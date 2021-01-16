@@ -28,6 +28,7 @@ const u32 kChrBankShift = 13;
 
 #define SUCCESS(x) ((x) == OK)
 #define PRINT_ERROR(...) fprintf(stderr, __VA_ARGS__)
+#define FATAL(...) PRINT_ERROR(__VA_ARGS__); exit(1)
 #define CHECK_MSG(x, ...)                                                      \
   if (!(x)) {                                                                  \
     PRINT_ERROR("%s:%d: ", __FILE__, __LINE__);                                \
@@ -85,12 +86,13 @@ typedef struct {
 
 typedef struct {
   u64 cy, bits;
-  u16 PC, PC_fix, bus_addr;
+  const u64* step;
+  u16 PC, bus_addr, temp;
   u8 A, X, Y, S;
   u8 ram[0x800]; // 2KiB internal ram.
-  u8 opcode, temp;
+  u8 opcode, busval;
   Bool C, Z, I, D, B, V, N; // Flags.
-  Bool bus_en, bus_write;
+  Bool overflow, bus_en, bus_write;
 } S;
 
 typedef struct {
@@ -109,13 +111,14 @@ static Result init_mapper(E *e);
 static u16 read_u16(E *e, u16 addr);
 static u8 read_u8(E *e, u16 addr);
 static void write_u8(E *e, u16 addr, u8 val);
-static void disasm(E* e);
+static void disasm(E* e, u16 addr);
 static void print_info(E* e);
 static void step(E* e);
 
 static const char* s_opcode_mnemonic[256];
-static u8 s_opcode_bytes[256];
-static u64 s_opcode_bits[256];
+static const u8 s_opcode_bytes[256];
+static const u64 s_opcode_bits[256][6];
+static const u64 s_fetch_bits;
 
 int main(int argc, char **argv) {
   int result = 1;
@@ -227,13 +230,14 @@ Result get_cart_info(FileData *file_data, CartInfo *cart_info) {
 }
 
 u8 read_u8(E *e, u16 addr) {
+  e->s.bus_write = FALSE;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
     return e->s.ram[addr & 0x7ff];
 
   case 2: case 3: // PPU
     // TODO
-    break;
+    return 0;
 
   case 4: // APU & I/O
     // TODO
@@ -253,6 +257,8 @@ u16 read_u16(E *e, u16 addr) {
 }
 
 void write_u8(E *e, u16 addr, u8 val) {
+  e->s.bus_write = TRUE;
+  printf("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
     e->s.ram[addr & 0x7ff] = val;
@@ -272,10 +278,15 @@ Result init_emulator(E *e) {
   S* s = &e->s;
   CHECK(SUCCESS(init_mapper(e)));
   memset(s, 0, sizeof(S));
-  s->PC = s->bus_addr = read_u16(e, 0xfffc);
-  s->S = 1;
+#if 0
+  s->PC = read_u16(e, 0xfffc);
+#else
+  s->PC = 0xc000; // automated NESTEST
+  s->cy = 7;
+#endif
+  s->S = 0xfd;
   s->bus_en = TRUE;
-  s->bits = 1; // Read PC.
+  s->bits = s_fetch_bits;
 
   return OK;
   ON_ERROR_RETURN;
@@ -299,14 +310,14 @@ Result init_mapper(E *e) {
 }
 
 
-void disasm(E* e) {
-  printf("   %04x: ", e->s.PC);
-  u8 opcode = read_u8(e, e->s.PC);
+void disasm(E* e, u16 addr) {
+  printf("   %04x: ", addr);
+  u8 opcode = read_u8(e, addr);
   const char* fmt = s_opcode_mnemonic[opcode];
   u8 bytes = s_opcode_bytes[opcode];
-  u8 b0 = read_u8(e, e->s.PC + 1);
-  u8 b1 = read_u8(e, e->s.PC + 2);
-  u16 b01 = read_u16(e, e->s.PC + 1);
+  u8 b0 = read_u8(e, addr + 1);
+  u8 b1 = read_u8(e, addr + 2);
+  u16 b01 = read_u16(e, addr + 1);
 
   switch (bytes) {
     case 1: printf("%02x     ", opcode); printf(fmt); break;
@@ -314,172 +325,1039 @@ void disasm(E* e) {
     case 3: printf("%02x%02x%02x ", opcode, b0, b1); printf(fmt, b01); break;
   }
   if ((opcode & 0x1f) == 0x10) {  // Branch.
-    printf(" (%04x)", e->s.PC + 2 + (s8)b0);
+    printf(" (%04x)", addr + 2 + (s8)b0);
   }
   printf("\n");
 }
 
-void print_info(E* e) {
-  printf("PC:%04x A:%02x X:%02x Y:%02x S:%02x P:%c%c1%c%c%c%c  bus:%c%c %04x  "
-         "(cy:%08" PRIu64 ")\n",
-         e->s.PC, e->s.A, e->s.X, e->s.Y, e->s.S, e->s.N ? 'N' : '_',
-         e->s.V ? 'V' : '_', e->s.D ? 'D' : '_', e->s.I ? 'I' : '_',
-         e->s.Z ? 'Z' : '_', e->s.C ? 'C' : '_', e->s.bus_en ? 'Y' : 'N',
-         e->s.bus_write ? 'W' : 'R', e->s.bus_addr, e->s.cy);
+static inline u8 get_P(E* e) {
+  return (e->s.N << 7) | (e->s.V << 6) | 0x20 | (e->s.B << 4) | (e->s.D << 3) |
+         (e->s.I << 2) | (e->s.Z << 1) | (e->s.C << 0);
 }
 
-static void set_nz(E* e, u8 value) {
-  e->s.Z = value == 0;
-  e->s.N = !!(value & 0x80);
+static inline void set_P(E* e, u8 val) {
+  e->s.N = !!(val & 0x80);
+  e->s.V = !!(val & 0x40);
+  e->s.B = !!(val & 0x10);
+  e->s.D = !!(val & 0x08);
+  e->s.I = !!(val & 0x04);
+  e->s.Z = !!(val & 0x02);
+  e->s.C = !!(val & 0x01);
+}
+
+void print_info(E* e) {
+  printf("PC:%04x A:%02x X:%02x Y:%02x S:%02x P:%c%c1%c%c%c%c%c(%02hhx)  "
+         "bus:%c%c %04x  "
+         "(cy:%08" PRIu64 ")\n",
+         e->s.PC, e->s.A, e->s.X, e->s.Y, e->s.S, e->s.N ? 'N' : '_',
+         e->s.V ? 'V' : '_', e->s.B ? 'B' : '_', e->s.D ? 'D' : '_',
+         e->s.I ? 'I' : '_', e->s.Z ? 'Z' : '_', e->s.C ? 'C' : '_', get_P(e),
+         e->s.bus_en ? 'Y' : 'N', e->s.bus_write ? 'W' : 'R', e->s.bus_addr,
+         e->s.cy);
+}
+
+static inline void sum8_overflow(u8 lhs, u8 rhs, u16* sum, Bool* overflow) {
+  u16 result = lhs + rhs;
+  u16 fix = (result ^ lhs) & 0x100;
+  *overflow = !!fix;
+  *sum = result ^ fix;
 }
 
 void step(E* e) {
   S* s = &e->s;
-
   print_info(e);
-
-  u8 busval = 0;
-  if (s->bus_en && !s->bus_write) {
-    busval = read_u8(e, s->bus_addr);
-  }
-
-  switch (__builtin_ctz(s->bits)) {
-    case 0: { // Read opcode.
-      disasm(e);
-      u8 opcode = s->opcode = busval;
-      s->bus_addr = ++s->PC;
-      s->bits = s_opcode_bits[opcode];
-      if (s->bits == 0) {
-        PRINT_ERROR("NYI %02hhx\n", s->opcode);
-        exit(1);
+  u64 bits = s->bits;
+  while (bits) {
+    int bit = __builtin_ctzll(bits);
+    switch (bit) {
+      case 0: s->bus_addr = s->PC; break;
+      case 1: s->bus_addr = 0x100 + s->S; break;
+      case 2: s->bus_addr = s->temp; break;
+      case 4: {Bool dummy; sum8_overflow(s->bus_addr, 1, &s->bus_addr, &dummy); break; }
+      case 5: s->busval = read_u8(e, s->bus_addr); break;
+      case 6: s->busval = s->PC & 0xff; break;
+      case 7: s->busval = s->PC >> 8; break;
+      case 8: s->busval = s->temp; break;
+      case 9: s->busval = s->A; break;
+      case 10: s->busval = s->X; break;
+      case 11: s->busval = s->Y; break;
+      case 12: s->busval = get_P(e); break;
+      case 13: s->temp = 0; break;
+      case 14: s->temp = s->busval; break;
+      case 15: s->temp = s->A; break;
+      case 16: s->temp = s->X; break;
+      case 17: s->temp = s->Y; break;
+      case 18: s->temp = s->S; break;
+      case 19: s->temp = s->Z; break;
+      case 20: s->temp = s->C; break;
+      case 21: s->temp = s->V; break;
+      case 22: s->temp = s->N; break;
+      case 23: s->temp = !s->temp; break;
+      case 24: s->temp = (s->temp - 1) & 0xff; break;
+      case 25: s->temp = (s->temp + 1) & 0xff; break;
+      case 26: sum8_overflow(s->temp, s->X, &s->temp, &s->overflow); break;
+      case 27: sum8_overflow(s->temp, s->Y, &s->temp, &s->overflow); break;
+      case 28: s->temp |= s->busval << 8; break;
+      case 29: s->temp += 0x100; break;
+      case 30: write_u8(e, s->bus_addr, s->busval); break;
+      case 31: s->C = !!(s->temp & 0x80); s->temp = (s->temp << 1) & 0xff; break;
+      case 32: s->C = !!(s->temp & 0x01); s->temp >>= 1; break;
+      case 33: {
+        Bool oldc = s->C;
+        s->C = !!(s->temp & 0x80);
+        s->temp = (s->temp << 1) | oldc;
+        break;
       }
-      break;
-    }
-
-    case 1: { // Fetch and increment PC, store in low byte.
-      s->temp = busval;
-      s->bus_addr = ++s->PC;
-      s->bits &= ~0b10;
-      break;
-    }
-
-    case 2: { // Fetch and increment PC, store in high byte.
-      s->bus_addr = (busval << 8) | s->temp;
-      ++s->PC;
-      s->bits &= ~0b100;
-      break;
-    }
-
-    case 3: { // Fetch from bus_addr and execute.
-      Bool oldc = s->C;
-      switch (s->opcode) {
-        case 0x09: ++s->PC;                             // ORA #XX
-        case 0x0D: set_nz(e, s->A |= busval); break;    // ORA XXXX
-        case 0x29: ++s->PC;                             // AND #XX
-        case 0x2D: set_nz(e, s->A &= busval); break;    // AND XXXX
-        case 0x49: ++s->PC;                             // EOR #XX
-        case 0x4D: set_nz(e, s->A ^= busval); break;    // EOR XXXX
-        case 0x69: ++s->PC;                             // ADC #XX
-        case 0x6D: /* TODO */ break;                    // ADC XXXX
-        case 0xA0: ++s->PC;                             // LDY #XX
-        case 0xAC: set_nz(e, s->Y = busval); break;     // LDY XXXX
-        case 0xA2: ++s->PC;                             // LDX #XX
-        case 0xAE: set_nz(e, s->X = busval); break;     // LDX XXXX
-        case 0xA9: ++s->PC;                             // LDA #XX
-        case 0xAD: set_nz(e, s->A = busval); break;     // LDA XXXX
-        case 0xC0: ++s->PC;                             // CPY #XX
-        case 0xCC: s->C = s->Y >= busval;               // CPY XXXX
-                   set_nz(e, s->Y - busval); break;
-        case 0xC9: ++s->PC;                             // CMP #XX
-        case 0xCD: s->C = s->A >= busval;               // CMP XXXX
-                   set_nz(e, s->A - busval); break;
-        case 0xE0: ++s->PC;                             // CPX #XX
-        case 0xEC: s->C = s->X >= busval;               // CPX XXXX
-                   set_nz(e, s->X - busval); break;
-        case 0xE9: ++s->PC;                             // SBC #XX
-        case 0xED: /* TODO */ break;                    // SBC XXXX
-
-        case 0x8C: s->bus_write = TRUE; busval = s->Y; break;  // STY XXXX
-        case 0x8D: s->bus_write = TRUE; busval = s->A; break;  // STA XXXX
-        case 0x8E: s->bus_write = TRUE; busval = s->X; break;  // STX XXXX
-
-        case 0x0A: s->C = !!(s->A & 0x80);              // ASL
-                   set_nz(e, s->A <<= 1); break;
-        case 0x18: s->C = 0; break;                     // CLC
-        case 0x2A: s->C = !!(s->A & 0x80);              // ROL
-                   set_nz(e, s->A = (s->A << 1) | oldc); break;
-        case 0x38: s->C = 1; break;                     // SEC
-        case 0x4A: s->C = !!(s->A & 0x01);              // LSR
-                   set_nz(e, s->A >>= 1); break;
-        case 0x58: s->I = 0; break;                     // CLI
-        case 0x6A: s->C = !!(s->A & 0x01);              // ROR
-                   set_nz(e, s->A = (s->A >> 1) | (oldc << 7)); break;
-        case 0x78: s->I = 1; break;                     // SEI
-        case 0x88: set_nz(e, --s->Y); break;            // DEY
-        case 0x98: s->A = s->Y; break;                  // TYA
-        case 0x9A: s->S = s->X; break;                  // TXS
-        case 0xA8: s->Y = s->A; break;                  // TAY
-        case 0xAA: s->X = s->A; break;                  // TAX
-        case 0xB8: s->V = 0; break;                     // CLV
-        case 0xBA: s->X = s->S; break;                  // TSX
-        case 0xC8: set_nz(e, ++s->Y);                   // INY
-        case 0xCA: set_nz(e, --s->X);                   // DEX
-        case 0xD8: s->D = 0; break;                     // CLD
-        case 0xE8: set_nz(e, ++s->X);                   // INX
-        case 0xEA: break;                               // NOP
-        case 0xF8: s->D = 1; break;                     // SED
-
-        case 0x10: ++s->PC; if (s->N == 0) goto branch_taken; break;  // BPL
-        case 0x30: ++s->PC; if (s->N == 1) goto branch_taken; break;  // BMI
-        case 0x50: ++s->PC; if (s->V == 0) goto branch_taken; break;  // BVC
-        case 0x70: ++s->PC; if (s->V == 1) goto branch_taken; break;  // BVS
-        case 0x90: ++s->PC; if (s->C == 0) goto branch_taken; break;  // BCC
-        case 0xB0: ++s->PC; if (s->C == 1) goto branch_taken; break;  // BCS
-        case 0xD0: ++s->PC; if (s->Z == 0) goto branch_taken; break;  // BNE
-        case 0xF0: ++s->PC; if (s->Z == 1) goto branch_taken; break;  // BEQ
-        branch_taken:
-          s->bits = 0b10000;
-          break;
-
-        default: PRINT_ERROR("NYI %02hhx\n", s->opcode); break;
+      case 34: {
+        Bool oldc = s->C;
+        s->C = !!(s->temp & 0x01);
+        s->temp = (s->temp >> 1) | (oldc << 7);
+        break;
       }
-      s->bits &= ~0b1000;
-      break;
-    }
-
-    case 4: { // Branch taken, update PC.
-      u16 new_PC = s->PC + (s8)busval;
-      s->PC_fix = (new_PC ^ s->PC) & 0x100;
-      s->PC = new_PC ^ s->PC_fix;
-      s->bus_addr = s->PC;
-      s->bits &= ~0b10000;
-      if (s->PC_fix) {
-        s->bits |= 0b100000;
+      case 35: s->C = s->temp >= s->busval; s->temp -= s->busval; break;
+      case 36: s->temp &= s->busval; break;
+      case 37:
+        s->N = !!(s->busval & 0x80);
+        s->V = !!(s->busval & 0x40);
+        s->Z = (s->temp & s->busval & 0xff) == 0;
+        break;
+      case 38: s->temp ^= s->busval; break;
+      case 39: s->temp |= s->busval; break;
+      case 41: s->busval = ~s->busval; // Fallthrough.
+      case 40: {
+        u16 sum = s->A + s->busval + s->C;
+        s->C = sum >= 0x100;
+        s->V = !!(~(s->A ^ s->busval) & (s->busval ^ sum) & 0x80);
+        s->temp = s->A = sum & 0xff;
+        break;
       }
-      break;
+      case 42: s->A = s->temp; break;
+      case 43: s->X = s->temp; break;
+      case 44: s->Y = s->temp; break;
+      case 45: s->S = s->temp; break;
+      case 46: set_P(e, s->temp); break;
+      case 47: s->C = s->temp; break;
+      case 48: s->I = s->temp; break;
+      case 49: s->D = s->temp; break;
+      case 50: s->V = s->temp; break;
+      case 51: --s->S; break;
+      case 52: ++s->S; break;
+      case 53: s->PC = (s->PC & 0xff00) | (s->temp & 0xff); break;
+      case 54: {
+        u16 new_PC = s->PC + (s8)s->temp;
+        u16 PC_fix = (new_PC ^ s->PC) & 0x100;
+        s->overflow = !!PC_fix;
+        s->PC = new_PC ^ PC_fix;
+        break;
+      }
+      case 55: s->PC = (s->PC & 0xff) | (s->busval << 8); break;
+      case 56: s->PC ^= 0x100; break; // TODO: fix is not correct for negative
+      case 57: ++s->PC; break;
+      case 58: s->Z = s->temp == 0; s->N = !!(s->temp & 0x80); break;
+      case 59: if (!s->overflow) { ++s->step; } break;
+      case 60: if (s->temp) { goto done; } s->temp = s->busval; break;
+      case 61: if (!s->overflow) { goto done; } break;
+      case 62: done: s->step = &s_fetch_bits; break;
+      case 63:
+        disasm(e, s->PC - 1);
+        s->step = &s_opcode_bits[s->opcode = s->busval][0];
+        break;
+      default:
+        FATAL("NYI: step %d\n", bit);
     }
-
-    case 5: { // Branch crossed page, fix PC.
-      s->PC ^= s->PC_fix;
-      s->bus_addr = s->PC;
-      s->bits &= ~0b100000;
-      break;
-    }
+    bits &= ~(1ull << bit);
   }
-
-  if (s->bus_en && s->bus_write) {
-    write_u8(e, s->bus_addr, busval);
-  }
-
+  s->bits = *(s->step++);
   if (s->bits == 0) {
-    s->bus_addr = s->PC;
-    s->bus_en = TRUE;
-    s->bus_write = FALSE;
-    s->bits = 1;
+    FATAL("NYI: opcode %02x\n", s->opcode);
   }
   s->cy++;
 }
 
+/* micro ops
+ *
+ * 00. busaddr = PC
+ * 01. busaddr = $100+S
+ * 02. busaddr = T
+ * 03. busaddr = FFFE
+ * 04. inc busaddr
+ * 05. do read
+ * 06. busval = PCL
+ * 07. busval = PCH
+ * 08. busval = T
+ * 09. busval = A
+ * 10. busval = X
+ * 11. busval = Y
+ * 12. busval = P
+ * 13. T = 0
+ * 14. T = busval, TH = 0
+ * 15. T = A
+ * 16. T = X
+ * 17. T = Y
+ * 18. T = S
+ * 19. T = Z
+ * 20. T = C
+ * 21. T = V
+ * 22. T = N
+ * 23. T = !T
+ * 24. T -= 1
+ * 25. T += 1
+ * 26. T += x
+ * 27. T += y
+ * 28. TH = busval
+ * 29. fix TH
+ * 30. do write
+ * 31. T <<= 1, set C
+ * 32. T >>= 1, set C
+ * 33. T rol= 1, set C
+ * 34. T ror= 1, set C
+ * 35. T -= busval, set C
+ * 36. T &= busval
+ * 37. T &= busval, set NVZ  (for BIT)
+ * 38. T ^= busval
+ * 39. T |= busval
+ * 40. A = A+busval+C, set VC
+ * 41. A = A-busval-(1-C), set VC
+ * 42. A = T
+ * 43. X = T
+ * 44. Y = T
+ * 45. S = T
+ * 46. P = T
+ * 47. C = T
+ * 48. I = T
+ * 49. D = T
+ * 50. V = T
+ * 51. dec S
+ * 52. inc S
+ * 53. PCL = T
+ * 54. PCL += T
+ * 55. PCH = busval
+ * 56. fix PCH
+ * 57. inc PC
+ * 58. set NZ
+ * 59. skip if no index overflow
+ * 60. done if T, T = busval
+ * 61. done if no index overflow
+ * 62. done
+ * 63. fetch opcode
+ *
+ *
+ * ***
+ *   1  busaddr = PC, do read, inc PC
+ *
+ * BRK:
+ * 00
+ *   2  busaddr = PC, do read, inc PC
+ *   3  busaddr = $100+S, busval = PCH, do write, dec S
+ *   4  busaddr = $100+S, busval = PCL, do write, dec S
+ *   5  busaddr = $100+S, busval = P, do write, dec S
+ *   6  busaddr = $FFFE, do read, PCL = busval
+ *   7  inc busaddr, do read, PCH = busval
+ *
+ * RTI:
+ * 40
+ *   2  busaddr = PC, do read
+ *   3  busaddr = $100+S, do read, inc S
+ *   4  busaddr = $100+S, do read, T = busval, P = T, inc S
+ *   5  busaddr = $100+S, do read, T = busval, PCL = T, inc S
+ *   6  busaddr = $100+S, do read, PCH = busval
+ *
+ * RTS:
+ * 60
+ *   2  busaddr = PC, do read
+ *   3  busaddr = $100+S, do read, inc S
+ *   4  busaddr = $100+S, do read, T = busval, PCL = T, inc S
+ *   5  busaddr = $100+S, do read, PCH = busval
+ *   6  inc PC
+ *
+ * PHA/PHP:
+ * 48  08
+ *   2  busaddr = PC, do read
+ *   3  busaddr = $100+S, busval = A/P, do write, dec S
+ *
+ * PLA/PLP:
+ * 68  28
+ *   2  busaddr = PC, do read
+ *   3  busaddr = $100+S, do read, inc S
+ *   4  busaddr = $100+S, do read, T = busval, A/P = T, set NZ
+ *
+ * JSR:
+ * 20
+ *   2  busaddr = PC, do read, T = busval, inc PC
+ *   3  busaddr = $100+S, do read
+ *   4  busaddr = $100+S, busval = PCH, do write, dec S
+ *   5  busaddr = $100+S, busval = PCL, do write, dec S
+ *   6  busaddr = PC, do read, PCL = T, PCH = busval
+ *
+ * (accumulator)
+ * ASL,LSR,ROL,ROR:
+ * 0A  4A  2A  6A
+ *   2  busaddr = PC, do read, T = A, do ASL/LSR/ROL/ROR, A = T, set C, set NZ
+ *
+ * (implied)
+ * SEC,SED,SEI:
+ * 38  F8  78
+ *   2  busaddr = PC, do read, T = 0, T = !T, C/D/I = T
+ *
+ * TAX,TAY,TSX,TXA,TXS,TYA:
+ * AA  A8  BA  8A  9A  98
+ *   2  busaddr = PC, do read, T = A/S/Y, X/Y/A/S = T
+ *
+ * CLC,CLD,CLI,CLV
+ * 18  D8  58  B8
+ *   2  busaddr = PC, do read, T = 0, C/D/I/V = T
+ *
+ * DEX,DEY
+ * CA  88
+ *   2  busaddr = PC, do read, T = X/Y, T -= 1, X/Y = T, set NZ
+*
+ * INX,INY
+ * E8  C8
+ *   2  busaddr = PC, do read, T = X/Y, T += 1, X/Y = T, set NZ
+ *
+ * NOP
+ * EA
+ *   2  busaddr = PC, do read
+ *
+ * (immediate)
+ * CMP,CPX,CPY
+ * C9  E0  C0
+ *   2  busaddr = PC, do read, inc PC, T = A/X/Y, do T - busval, set C, set NZ
+ *
+ * LDA,LDX,LDY
+ * A9  A2  A0
+ *   2  busaddr = PC, do read, inc PC, T = busval, A/X/Y = T, set NZ
+ *
+ * AND,EOR,ORA
+ * 29  49  09
+ *   2  busaddr = PC, do read, inc PC, T = A, do T &^| busval, A = T, set NZ
+ *
+ * ADC
+ * 69
+ *   2  busaddr = PC, do read, inc PC, A = A+busval+C, set VC, set NZ
+ *
+ * SBC
+ * E9
+ *   2  busaddr = PC, do read, inc PC, A = A-busval-(1-C), set VC, set NZ
+ *
+ * (absolute)
+ * JMP
+ * 4C
+ *   2  busaddr = PC, do read, inc PC, T = busval
+ *   3  busaddr = PC, do read, PCL = T, PCH = busval
+ *
+ * LDA/LDX/LDY
+ * AD  AE  AC
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
+ *
+ * AND,EOR,ORA
+ * 2D  4D  0D
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
+ *
+ * ADC
+ * 6D
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read, A = A+busval+C, set VC, set NZ
+ *
+ * SBC
+ * ED
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
+ *
+ * CMP/CPX/CPY
+ * CD  EC  CC
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read, T = A/X/Y, do T - busval, set C, set NZ
+ *
+ * BIT
+ * 2C
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read, T = A, do T & busval, set NVZ
+ *
+ * ASL/LSR/ROL/ROR
+ * 0E  4E  2E  6E
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read
+ *   5  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
+ *   6  busval = T, do write
+ *
+ * INC/DEC
+ * EE  CE
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read
+ *   5  do write, INC/DEC T, set NZ
+ *   6  busval = T, do write
+ *
+ * STA/STX/STY
+ * 8D  8E  8C
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, busval = A/X/Y, do write
+ *
+ * (zero page)
+ * LDA/LDX/LDY
+ * A5  A6  A4
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
+ *
+ * AND,EOR,ORA
+ * 25  45  05
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
+ *
+ * ADC
+ * 65
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, A = A+busval+C, set VC, set NZ
+ *
+ * SBC
+ * E5
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
+ *
+ * CMP/CPX/CPY
+ * C5  E4  C4
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, T = A/X/Y, do T - busval, set C, set NZ
+ *
+ * BIT
+ * 24
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, T = A, do T & busval, set NVZ
+ *
+ * ASL/LSR/ROL/ROR
+ * 06  46  26  66
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, T = busval
+ *   4  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
+ *   5  busval = T, do write
+ *
+ * INC/DEC
+ * E6  C6
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, T = busval
+ *   4  do write, do INC/DEC on T, set NZ
+ *   5  busval = T, do write
+ *
+ * STA/STX/STY
+ * 85  86  84
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0,
+ *   3  busaddr = T, busval = A/X/Y, do write
+ *
+ * (zero page indexed)
+ *
+ * LDA/LDX/LDY
+ * B5  B6  B4
+ *
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL += x/y
+ *   4  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
+ *
+ * AND,EOR,ORA
+ * 35  55  15
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL += x/y
+ *   4  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
+ *
+ * ADC
+ * 75
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL += x/y
+ *   4  busaddr = T, do read, A = A+busval+C, set VC, set NZ
+ *
+ * SBC
+ * F5
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL += x/y
+ *   4  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
+ *
+ * CMP
+ * D5
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL += x/y
+ *   4  busaddr = T, do read, do T - busval, set C, set NZ
+ *
+ * ASL/LSR/ROL/ROR
+ * 16  56  36  76
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL += x
+ *   4  busaddr = T, do read, T = busval
+ *   5  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
+ *   6  busval = T, do write
+ *
+ * INC/DEC
+ * F6  D6
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL += x
+ *   4  busaddr = T, do read, T = busval
+ *   5  do write, do INC/DEC on T, set C, set NZ
+ *   6  busval = T, do write
+ *
+ * STA/STX/STY
+ * 95  96  94
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0,
+ *   3  busaddr = T, do read, TL += x/y
+ *   4  busaddr = T, busval = A/X/Y, do write
+ *
+ * (absolute indexed)
+ * LDA/LDX/LDY
+ * B9  BE  BC
+ * BD
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
+ *
+ * AND,EOR,ORA
+ * 39  59  19
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
+ *
+ * ADC
+ * 79
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, do read, A = A+busval+C, set VC, set NZ
+ *
+ * SBC
+ * F9
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
+ *
+ * CMP
+ * D9
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, do read, do T - busval, set C, set NZ
+ *
+ * ASL/LSR/ROL/ROR
+ * 1E  5E  3E  7E
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, do read
+ *   6  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
+ *   7  busval = T, do write
+ *
+ * STA
+ * 9D
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, busval = A, do write
+ *
+ * (relative)
+ * BCC/BCS/BNE/BEQ/BPL/BMI/BVC/BVS
+ * 90  B0  D0  F0  10  30  50  70
+ *   2  busaddr = PC, do read, T = busval, inc PC, done if branch fails
+ *   3? busaddr = PC, do read, PCL += T
+ *   4+ busaddr = PC, do read, fix PCH
+ *
+ * (indexed indirect)
+ * LDA
+ * A1
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TH = busval, TL += x/y
+ *   4  busaddr = T, do read, TL = busval
+ *   5  inc busaddr, do read, TH = busval
+ *   6  busaddr = T, do read, T = busval, A = T, set NZ
+ *
+ * AND,EOR,ORA
+ * 21  41  01
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TH = busval, TL += x/y
+ *   4  busaddr = T, do read, TL = busval
+ *   5  inc busaddr, do read, TH = busval
+ *   6  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
+ *
+ * ADC
+ * 61
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TH = busval, TL += x/y
+ *   4  busaddr = T, do read, TL = busval
+ *   5  inc busaddr, do read, TH = busval
+ *   6  busaddr = T, do read, A = A+busval+C, set VC, set NZ
+ *
+ * SBC
+ * E1
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TH = busval, TL += x/y
+ *   4  busaddr = T, do read, TL = busval
+ *   5  inc busaddr, do read, TH = busval
+ *   6  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
+ *
+ * CMP
+ * C1
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TH = busval, TL += x/y
+ *   4  busaddr = T, do read, TL = busval
+ *   5  inc busaddr, do read, TH = busval
+ *   6  busaddr = T, do read, do T - busval, set C, set NZ
+ *
+ * STA
+ * 81
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TH = busval, TL += x/y
+ *   4  busaddr = T, do read, TL = busval
+ *   5  inc busaddr, do read, TH = busval
+ *   6  busaddr = T, busval = A, do write
+  *
+ * (indirect indexed)
+ * LDA
+ * B1
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL = busval
+ *   4  inc busaddr, do read, TH = busval, TL += y
+ *   5+ busaddr = T, do read, fix TH
+ *   6  busaddr = T, do read, T = busval, A = T, set NZ
+ *
+ * AND,EOR,ORA
+ * 31  51  11
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL = busval
+ *   4  inc busaddr, do read, TH = busval, TL += y
+ *   5+ busaddr = T, do read, fix TH
+ *   6  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
+ *
+ * ADC
+ * 71
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL = busval
+ *   4  inc busaddr, do read, TH = busval, TL += y
+ *   5+ busaddr = T, do read, fix TH
+ *   6  busaddr = T, do read, A = A+busval+C, set VC, set NZ
+ *
+ * SBC
+ * F1
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL = busval
+ *   4  inc busaddr, do read, TH = busval, TL += y
+ *   5+ busaddr = T, do read, fix TH
+ *   6  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
+ *
+ * CMP
+ * D1
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL = busval
+ *   4  inc busaddr, do read, TH = busval, TL += y
+ *   5+ busaddr = T, do read, fix TH
+ *   6  busaddr = T, do read, do T - busval, set C, set NZ
+ *
+ * STA
+ * 91
+ *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
+ *   3  busaddr = T, do read, TL = busval
+ *   4  inc busaddr, do read, TH = busval, TL += y
+ *   5+ busaddr = T, do read, fix TH
+ *   6  busaddr = T, busval = A, do write
+ *
+ * (absolute indirect)
+ * JMP
+ * 6C
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval
+ *   4  busaddr = T, do read, T = busval
+ *   5  inc busaddr, do read, PCL = T, PCH = busval
+ *
+ */
+
+//    6666555555555544444444443333333333222222222211111111110000000000
+//    3210987654321098765432109876543210987654321098765432109876543210
+static const u64 s_fetch_bits =
+    0b1000001000000000000000000000000000000000000000000000000000100001;
+
+#if 0
+    /*LSR nnnn*/[0x4E] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0000000000000000000000000000000000000000000000000000000000100100,
+         0b0000010000000000000000000000000101000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000000000100},
+#endif
+
+static const u64 s_opcode_bits[256][6] = {
+    //     6666555555555544444444443333333333222222222211111111110000000000
+    //     3210987654321098765432109876543210987654321098765432109876543210
+    /*ORA (nn,x)*/ [0x01] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100010000000000000001001000000000000000000000001000000000100100},
+    /*ORA nn*/[0x05] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000001001000000000000000000000001000000000100100},
+    /*ASL nn*/[0x06] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000011000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*PHP*/[0x08] =
+        {0b0000000000000000000000000000000000000000000000000000000000100001,
+         0b0100000000001000000000000000000001000000000000000001000000000010},
+    /*ORA #nn*/[0x09] =
+        {0b0100011000000000000001001000000000000000000000001000000000100001},
+    /*ASL*/[0x0A] =
+        {0b0100010000000000000001000000000010000000000000001000000000100001},
+    /*ORA nnnn*/[0x0D] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000001001000000000000000000000001000000000100100},
+    /*ASL nnnn*/[0x0E] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000011000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*BPL*/[0x10] =
+        {0b0001001000000000000000000000000000000000010000000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*CLC*/[0x18] =
+        {0b0100000000000000100000000000000000000000000000000010000000100001},
+    /*JSR*/[0x20] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000000000000100010,
+         0b0000000000001000000000000000000001000000000000000000000010000010,
+         0b0000000000001000000000000000000001000000000000000000000001000010,
+         0b0100000010100000000000000000000000000000000000000000000000100001},
+    /*AND (nn,x)*/[0x21] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100010000000000000001000001000000000000000000001000000000100100},
+    /*BIT nn*/[0x24] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100000000000000000000000010000000000000000000001000000000100100},
+    /*AND nn*/[0x25] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000001000001000000000000000000001000000000100100},
+    /*ROL nn*/[0x26] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000001001000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*PLP*/[0x28] =
+        {0b0000000000000000000000000000000000000000000000000000000000100001,
+         0b0000000000010000000000000000000000000000000000000000000000100010,
+         0b0100000000000000010000000000000000000000000000000100000000100010},
+    /*AND #nn*/[0x29] =
+        {0b0100011000000000000001000001000000000000000000001000000000100001},
+    /*ROL*/[0x2A] =
+        {0b0100010000000000000001000000001000000000000000001000000000100001},
+    /*BIT nnnn*/[0x2C] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100000000000000000000000010000000000000000000001000000000100100},
+    /*AND nnnn*/[0x2D] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000001000001000000000000000000001000000000100100},
+    /*ROL nnnn*/[0x2E] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000001001000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*BMI*/[0x30] =
+        {0b0001001000000000000000000000000000000000110000000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*SEC*/[0x38] =
+        {0b0100000000000000100000000000000000000000100000000010000000100001},
+    /*RTI*/[0x40] =
+        {0b0000000000000000000000000000000000000000000000000000000000100001,
+         0b0000000000010000000000000000000000000000000000000000000000100010,
+         0b0000000000010000010000000000000000000000000000000100000000100010,
+         0b0000000000110000000000000000000000000000000000000100000000100010,
+         0b0100000010000000000000000000000000000000000000000000000000100010},
+    /*EOR (nn,x)*/[0x41] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100010000000000000001000100000000000000000000001000000000100100},
+    /*EOR nn*/[0x45] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000001000100000000000000000000001000000000100100},
+    /*LSR nn*/[0x46] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000101000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*PHA*/[0x48] =
+        {0b0000000000000000000000000000000000000000000000000000000000100001,
+         0b0100000000001000000000000000000001000000000000000000001000000010},
+    /*EOR #nn*/[0x49] =
+        {0b0100011000000000000001000100000000000000000000001000000000100001},
+    /*LSR*/[0x4A] =
+        {0b0100010000000000000001000000000100000000000000001000000000100001},
+    /*JMP*/[0x4C] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100000010100000000000000000000000000000000000000000000000100001},
+    /*EOR nnnn*/[0x4D] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000001000100000000000000000000001000000000100100},
+    /*LSR nnnn*/[0x4E] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000101000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*BVC*/[0x50] =
+        {0b0001001000000000000000000000000000000000001000000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*CLI*/[0x58] =
+        {0b0100000000000001000000000000000000000000000000000010000000100001},
+    /*RTS*/[0x60] =
+        {0b0000000000000000000000000000000000000000000000000000000000100001,
+         0b0000000000010000000000000000000000000000000000000000000000100010,
+         0b0000000000110000000000000000000000000000000000000100000000100010,
+         0b0000000010000000000000000000000000000000000000000000000000100010,
+         0b0100001000000000000000000000000000000000000000000000000000000000},
+    /*ADC (nn,x)*/[0x61] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100010000000000000000010000000000000000000000001000000000100100},
+    /*ADC nn*/[0x65] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000000010000000000000000000000000000000000100100},
+    /*ROR nn*/[0x66] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000010001000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*PLA*/[0x68] =
+        {0b0000000000000000000000000000000000000000000000000000000000100001,
+         0b0000000000010000000000000000000000000000000000000000000000100010,
+         0b0100010000000000000001000000000000000000000000000100000000100010},
+    /*ADC #nn*/[0x69] =
+        {0b0100011000000000000000010000000000000000000000001000000000100001},
+    /*ROL*/[0x6A] =
+        {0b0100010000000000000001000000010000000000000000001000000000100001},
+    /*ADC nnnn*/[0x6D] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000000010000000000000000000000000000000000100100},
+    /*ROR nn*/[0x6E] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000010001000000000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*BVS*/[0x70] =
+        {0b0001001000000000000000000000000000000000101000000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*SEI*/[0x78] =
+        {0b0100000000000001000000000000000000000000100000000010000000100001},
+    /*STA (nn,x)*/[0x81] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100000000000000000000000000000001000000000000000000001000000100},
+    /*STY nn*/[0x84] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100000000000000000000000000000001000000000000000000100000000100},
+    /*STA nn*/[0x85] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100000000000000000000000000000001000000000000000000001000000100},
+    /*STX nn*/[0x86] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100000000000000000000000000000001000000000000000000010000000100},
+    /*DEY*/[0x88] =
+        {0b0100010000000000000100000000000000000001000000100000000000100001},
+    /*TXA*/[0x8A] =
+        {0b0100010000000000000001000000000000000000000000010000000000100001},
+    /*STY nnnn*/[0x8C] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100000000000000000000000000000001000000000000000000100000000100},
+    /*STA nnnn*/[0x8D] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100000000000000000000000000000001000000000000000000001000000100},
+    /*STX nnnn*/[0x8E] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100000000000000000000000000000001000000000000000000010000000100},
+    /*BCC*/[0x90] =
+        {0b0001001000000000000000000000000000000000000100000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*TYA*/[0x98] =
+        {0b0100010000000000000001000000000000000000000000100000000000100001},
+    /*TXS*/[0x9A] =
+        {0b0100000000000000001000000000000000000000000000010000000000100001},
+    /*LDY #nn*/[0xA0] =
+        {0b0100011000000000000100000000000000000000000000000100000000100001},
+    /*LDA (nn,x)*/[0xA1] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100010000000000000001000000000000000000000000000100000000100100},
+    /*LDX #nn*/[0xA2] =
+        {0b0100011000000000000010000000000000000000000000000100000000100001},
+    /*LDY nn*/[0xA4] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000100000000000000000000000000000100000000100100},
+    /*LDA nn*/[0xA5] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000001000000000000000000000000000100000000100100},
+    /*LDX nn*/[0xA6] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000010000000000000000000000000000100000000100100},
+    /*TAY*/[0xA8] =
+        {0b0100010000000000000100000000000000000000000000001000000000100001},
+    /*LDA #nn*/[0xA9] =
+        {0b0100011000000000000001000000000000000000000000000100000000100001},
+    /*TAX*/[0xAA] =
+        {0b0100010000000000000010000000000000000000000000001000000000100001},
+    /*LDY nnnn*/[0xAC] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000100000000000000000000000000000100000000100100},
+    /*LDA nnnn*/[0xAD] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000001000000000000000000000000000100000000100100},
+    /*LDX nnnn*/[0xAE] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000010000000000000000000000000000100000000100100},
+    /*BCS*/[0xB0] =
+        {0b0001001000000000000000000000000000000000100100000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*LDA (nn),y*/[0xB1] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000100000000000000000000000000000011000000000000000000000110000,
+         0b0000000000000000000000000000000000100000000000000000000000100100,
+         0b0100010000000000000001000000000000000000000000000100000000100100},
+    /*CLV*/[0xB8] =
+        {0b0100000000000100000000000000000000000000000000000010000000100001},
+    /*TSX*/[0xBA] =
+        {0b0100010000000000000010000000000000000000000001000000000000100001},
+    /*LDA nnnn,x*/[0xBD] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000101000000000000000000000000000010100000000000000000000100001,
+         0b0000000000000000000000000000000000100000000000000000000000100100,
+         0b0100010000000000000001000000000000000000000000000100000000100100},
+    /*CPY*/[0xC0] =
+        {0b0100011000000000000000000000100000000000000000100000000000100001},
+    /*CMP (nn,x)*/[0xC1] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100010000000000000000000000100000000000000000001000000000100100},
+    /*CPY nn*/[0xC4] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000000000000100000000000000000100000000000100100},
+    /*CMP nn*/[0xC5] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000000000000100000000000000000001000000000100100},
+    /*DEC nn*/[0xC6] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000001000001000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*INY*/[0xC8] =
+        {0b0100010000000000000100000000000000000010000000100000000000100001},
+    /*CMP*/[0xC9] =
+        {0b0100011000000000000000000000100000000000000000001000000000100001},
+    /*DEX*/[0xCA] =
+        {0b0100010000000000000010000000000000000001000000010000000000100001},
+    /*CPY nnnn*/[0xCC] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000000000000100000000000000000100000000000100100},
+    /*CMP nnnn*/[0xCD] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000000000000100000000000000000001000000000100100},
+    /*DEC nnnn*/[0xCE] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000001000001000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*BNE*/[0xD0] =
+        {0b0001001000000000000000000000000000000000000010000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*CLD*/[0xD8] =
+        {0b0100000000000010000000000000000000000000000000000010000000100001},
+    /*CPX*/[0xE0] =
+        {0b0100011000000000000000000000100000000000000000010000000000100001},
+    /*SBC (nn,x)*/[0xE1] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000010100000000000000000000100100,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000000000000000000000000000000000010000000000000000000000110000,
+         0b0100010000000000000000100000000000000000000000001000000000100100},
+    /*CPX nn*/[0xE4] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000000000000100000000000000000010000000000100100},
+    /*SBC nn*/[0xE5] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0100010000000000000000100000000000000000000000000000000000100100},
+    /*INC nn*/[0xE6] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000001000010000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*NOP*/[0xEA] =
+        {0b0100000000000000000000000000000000000000000000000000000000100001},
+    /*INX*/[0xE8] =
+        {0b0100010000000000000010000000000000000010000000010000000000100001},
+    /*SBC #nn*/[0xE9] =
+        {0b0100011000000000000000100000000000000000000000001000000000100001},
+    /*CPX nnnn*/[0xEC] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000000000000100000000000000000010000000000100100},
+    /*SBC nnnn*/[0xED] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0100010000000000000000100000000000000000000000000000000000100100},
+    /*INC nnnn*/[0xEE] =
+        {0b0000001000000000000000000000000000000000000000000100000000100001,
+         0b0000001000000000000000000000000000010000000000000000000000100001,
+         0b0000000000000000000000000000000000000000000000000100000000100100,
+         0b0000010000000000000000000000000001000010000000000000000000000000,
+         0b0100000000000000000000000000000001000000000000000000000100000000},
+    /*BEQ*/[0xF0] =
+        {0b0001001000000000000000000000000000000000100010000000000000100001,
+         0b0010000001000000000000000000000000000000000000000000000000100001,
+         0b0100000100000000000000000000000000000000000000000000000000100001},
+    /*SED*/[0xF8] =
+        {0b0100000000000010000000000000000000000000100000000010000000100001},
+};
 
 static const char* s_opcode_mnemonic[256] = {
   // 00..0f
@@ -771,7 +1649,7 @@ static const char* s_opcode_mnemonic[256] = {
   "ISB $%04hx,x",
 };
 
-static u8 s_opcode_bytes[] = {
+static const u8 s_opcode_bytes[] = {
     /*       0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f */
     /* 00 */ 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
     /* 10 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
@@ -790,62 +1668,3 @@ static u8 s_opcode_bytes[] = {
     /* e0 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
     /* f0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
 };
-
-static u64 s_opcode_bits[256] = {
-    [0x09] = 0b001000, // ORA #XX
-    [0x10] = 0b001000, // BPL +XX
-    [0x0D] = 0b001110, // ORA XXXX
-    [0x0A] = 0b001000, // ASL
-    [0x18] = 0b001000, // CLC
-    [0x29] = 0b001000, // AND #XX
-    [0x2D] = 0b001110, // AND XXXX
-    [0x2A] = 0b001000, // ROL
-    [0x30] = 0b001000, // BMI +XX
-    [0x38] = 0b001000, // SEC
-    [0x49] = 0b001000, // EOR #XX
-    [0x4D] = 0b001110, // EOR XXXX
-    [0x4A] = 0b001000, // LSR
-    [0x50] = 0b001000, // BVC +XX
-    [0x58] = 0b001000, // CLI
-    [0x69] = 0b001000, // ADC #XX
-    [0x6D] = 0b001110, // ADC XXXX
-    [0x6A] = 0b001000, // ROR
-    [0x70] = 0b001000, // BVS +XX
-    [0x78] = 0b001000, // SEI
-    [0x88] = 0b001000, // DEY
-    [0x8A] = 0b001000, // TXA
-    [0x8C] = 0b001110, // STY XXXX
-    [0x8D] = 0b001110, // STA XXXX
-    [0x8E] = 0b001110, // STX XXXX
-    [0x90] = 0b001000, // BCC +XX
-    [0x98] = 0b001000, // TYA
-    [0x9A] = 0b001000, // TXS
-    [0xA0] = 0b001000, // LDY #XX
-    [0xA2] = 0b001000, // LDX #XX
-    [0xA8] = 0b001000, // TAY
-    [0xA9] = 0b001000, // LDA #XX
-    [0xAA] = 0b001000, // TAX
-    [0xAC] = 0b001110, // LDY XXXX
-    [0xAD] = 0b001110, // LDA XXXX
-    [0xAE] = 0b001110, // LDX XXXX
-    [0xB0] = 0b001000, // BCS +XX
-    [0xB8] = 0b001000, // CLV
-    [0xBA] = 0b001000, // TSX
-    [0xC0] = 0b001000, // CPY #XX
-    [0xC8] = 0b001000, // INY
-    [0xC9] = 0b001000, // CMP #XX
-    [0xCA] = 0b001000, // DEX
-    [0xCC] = 0b001110, // CPY XXXX
-    [0xCD] = 0b001110, // CMP XXXX
-    [0xD0] = 0b001000, // BNE +XX
-    [0xD8] = 0b001000, // CLD
-    [0xE0] = 0b001000, // CPX #XX
-    [0xEC] = 0b001110, // CPX XXXX
-    [0xE8] = 0b001000, // INX
-    [0xE9] = 0b001000, // SBC #XX
-    [0xED] = 0b001110, // SBC XXXX
-    [0xEA] = 0b001000, // NOP
-    [0xF0] = 0b001000, // BEQ +XX
-    [0xF8] = 0b001000, // SED
-};
-
