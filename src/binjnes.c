@@ -6,6 +6,7 @@
  */
 
 #include <assert.h>
+#include <inttypes.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -54,6 +55,15 @@ const u32 kChrBankShift = 13;
 #define xcalloc calloc
 
 typedef enum { MIRROR_HORIZONTAL = 0, MIRROR_VERTICAL = 1 } Mirror;
+enum {
+  FLAG_C = 0x01,
+  FLAG_Z = 0x02,
+  FLAG_I = 0x04,
+  FLAG_D = 0x08,
+  FLAG_B = 0x10,
+  FLAG_V = 0x40,
+  FLAG_N = 0x80,
+};
 
 typedef struct FileData {
   u8 *data;
@@ -74,9 +84,13 @@ typedef struct {
 } CartInfo;
 
 typedef struct {
-  u16 PC;
-  u8 A, X, Y, P, S;
+  u64 cy, bits;
+  u16 PC, PC_fix, bus_addr;
+  u8 A, X, Y, S;
   u8 ram[0x800]; // 2KiB internal ram.
+  u8 opcode, temp;
+  Bool C, Z, I, D, B, V, N; // Flags.
+  Bool bus_en, bus_write;
 } S;
 
 typedef struct {
@@ -94,7 +108,14 @@ static Result init_emulator(E *e);
 static Result init_mapper(E *e);
 static u16 read_u16(E *e, u16 addr);
 static u8 read_u8(E *e, u16 addr);
+static void write_u8(E *e, u16 addr, u8 val);
 static void disasm(E* e);
+static void print_info(E* e);
+static void step(E* e);
+
+static const char* s_opcode_mnemonic[256];
+static u8 s_opcode_bytes[256];
+static u64 s_opcode_bits[256];
 
 int main(int argc, char **argv) {
   int result = 1;
@@ -109,11 +130,9 @@ int main(int argc, char **argv) {
   CHECK(SUCCESS(get_cart_info(&rom, &e.ci)));
   CHECK(SUCCESS(init_emulator(&e)));
 
-#if 0
-  for (int i = 0; i < 400; ++i) {
-    disasm(&e);
+  while (1) {
+    step(&e);
   }
-#endif
 
   result = 0;
 error:
@@ -209,25 +228,21 @@ Result get_cart_info(FileData *file_data, CartInfo *cart_info) {
 
 u8 read_u8(E *e, u16 addr) {
   switch (addr >> 12) {
-  case 0:
-  case 1:
+  case 0: case 1: // Internal RAM
     return e->s.ram[addr & 0x7ff];
 
-  case 4:
-    // I/O
-    assert(FALSE); // TODO
+  case 2: case 3: // PPU
+    // TODO
     break;
 
-  case 8:
-  case 9:
-  case 10:
-  case 11:
+  case 4: // APU & I/O
+    // TODO
+    break;
+
+  case 8: case 9: case 10: case 11: // ROM
     return e->cpu_map[0][addr - 0x8000];
 
-  case 12:
-  case 13:
-  case 14:
-  case 15:
+  case 12: case 13: case 14: case 15: // ROM
     return e->cpu_map[1][addr - 0xc000];
   }
   return 0xff;
@@ -237,11 +252,31 @@ u16 read_u16(E *e, u16 addr) {
   return read_u8(e, addr) | (read_u8(e, addr + 1) << 8);
 }
 
+void write_u8(E *e, u16 addr, u8 val) {
+  switch (addr >> 12) {
+  case 0: case 1: // Internal RAM
+    e->s.ram[addr & 0x7ff] = val;
+    break;
+
+  case 2: case 3: // PPU
+    // TODO
+    break;
+
+  case 4: // APU & I/O
+    // TODO
+    break;
+  }
+}
+
 Result init_emulator(E *e) {
+  S* s = &e->s;
   CHECK(SUCCESS(init_mapper(e)));
-  e->s.PC = read_u16(e, 0xfffc);
-  e->s.S = 1;
-  e->s.A = e->s.X = e->s.Y = 0;
+  memset(s, 0, sizeof(S));
+  s->PC = s->bus_addr = read_u16(e, 0xfffc);
+  s->S = 1;
+  s->bus_en = TRUE;
+  s->bits = 1; // Read PC.
+
   return OK;
   ON_ERROR_RETURN;
 }
@@ -262,6 +297,189 @@ Result init_mapper(E *e) {
   return OK;
   ON_ERROR_RETURN;
 }
+
+
+void disasm(E* e) {
+  printf("   %04x: ", e->s.PC);
+  u8 opcode = read_u8(e, e->s.PC);
+  const char* fmt = s_opcode_mnemonic[opcode];
+  u8 bytes = s_opcode_bytes[opcode];
+  u8 b0 = read_u8(e, e->s.PC + 1);
+  u8 b1 = read_u8(e, e->s.PC + 2);
+  u16 b01 = read_u16(e, e->s.PC + 1);
+
+  switch (bytes) {
+    case 1: printf("%02x     ", opcode); printf(fmt); break;
+    case 2: printf("%02x%02x   ", opcode, b0); printf(fmt, b0); break;
+    case 3: printf("%02x%02x%02x ", opcode, b0, b1); printf(fmt, b01); break;
+  }
+  if ((opcode & 0x1f) == 0x10) {  // Branch.
+    printf(" (%04x)", e->s.PC + 2 + (s8)b0);
+  }
+  printf("\n");
+}
+
+void print_info(E* e) {
+  printf("PC:%04x A:%02x X:%02x Y:%02x S:%02x P:%c%c1%c%c%c%c  bus:%c%c %04x  "
+         "(cy:%08" PRIu64 ")\n",
+         e->s.PC, e->s.A, e->s.X, e->s.Y, e->s.S, e->s.N ? 'N' : '_',
+         e->s.V ? 'V' : '_', e->s.D ? 'D' : '_', e->s.I ? 'I' : '_',
+         e->s.Z ? 'Z' : '_', e->s.C ? 'C' : '_', e->s.bus_en ? 'Y' : 'N',
+         e->s.bus_write ? 'W' : 'R', e->s.bus_addr, e->s.cy);
+}
+
+static void set_nz(E* e, u8 value) {
+  e->s.Z = value == 0;
+  e->s.N = !!(value & 0x80);
+}
+
+void step(E* e) {
+  S* s = &e->s;
+
+  print_info(e);
+
+  u8 busval = 0;
+  if (s->bus_en && !s->bus_write) {
+    busval = read_u8(e, s->bus_addr);
+  }
+
+  switch (__builtin_ctz(s->bits)) {
+    case 0: { // Read opcode.
+      disasm(e);
+      u8 opcode = s->opcode = busval;
+      s->bus_addr = ++s->PC;
+      s->bits = s_opcode_bits[opcode];
+      if (s->bits == 0) {
+        PRINT_ERROR("NYI %02hhx\n", s->opcode);
+        exit(1);
+      }
+      break;
+    }
+
+    case 1: { // Fetch and increment PC, store in low byte.
+      s->temp = busval;
+      s->bus_addr = ++s->PC;
+      s->bits &= ~0b10;
+      break;
+    }
+
+    case 2: { // Fetch and increment PC, store in high byte.
+      s->bus_addr = (busval << 8) | s->temp;
+      ++s->PC;
+      s->bits &= ~0b100;
+      break;
+    }
+
+    case 3: { // Fetch from bus_addr and execute.
+      Bool oldc = s->C;
+      switch (s->opcode) {
+        case 0x09: ++s->PC;                             // ORA #XX
+        case 0x0D: set_nz(e, s->A |= busval); break;    // ORA XXXX
+        case 0x29: ++s->PC;                             // AND #XX
+        case 0x2D: set_nz(e, s->A &= busval); break;    // AND XXXX
+        case 0x49: ++s->PC;                             // EOR #XX
+        case 0x4D: set_nz(e, s->A ^= busval); break;    // EOR XXXX
+        case 0x69: ++s->PC;                             // ADC #XX
+        case 0x6D: /* TODO */ break;                    // ADC XXXX
+        case 0xA0: ++s->PC;                             // LDY #XX
+        case 0xAC: set_nz(e, s->Y = busval); break;     // LDY XXXX
+        case 0xA2: ++s->PC;                             // LDX #XX
+        case 0xAE: set_nz(e, s->X = busval); break;     // LDX XXXX
+        case 0xA9: ++s->PC;                             // LDA #XX
+        case 0xAD: set_nz(e, s->A = busval); break;     // LDA XXXX
+        case 0xC0: ++s->PC;                             // CPY #XX
+        case 0xCC: s->C = s->Y >= busval;               // CPY XXXX
+                   set_nz(e, s->Y - busval); break;
+        case 0xC9: ++s->PC;                             // CMP #XX
+        case 0xCD: s->C = s->A >= busval;               // CMP XXXX
+                   set_nz(e, s->A - busval); break;
+        case 0xE0: ++s->PC;                             // CPX #XX
+        case 0xEC: s->C = s->X >= busval;               // CPX XXXX
+                   set_nz(e, s->X - busval); break;
+        case 0xE9: ++s->PC;                             // SBC #XX
+        case 0xED: /* TODO */ break;                    // SBC XXXX
+
+        case 0x8C: s->bus_write = TRUE; busval = s->Y; break;  // STY XXXX
+        case 0x8D: s->bus_write = TRUE; busval = s->A; break;  // STA XXXX
+        case 0x8E: s->bus_write = TRUE; busval = s->X; break;  // STX XXXX
+
+        case 0x0A: s->C = !!(s->A & 0x80);              // ASL
+                   set_nz(e, s->A <<= 1); break;
+        case 0x18: s->C = 0; break;                     // CLC
+        case 0x2A: s->C = !!(s->A & 0x80);              // ROL
+                   set_nz(e, s->A = (s->A << 1) | oldc); break;
+        case 0x38: s->C = 1; break;                     // SEC
+        case 0x4A: s->C = !!(s->A & 0x01);              // LSR
+                   set_nz(e, s->A >>= 1); break;
+        case 0x58: s->I = 0; break;                     // CLI
+        case 0x6A: s->C = !!(s->A & 0x01);              // ROR
+                   set_nz(e, s->A = (s->A >> 1) | (oldc << 7)); break;
+        case 0x78: s->I = 1; break;                     // SEI
+        case 0x88: set_nz(e, --s->Y); break;            // DEY
+        case 0x98: s->A = s->Y; break;                  // TYA
+        case 0x9A: s->S = s->X; break;                  // TXS
+        case 0xA8: s->Y = s->A; break;                  // TAY
+        case 0xAA: s->X = s->A; break;                  // TAX
+        case 0xB8: s->V = 0; break;                     // CLV
+        case 0xBA: s->X = s->S; break;                  // TSX
+        case 0xC8: set_nz(e, ++s->Y);                   // INY
+        case 0xCA: set_nz(e, --s->X);                   // DEX
+        case 0xD8: s->D = 0; break;                     // CLD
+        case 0xE8: set_nz(e, ++s->X);                   // INX
+        case 0xEA: break;                               // NOP
+        case 0xF8: s->D = 1; break;                     // SED
+
+        case 0x10: ++s->PC; if (s->N == 0) goto branch_taken; break;  // BPL
+        case 0x30: ++s->PC; if (s->N == 1) goto branch_taken; break;  // BMI
+        case 0x50: ++s->PC; if (s->V == 0) goto branch_taken; break;  // BVC
+        case 0x70: ++s->PC; if (s->V == 1) goto branch_taken; break;  // BVS
+        case 0x90: ++s->PC; if (s->C == 0) goto branch_taken; break;  // BCC
+        case 0xB0: ++s->PC; if (s->C == 1) goto branch_taken; break;  // BCS
+        case 0xD0: ++s->PC; if (s->Z == 0) goto branch_taken; break;  // BNE
+        case 0xF0: ++s->PC; if (s->Z == 1) goto branch_taken; break;  // BEQ
+        branch_taken:
+          s->bits = 0b10000;
+          break;
+
+        default: PRINT_ERROR("NYI %02hhx\n", s->opcode); break;
+      }
+      s->bits &= ~0b1000;
+      break;
+    }
+
+    case 4: { // Branch taken, update PC.
+      u16 new_PC = s->PC + (s8)busval;
+      s->PC_fix = (new_PC ^ s->PC) & 0x100;
+      s->PC = new_PC ^ s->PC_fix;
+      s->bus_addr = s->PC;
+      s->bits &= ~0b10000;
+      if (s->PC_fix) {
+        s->bits |= 0b100000;
+      }
+      break;
+    }
+
+    case 5: { // Branch crossed page, fix PC.
+      s->PC ^= s->PC_fix;
+      s->bus_addr = s->PC;
+      s->bits &= ~0b100000;
+      break;
+    }
+  }
+
+  if (s->bus_en && s->bus_write) {
+    write_u8(e, s->bus_addr, busval);
+  }
+
+  if (s->bits == 0) {
+    s->bus_addr = s->PC;
+    s->bus_en = TRUE;
+    s->bus_write = FALSE;
+    s->bits = 1;
+  }
+  s->cy++;
+}
+
 
 static const char* s_opcode_mnemonic[256] = {
   // 00..0f
@@ -573,24 +791,61 @@ static u8 s_opcode_bytes[] = {
     /* f0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
 };
 
+static u64 s_opcode_bits[256] = {
+    [0x09] = 0b001000, // ORA #XX
+    [0x10] = 0b001000, // BPL +XX
+    [0x0D] = 0b001110, // ORA XXXX
+    [0x0A] = 0b001000, // ASL
+    [0x18] = 0b001000, // CLC
+    [0x29] = 0b001000, // AND #XX
+    [0x2D] = 0b001110, // AND XXXX
+    [0x2A] = 0b001000, // ROL
+    [0x30] = 0b001000, // BMI +XX
+    [0x38] = 0b001000, // SEC
+    [0x49] = 0b001000, // EOR #XX
+    [0x4D] = 0b001110, // EOR XXXX
+    [0x4A] = 0b001000, // LSR
+    [0x50] = 0b001000, // BVC +XX
+    [0x58] = 0b001000, // CLI
+    [0x69] = 0b001000, // ADC #XX
+    [0x6D] = 0b001110, // ADC XXXX
+    [0x6A] = 0b001000, // ROR
+    [0x70] = 0b001000, // BVS +XX
+    [0x78] = 0b001000, // SEI
+    [0x88] = 0b001000, // DEY
+    [0x8A] = 0b001000, // TXA
+    [0x8C] = 0b001110, // STY XXXX
+    [0x8D] = 0b001110, // STA XXXX
+    [0x8E] = 0b001110, // STX XXXX
+    [0x90] = 0b001000, // BCC +XX
+    [0x98] = 0b001000, // TYA
+    [0x9A] = 0b001000, // TXS
+    [0xA0] = 0b001000, // LDY #XX
+    [0xA2] = 0b001000, // LDX #XX
+    [0xA8] = 0b001000, // TAY
+    [0xA9] = 0b001000, // LDA #XX
+    [0xAA] = 0b001000, // TAX
+    [0xAC] = 0b001110, // LDY XXXX
+    [0xAD] = 0b001110, // LDA XXXX
+    [0xAE] = 0b001110, // LDX XXXX
+    [0xB0] = 0b001000, // BCS +XX
+    [0xB8] = 0b001000, // CLV
+    [0xBA] = 0b001000, // TSX
+    [0xC0] = 0b001000, // CPY #XX
+    [0xC8] = 0b001000, // INY
+    [0xC9] = 0b001000, // CMP #XX
+    [0xCA] = 0b001000, // DEX
+    [0xCC] = 0b001110, // CPY XXXX
+    [0xCD] = 0b001110, // CMP XXXX
+    [0xD0] = 0b001000, // BNE +XX
+    [0xD8] = 0b001000, // CLD
+    [0xE0] = 0b001000, // CPX #XX
+    [0xEC] = 0b001110, // CPX XXXX
+    [0xE8] = 0b001000, // INX
+    [0xE9] = 0b001000, // SBC #XX
+    [0xED] = 0b001110, // SBC XXXX
+    [0xEA] = 0b001000, // NOP
+    [0xF0] = 0b001000, // BEQ +XX
+    [0xF8] = 0b001000, // SED
+};
 
-void disasm(E* e) {
-  printf("%04x: ", e->s.PC);
-  u8 opcode = read_u8(e, e->s.PC);
-  const char* fmt = s_opcode_mnemonic[opcode];
-  u8 bytes = s_opcode_bytes[opcode];
-  u8 b0 = read_u8(e, e->s.PC + 1);
-  u8 b1 = read_u8(e, e->s.PC + 2);
-  u16 b01 = read_u16(e, e->s.PC + 1);
-
-  switch (bytes) {
-    case 1: printf("%02x     ", opcode); printf(fmt); break;
-    case 2: printf("%02x%02x   ", opcode, b0); printf(fmt, b0); break;
-    case 3: printf("%02x%02x%02x ", opcode, b0, b1); printf(fmt, b01); break;
-  }
-  if ((opcode & 0x1f) == 0x10) {  // Branch.
-    printf(" (%04x)", e->s.PC + 2 + (s8)b0);
-  }
-  e->s.PC += bytes;
-  printf("\n");
-}
