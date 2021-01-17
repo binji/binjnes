@@ -87,12 +87,12 @@ typedef struct {
 typedef struct {
   u64 cy, bits;
   const u64* step;
-  u16 PC, bus_addr, temp;
+  u8 PCL, PCH, TL, TH, buslo, bushi, fixhi;
   u8 A, X, Y, S;
   u8 ram[0x800]; // 2KiB internal ram.
-  u8 opcode, busval;
+  u8 opcode;
   Bool C, Z, I, D, B, V, N; // Flags.
-  Bool overflow, bus_en, bus_write;
+  Bool bus_en, bus_write;
 } S;
 
 typedef struct {
@@ -279,9 +279,11 @@ Result init_emulator(E *e) {
   CHECK(SUCCESS(init_mapper(e)));
   memset(s, 0, sizeof(S));
 #if 0
-  s->PC = read_u16(e, 0xfffc);
+  s->PCL = read_u16(e, 0xfffc);
+  s->PCH = read_u16(e, 0xfffd);
 #else
-  s->PC = 0xc000; // automated NESTEST
+  s->PCH = 0xc0; // automated NESTEST
+  s->PCL = 0;
   s->cy = 7;
 #endif
   s->S = 0xfd;
@@ -345,122 +347,129 @@ static inline void set_P(E* e, u8 val) {
   e->s.C = !!(val & 0x01);
 }
 
-void print_info(E* e) {
-  printf("PC:%04x A:%02x X:%02x Y:%02x S:%02x P:%c%c1%c%c%c%c%c(%02hhx)  "
-         "bus:%c%c %04x  "
-         "(cy:%08" PRIu64 ")\n",
-         e->s.PC, e->s.A, e->s.X, e->s.Y, e->s.S, e->s.N ? 'N' : '_',
-         e->s.V ? 'V' : '_', e->s.B ? 'B' : '_', e->s.D ? 'D' : '_',
-         e->s.I ? 'I' : '_', e->s.Z ? 'Z' : '_', e->s.C ? 'C' : '_', get_P(e),
-         e->s.bus_en ? 'Y' : 'N', e->s.bus_write ? 'W' : 'R', e->s.bus_addr,
-         e->s.cy);
+static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
+
+static inline void u8_sum(u8 lhs, u8 rhs, u8* sum, u8* fixhi) {
+  u16 result = lhs + rhs;
+  *fixhi = result >> 8;
+  *sum = result;
 }
 
-static inline void sum8_overflow(u8 lhs, u8 rhs, u16* sum, Bool* overflow) {
-  u16 result = lhs + rhs;
-  u16 fix = (result ^ lhs) & 0x100;
-  *overflow = !!fix;
-  *sum = result ^ fix;
+static inline void u16_inc(u8* hi, u8* lo) {
+  u8 fixhi;
+  u8_sum(*lo, 1, lo, &fixhi);
+  *hi += fixhi;
+}
+
+static inline void rol(u8 val, Bool C, u8 *result, Bool *out_c) {
+  *out_c = !!(val & 0x80);
+  *result = (val << 1) | C;
+}
+
+static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
+  *out_c = !!(val & 0x01);
+  *result = (val >> 1) | (C << 7);
+}
+
+void print_info(E* e) {
+  printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c1%c%c%c%c%c(%02hhx) S:%02x  "
+         "bus:%c%c %02x%02x  "
+         "(cy:%08" PRIu64 ")\n",
+         e->s.PCH, e->s.PCL, e->s.A, e->s.X, e->s.Y, e->s.N ? 'N' : '_',
+         e->s.V ? 'V' : '_', e->s.B ? 'B' : '_', e->s.D ? 'D' : '_',
+         e->s.I ? 'I' : '_', e->s.Z ? 'Z' : '_', e->s.C ? 'C' : '_', get_P(e),
+         e->s.S, e->s.bus_en ? 'Y' : 'N', e->s.bus_write ? 'W' : 'R',
+         e->s.bushi, e->s.buslo, e->s.cy);
 }
 
 void step(E* e) {
+  u8 busval;
   S* s = &e->s;
-  print_info(e);
   u64 bits = s->bits;
   while (bits) {
     int bit = __builtin_ctzll(bits);
     switch (bit) {
-      case 0: s->bus_addr = s->PC; break;
-      case 1: s->bus_addr = 0x100 + s->S; break;
-      case 2: s->bus_addr = s->temp; break;
-      case 4: {Bool dummy; sum8_overflow(s->bus_addr, 1, &s->bus_addr, &dummy); break; }
-      case 5: s->busval = read_u8(e, s->bus_addr); break;
-      case 6: s->busval = s->PC & 0xff; break;
-      case 7: s->busval = s->PC >> 8; break;
-      case 8: s->busval = s->temp; break;
-      case 9: s->busval = s->A; break;
-      case 10: s->busval = s->X; break;
-      case 11: s->busval = s->Y; break;
-      case 12: s->busval = get_P(e); break;
-      case 13: s->temp = 0; break;
-      case 14: s->temp = s->busval; break;
-      case 15: s->temp = s->A; break;
-      case 16: s->temp = s->X; break;
-      case 17: s->temp = s->Y; break;
-      case 18: s->temp = s->S; break;
-      case 19: s->temp = s->Z; break;
-      case 20: s->temp = s->C; break;
-      case 21: s->temp = s->V; break;
-      case 22: s->temp = s->N; break;
-      case 23: s->temp = !s->temp; break;
-      case 24: s->temp = (s->temp - 1) & 0xff; break;
-      case 25: s->temp = (s->temp + 1) & 0xff; break;
-      case 26: sum8_overflow(s->temp, s->X, &s->temp, &s->overflow); break;
-      case 27: sum8_overflow(s->temp, s->Y, &s->temp, &s->overflow); break;
-      case 28: s->temp |= s->busval << 8; break;
-      case 29: s->temp += 0x100; break;
-      case 30: write_u8(e, s->bus_addr, s->busval); break;
-      case 31: s->C = !!(s->temp & 0x80); s->temp = (s->temp << 1) & 0xff; break;
-      case 32: s->C = !!(s->temp & 0x01); s->temp >>= 1; break;
-      case 33: {
-        Bool oldc = s->C;
-        s->C = !!(s->temp & 0x80);
-        s->temp = (s->temp << 1) | oldc;
-        break;
-      }
-      case 34: {
-        Bool oldc = s->C;
-        s->C = !!(s->temp & 0x01);
-        s->temp = (s->temp >> 1) | (oldc << 7);
-        break;
-      }
-      case 35: s->C = s->temp >= s->busval; s->temp -= s->busval; break;
-      case 36: s->temp &= s->busval; break;
+      case 0: s->bushi = s->PCH; s->buslo = s->PCL; break;
+      case 1: s->bushi = 1; s->buslo = s->S; break;
+      case 2: s->bushi = s->TH; s->buslo = s->TL; break;
+      case 4: ++s->buslo; break;
+      case 5: busval = read_u8(e, get_u16(s->bushi, s->buslo)); break;
+      case 6: busval = s->PCL; break;
+      case 7: busval = s->PCH; break;
+      case 8: busval = s->TL; break;
+      case 9: busval = s->A; break;
+      case 10: busval = s->X; break;
+      case 11: busval = s->Y; break;
+      case 12: busval = get_P(e); break;
+      case 13: s->TL = 0; break;
+      case 14: s->TL = busval; s->TH = 0; break;
+      case 15: s->TL = s->A; break;
+      case 16: s->TL = s->X; break;
+      case 17: s->TL = s->Y; break;
+      case 18: s->TL = s->S; break;
+      case 19: s->TL = s->Z; break;
+      case 20: s->TL = s->C; break;
+      case 21: s->TL = s->V; break;
+      case 22: s->TL = s->N; break;
+      case 23: s->TL = !s->TL; break;
+      case 24: --s->TL; break;
+      case 25: ++s->TL; break;
+      case 26: u8_sum(s->TL, s->X, &s->TL, &s->fixhi); break;
+      case 27: u8_sum(s->TL, s->Y, &s->TL, &s->fixhi); break;
+      case 28: s->TH = busval; break;
+      case 29: s->TH += 1; break;
+      case 30: write_u8(e, get_u16(s->bushi, s->buslo), busval); break;
+      case 31: s->C = !!(s->TL & 0x80); s->TL <<= 1; break;
+      case 32: s->C = !!(s->TL & 0x01); s->TL >>= 1; break;
+      case 33: rol(s->TL, s->C, &s->TL, &s->C); break;
+      case 34: ror(s->TL, s->C, &s->TL, &s->C); break;
+      case 35: s->C = s->TL >= busval; s->TL -= busval; break;
+      case 36: s->TL &= busval; break;
       case 37:
-        s->N = !!(s->busval & 0x80);
-        s->V = !!(s->busval & 0x40);
-        s->Z = (s->temp & s->busval & 0xff) == 0;
+        s->N = !!(busval & 0x80);
+        s->V = !!(busval & 0x40);
+        s->Z = (s->TL & busval) == 0;
         break;
-      case 38: s->temp ^= s->busval; break;
-      case 39: s->temp |= s->busval; break;
-      case 41: s->busval = ~s->busval; // Fallthrough.
+      case 38: s->TL ^= busval; break;
+      case 39: s->TL |= busval; break;
+      case 41: busval = ~busval; // Fallthrough.
       case 40: {
-        u16 sum = s->A + s->busval + s->C;
+        u16 sum = s->A + busval + s->C;
         s->C = sum >= 0x100;
-        s->V = !!(~(s->A ^ s->busval) & (s->busval ^ sum) & 0x80);
-        s->temp = s->A = sum & 0xff;
+        s->V = !!(~(s->A ^ busval) & (busval ^ sum) & 0x80);
+        s->TL = s->A = sum;
         break;
       }
-      case 42: s->A = s->temp; break;
-      case 43: s->X = s->temp; break;
-      case 44: s->Y = s->temp; break;
-      case 45: s->S = s->temp; break;
-      case 46: set_P(e, s->temp); break;
-      case 47: s->C = s->temp; break;
-      case 48: s->I = s->temp; break;
-      case 49: s->D = s->temp; break;
-      case 50: s->V = s->temp; break;
+      case 42: s->A = s->TL; break;
+      case 43: s->X = s->TL; break;
+      case 44: s->Y = s->TL; break;
+      case 45: s->S = s->TL; break;
+      case 46: set_P(e, s->TL); break;
+      case 47: s->C = s->TL; break;
+      case 48: s->I = s->TL; break;
+      case 49: s->D = s->TL; break;
+      case 50: s->V = s->TL; break;
       case 51: --s->S; break;
       case 52: ++s->S; break;
-      case 53: s->PC = (s->PC & 0xff00) | (s->temp & 0xff); break;
+      case 53: s->PCL = s->TL; break;
       case 54: {
-        u16 new_PC = s->PC + (s8)s->temp;
-        u16 PC_fix = (new_PC ^ s->PC) & 0x100;
-        s->overflow = !!PC_fix;
-        s->PC = new_PC ^ PC_fix;
+        u16 result = s->PCL + (s8)s->TL;
+        s->fixhi = result >> 8;
+        s->PCL = result;
         break;
       }
-      case 55: s->PC = (s->PC & 0xff) | (s->busval << 8); break;
-      case 56: s->PC ^= 0x100; break; // TODO: fix is not correct for negative
-      case 57: ++s->PC; break;
-      case 58: s->Z = s->temp == 0; s->N = !!(s->temp & 0x80); break;
-      case 59: if (!s->overflow) { ++s->step; } break;
-      case 60: if (s->temp) { goto done; } s->temp = s->busval; break;
-      case 61: if (!s->overflow) { goto done; } break;
+      case 55: s->PCH = busval; break;
+      case 56: s->PCH += s->fixhi; break;
+      case 57: u16_inc(&s->PCH, &s->PCL); break;
+      case 58: s->Z = s->TL == 0; s->N = !!(s->TL & 0x80); break;
+      case 59: if (!s->fixhi) { ++s->step; } break;
+      case 60: if (s->TL) { goto done; } s->TL = busval; break;
+      case 61: if (!s->fixhi) { goto done; } break;
       case 62: done: s->step = &s_fetch_bits; break;
       case 63:
-        disasm(e, s->PC - 1);
-        s->step = &s_opcode_bits[s->opcode = s->busval][0];
+        disasm(e, get_u16(s->PCH, s->PCL) - 1);
+        print_info(e);
+        s->step = &s_opcode_bits[s->opcode = busval][0];
         break;
       default:
         FATAL("NYI: step %d\n", bit);
