@@ -117,7 +117,7 @@ static void step(E* e);
 
 static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
-static const u64 s_opcode_bits[256][6];
+static const u64 s_opcode_bits[256][7];
 static const u64 s_decode;
 
 int main(int argc, char **argv) {
@@ -383,7 +383,7 @@ void print_info(E* e) {
 }
 
 void step(E* e) {
-  u8 busval;
+  u8 busval = 0xff;
   print_info(e);
   S* s = &e->s;
   u64 bits = s->bits;
@@ -394,14 +394,14 @@ void step(E* e) {
       case 1: s->bushi = 1; s->buslo = s->S; break;
       case 2: s->bushi = s->TH; s->buslo = s->TL; break;
       case 4: ++s->buslo; break;
-      case 5: busval = read_u8(e, get_u16(s->bushi, s->buslo)); break;
-      case 6: busval = s->PCL; break;
-      case 7: busval = s->PCH; break;
-      case 8: busval = s->TL; break;
-      case 9: busval = s->A; break;
-      case 10: busval = s->X; break;
-      case 11: busval = s->Y; break;
-      case 12: busval = get_P(e); break;
+      case 5: busval &= read_u8(e, get_u16(s->bushi, s->buslo)); break;
+      case 6: busval &= s->PCL; break;
+      case 7: busval &= s->PCH; break;
+      case 8: busval &= s->TL; break;
+      case 9: busval &= s->A; break;
+      case 10: busval &= s->X; break;
+      case 11: busval &= s->Y; break;
+      case 12: busval &= get_P(e); break;
       case 13: s->TL = 0; break;
       case 14: s->TL = busval; s->TH = 0; break;
       case 15: s->TL = s->A; break;
@@ -1011,9 +1011,9 @@ static const u64 s_br          = 0b001000000100000000000000000000000000000000000
 static const u64 s_fixpc       = 0b0100000100000000000000000000000000000000000000000000000000100001;
 static const u64 s_zerox       = 0b0000000000000000000000000000000000000100000000000000000000100100;
 static const u64 s_zeroy       = 0b0000000000000000000000000000000000001000000000000000000000100100;
-static const u64 s_zerox_indir = 0b0000000000000000000000000000000000010100000000000000000000100100;
+static const u64 s_zerox_indir = 0b0000000000000000000000000000000000000100000000000000000000100100;
 static const u64 s_zeroy_indir = 0b0000100000000000000000000000000000011000000000000000000000110000;
-static const u64 s_readlo        = 0b0000000000000000000000000000000000000000000000000100000000100100;
+static const u64 s_readlo      = 0b0000000000000000000000000000000000000000000000000100000000100100;
 static const u64 s_readhi      = 0b0000000000000000000000000000000000010000000000000000000000110000;
 static const u64 s_write       = 0b0100000000000000000000000000000001000000000000000000000100000000;
 static const u64 s_pop_pcl     = 0b0000000000110000000000000000000000000000000000000100000000100010;
@@ -1037,15 +1037,18 @@ static const u64 s_ora = 0b01000100000000000000010010000000000000000000000010000
 static const u64 s_rol = 0b0000010000000000000000000000001001000000000000000000000000000000;
 static const u64 s_ror = 0b0000010000000000000000000000010001000000000000000000000000000000;
 static const u64 s_sbc = 0b0100010000000000000000100000000000000000000000000000000000100100;
+static const u64 s_sax = 0b0100000000000000000000000000000001000000000000000000011000000100;
 static const u64 s_sta = 0b0100000000000000000000000000000001000000000000000000001000000100;
 static const u64 s_stx = 0b0100000000000000000000000000000001000000000000000000010000000100;
 static const u64 s_sty = 0b0100000000000000000000000000000001000000000000000000100000000100;
+static const u64 s_dcp1 = 0b0000000000000000000000000000000000000001000000000100000000100100;
+static const u64 s_dcp2 = 0b0000000000000000000000000000000001000000000000000000000100000000;
+static const u64 s_dcp3 = 0b0100010000000000000000000000100000000000000000001000000000100000;
+static const u64 s_isb1 = 0b0000000000000000000000000000000000000010000000000100000000100100;
+static const u64 s_isb2 = 0b0000000000000000000000000000000001000000000000000000000100000000;
+static const u64 s_isb3 = 0b0100010000000000000000100000000000000000000000000000000000100000;
 
-#if 0
-    /*SAX (nn,x)*/ [0xA3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sax},
-#endif
-
-static const u64 s_opcode_bits[256][6] = {
+static const u64 s_opcode_bits[256][7] = {
     //     6666555555555544444444443333333333222222222211111111110000000000
     //     3210987654321098765432109876543210987654321098765432109876543210
 
@@ -1189,9 +1192,11 @@ static const u64 s_opcode_bits[256][6] = {
     /*NOP #nn*/[0x80] =
         {0b0100001000000000000000000000000000000000000000000000000000100001},
     /*STA (nn,x)*/[0x81] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sta},
+    /*SAX (nn,x)*/[0x83] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sax},
     /*STY nn*/[0x84] = {s_immlo, s_sty},
     /*STA nn*/[0x85] = {s_immlo, s_sta},
     /*STX nn*/[0x86] = {s_immlo, s_stx},
+    /*SAX nn*/[0x87] = {s_immlo, s_sax},
     /*DEY*/[0x88] =
         {0b0100010000000000000100000000000000000001000000100000000000100001},
     /*TXA*/[0x8A] =
@@ -1199,6 +1204,7 @@ static const u64 s_opcode_bits[256][6] = {
     /*STY nnnn*/[0x8C] = {s_immlo, s_immhi, s_sty},
     /*STA nnnn*/[0x8D] = {s_immlo, s_immhi, s_sta},
     /*STX nnnn*/[0x8E] = {s_immlo, s_immhi, s_stx},
+    /*SAX nnnn*/[0x8f] = {s_immlo, s_immhi, s_sax},
     /*BCC*/[0x90] =
         {0b0001001000000000000000000000000000000000000100000000000000100001,
          s_br, s_fixpc},
@@ -1209,6 +1215,7 @@ static const u64 s_opcode_bits[256][6] = {
     /*STY nn,x*/[0x94] = {s_immlo, s_zerox, s_sty},
     /*STA nn,x*/[0x95] = {s_immlo, s_zerox, s_sta},
     /*STX nn,y*/[0x96] = {s_immlo, s_zeroy, s_stx},
+    /*SAX nn,y*/[0x97] = {s_immlo, s_zeroy, s_sax},
     /*TYA*/[0x98] =
         {0b0100010000000000000001000000000000000000000000100000000000100001},
     /*STA nnnn,y*/[0x99] =
@@ -1262,11 +1269,14 @@ static const u64 s_opcode_bits[256][6] = {
     /*CPY*/[0xC0] =
         {0b0100011000000000000000000000100000000000000000100000000000100001},
     /*CMP (nn,x)*/[0xC1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_cmp},
+    /*DCP (nn,x)*/[0xC3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_dcp1,
+                            s_dcp2, s_dcp3},
     /*CPY nn*/[0xC4] =
         {s_immlo,
          0b0100010000000000000000000000100000000000000000100000000000100100},
     /*CMP nn*/[0xC5] = {s_immlo, s_cmp},
     /*DEC nn*/[0xC6] = {s_immlo, s_readlo, s_dec, s_write},
+    /*DCP nn*/[0xC7] = {s_immlo, s_dcp1, s_dcp2, s_dcp3},
     /*INY*/[0xC8] =
         {0b0100010000000000000100000000000000000010000000100000000000100001},
     /*CMP*/[0xC9] =
@@ -1278,30 +1288,42 @@ static const u64 s_opcode_bits[256][6] = {
          0b0100010000000000000000000000100000000000000000100000000000100100},
     /*CMP nnnn*/[0xCD] = {s_immlo, s_immhi, s_cmp},
     /*DEC nnnn*/[0xCE] = {s_immlo, s_immhi, s_readlo, s_dec, s_write},
+    /*DCP nnnn*/[0xCF] = {s_immlo, s_immhi, s_dcp1, s_dcp2, s_dcp3},
     /*BNE*/[0xD0] =
         {0b0001001000000000000000000000000000000000000010000000000000100001,
          s_br, s_fixpc},
     /*CMP (nn),y*/[0xD1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_cmp},
+    /*DCP (nn),y*/[0xD3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_dcp1,
+                            s_dcp2, s_dcp3},
     /*NOP nn,x*/[0xD4] = {s_immlo, s_zerox, s_nopm},
     /*CMP nn,x*/[0xD5] = {s_immlo, s_zerox, s_cmp},
     /*DEC nn,x*/[0xD6] = {s_immlo, s_zerox, s_readlo, s_dec, s_write},
+    /*DCP nn,x*/[0xD7] = {s_immlo, s_zerox, s_dcp1, s_dcp2, s_dcp3},
     /*CLD*/[0xD8] =
         {0b0100000000000010000000000000000000000000000000000010000000100001},
     /*CMP nnnn,y*/[0xD9] = {s_immlo, s_immhiy, s_fixhi, s_cmp},
     /*NOP*/[0xDA] = {s_nop},
+    /*DCP nnnn,y*/[0xDB] = {s_immlo, s_immhiy, s_fixhi, s_dcp1, s_dcp2, s_dcp3},
     /*NOP nnnn,x*/[0xDC] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*CMP nnnn,x*/[0xDD] = {s_immlo, s_immhix, s_fixhi, s_cmp},
     /*DEC nnnn,x*/[0xDE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_dec,
                             s_write},
+    /*DCP nnnn,x*/[0xDF] = {s_immlo, s_immhix2, s_fixhi, s_dcp1, s_dcp2,
+                            s_dcp3},
     /*CPX*/[0xE0] =
         {0b0100011000000000000000000000100000000000000000010000000000100001},
     /*SBC (nn,x)*/[0xE1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sbc},
+    /*ISB (nn,x)*/[0xE3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_isb1,
+                            s_isb2, s_isb3},
     /*CPX nn*/[0xE4] =
         {s_immlo,
          0b0100010000000000000000000000100000000000000000010000000000100100},
     /*SBC nn*/[0xE5] = {s_immlo, s_sbc},
     /*INC nn*/[0xE6] = {s_immlo, s_readlo, s_inc, s_write},
+    /*ISB nn*/[0xE7] = {s_immlo, s_isb1, s_isb2, s_isb3},
     /*NOP*/[0xEA] = {s_nop},
+    /*SBC #nn*/[0xEB] =
+        {0b0100011000000000000000100000000000000000000000001000000000100001},
     /*INX*/[0xE8] =
         {0b0100010000000000000010000000000000000010000000010000000000100001},
     /*SBC #nn*/[0xE9] =
@@ -1311,21 +1333,28 @@ static const u64 s_opcode_bits[256][6] = {
          0b0100010000000000000000000000100000000000000000010000000000100100},
     /*SBC nnnn*/[0xED] = {s_immlo, s_immhi, s_sbc},
     /*INC nnnn*/[0xEE] = {s_immlo, s_immhi, s_readlo, s_inc, s_write},
+    /*ISB nnnn*/[0xEF] = {s_immlo, s_immhi, s_isb1, s_isb2, s_isb3},
     /*BEQ*/[0xF0] =
         {0b0001001000000000000000000000000000000000100010000000000000100001,
          s_br, s_fixpc},
     /*SBC (nn),y*/[0xF1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sbc},
+    /*ISB (nn),y*/[0xF3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_isb1,
+                            s_isb2, s_isb3},
     /*NOP nn,x*/[0xF4] = {s_immlo, s_zerox, s_nopm},
     /*SBC nn,x*/[0xF5] = {s_immlo, s_zerox, s_sbc},
     /*INC nn,x*/[0xF6] = {s_immlo, s_zerox, s_readlo, s_inc, s_write},
+    /*ISB nn,x*/[0xF7] = {s_immlo, s_zerox, s_isb1, s_isb2, s_isb3},
     /*SED*/[0xF8] =
         {0b0100000000000010000000000000000000000000100000000010000000100001},
     /*SBC nnnn,y*/[0xF9] = {s_immlo, s_immhiy, s_fixhi, s_sbc},
     /*NOP*/[0xFA] = {s_nop},
+    /*ISB nnnn,y*/[0xFB] = {s_immlo, s_immhiy, s_fixhi, s_isb1, s_isb2, s_isb3},
     /*NOP nnnn,x*/[0xFC] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*SBC nnnn,x*/[0xFD] = {s_immlo, s_immhix, s_fixhi, s_sbc},
     /*INC nnnn,x*/[0xFE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_inc,
                             s_write},
+    /*ISB nnnn,x*/[0xFF] = {s_immlo, s_immhix2, s_fixhi, s_isb1, s_isb2,
+                            s_isb3},
 };
 
 static const char* s_opcode_mnemonic[256] = {
