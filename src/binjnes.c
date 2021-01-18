@@ -483,520 +483,6 @@ void step(E* e) {
   s->cy++;
 }
 
-/* micro ops
- *
- * 00. busaddr = PC
- * 01. busaddr = $100+S
- * 02. busaddr = T
- * 03. busaddr = FFFE
- * 04. inc busaddr
- * 05. do read
- * 06. busval = PCL
- * 07. busval = PCH
- * 08. busval = T
- * 09. busval = A
- * 10. busval = X
- * 11. busval = Y
- * 12. busval = P
- * 13. T = 0
- * 14. T = busval, TH = 0
- * 15. T = A
- * 16. T = X
- * 17. T = Y
- * 18. T = S
- * 19. T = Z
- * 20. T = C
- * 21. T = V
- * 22. T = N
- * 23. T = !T
- * 24. T -= 1
- * 25. T += 1
- * 26. T += x
- * 27. T += y
- * 28. TH = busval
- * 29. fix TH
- * 30. do write
- * 31. T <<= 1, set C
- * 32. T >>= 1, set C
- * 33. T rol= 1, set C
- * 34. T ror= 1, set C
- * 35. T -= busval, set C
- * 36. T &= busval
- * 37. T &= busval, set NVZ  (for BIT)
- * 38. T ^= busval
- * 39. T |= busval
- * 40. A = A+busval+C, set VC
- * 41. A = A-busval-(1-C), set VC
- * 42. A = T
- * 43. X = T
- * 44. Y = T
- * 45. S = T
- * 46. P = T
- * 47. C = T
- * 48. I = T
- * 49. D = T
- * 50. V = T
- * 51. dec S
- * 52. inc S
- * 53. PCL = T
- * 54. PCL += T
- * 55. PCH = busval
- * 56. fix PCH
- * 57. inc PC
- * 58. set NZ
- * 59. skip if no index overflow
- * 60. done if T, T = busval
- * 61. done if no index overflow
- * 62. done
- * 63. fetch opcode
- *
- *
- * ***
- *   1  busaddr = PC, do read, inc PC
- *
- * BRK:
- * 00
- *   2  busaddr = PC, do read, inc PC
- *   3  busaddr = $100+S, busval = PCH, do write, dec S
- *   4  busaddr = $100+S, busval = PCL, do write, dec S
- *   5  busaddr = $100+S, busval = P, do write, dec S
- *   6  busaddr = $FFFE, do read, PCL = busval
- *   7  inc busaddr, do read, PCH = busval
- *
- * RTI:
- * 40
- *   2  busaddr = PC, do read
- *   3  busaddr = $100+S, do read, inc S
- *   4  busaddr = $100+S, do read, T = busval, P = T, inc S
- *   5  busaddr = $100+S, do read, T = busval, PCL = T, inc S
- *   6  busaddr = $100+S, do read, PCH = busval
- *
- * RTS:
- * 60
- *   2  busaddr = PC, do read
- *   3  busaddr = $100+S, do read, inc S
- *   4  busaddr = $100+S, do read, T = busval, PCL = T, inc S
- *   5  busaddr = $100+S, do read, PCH = busval
- *   6  inc PC
- *
- * PHA/PHP:
- * 48  08
- *   2  busaddr = PC, do read
- *   3  busaddr = $100+S, busval = A/P, do write, dec S
- *
- * PLA/PLP:
- * 68  28
- *   2  busaddr = PC, do read
- *   3  busaddr = $100+S, do read, inc S
- *   4  busaddr = $100+S, do read, T = busval, A/P = T, set NZ
- *
- * JSR:
- * 20
- *   2  busaddr = PC, do read, T = busval, inc PC
- *   3  busaddr = $100+S, do read
- *   4  busaddr = $100+S, busval = PCH, do write, dec S
- *   5  busaddr = $100+S, busval = PCL, do write, dec S
- *   6  busaddr = PC, do read, PCL = T, PCH = busval
- *
- * (accumulator)
- * ASL,LSR,ROL,ROR:
- * 0A  4A  2A  6A
- *   2  busaddr = PC, do read, T = A, do ASL/LSR/ROL/ROR, A = T, set C, set NZ
- *
- * (implied)
- * SEC,SED,SEI:
- * 38  F8  78
- *   2  busaddr = PC, do read, T = 0, T = !T, C/D/I = T
- *
- * TAX,TAY,TSX,TXA,TXS,TYA:
- * AA  A8  BA  8A  9A  98
- *   2  busaddr = PC, do read, T = A/S/Y, X/Y/A/S = T
- *
- * CLC,CLD,CLI,CLV
- * 18  D8  58  B8
- *   2  busaddr = PC, do read, T = 0, C/D/I/V = T
- *
- * DEX,DEY
- * CA  88
- *   2  busaddr = PC, do read, T = X/Y, T -= 1, X/Y = T, set NZ
-*
- * INX,INY
- * E8  C8
- *   2  busaddr = PC, do read, T = X/Y, T += 1, X/Y = T, set NZ
- *
- * NOP
- * EA
- *   2  busaddr = PC, do read
- *
- * (immediate)
- * CMP,CPX,CPY
- * C9  E0  C0
- *   2  busaddr = PC, do read, inc PC, T = A/X/Y, do T - busval, set C, set NZ
- *
- * LDA,LDX,LDY
- * A9  A2  A0
- *   2  busaddr = PC, do read, inc PC, T = busval, A/X/Y = T, set NZ
- *
- * AND,EOR,ORA
- * 29  49  09
- *   2  busaddr = PC, do read, inc PC, T = A, do T &^| busval, A = T, set NZ
- *
- * ADC
- * 69
- *   2  busaddr = PC, do read, inc PC, A = A+busval+C, set VC, set NZ
- *
- * SBC
- * E9
- *   2  busaddr = PC, do read, inc PC, A = A-busval-(1-C), set VC, set NZ
- *
- * (absolute)
- * JMP
- * 4C
- *   2  busaddr = PC, do read, inc PC, T = busval
- *   3  busaddr = PC, do read, PCL = T, PCH = busval
- *
- * LDA/LDX/LDY
- * AD  AE  AC
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
- *
- * AND,EOR,ORA
- * 2D  4D  0D
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
- *
- * ADC
- * 6D
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read, A = A+busval+C, set VC, set NZ
- *
- * SBC
- * ED
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
- *
- * CMP/CPX/CPY
- * CD  EC  CC
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read, T = A/X/Y, do T - busval, set C, set NZ
- *
- * BIT
- * 2C
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read, T = A, do T & busval, set NVZ
- *
- * ASL/LSR/ROL/ROR
- * 0E  4E  2E  6E
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read
- *   5  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
- *   6  busval = T, do write
- *
- * INC/DEC
- * EE  CE
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read
- *   5  do write, INC/DEC T, set NZ
- *   6  busval = T, do write
- *
- * STA/STX/STY
- * 8D  8E  8C
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, busval = A/X/Y, do write
- *
- * (zero page)
- * LDA/LDX/LDY
- * A5  A6  A4
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
- *
- * AND,EOR,ORA
- * 25  45  05
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
- *
- * ADC
- * 65
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, A = A+busval+C, set VC, set NZ
- *
- * SBC
- * E5
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
- *
- * CMP/CPX/CPY
- * C5  E4  C4
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, T = A/X/Y, do T - busval, set C, set NZ
- *
- * BIT
- * 24
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, T = A, do T & busval, set NVZ
- *
- * ASL/LSR/ROL/ROR
- * 06  46  26  66
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, T = busval
- *   4  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
- *   5  busval = T, do write
- *
- * INC/DEC
- * E6  C6
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, T = busval
- *   4  do write, do INC/DEC on T, set NZ
- *   5  busval = T, do write
- *
- * STA/STX/STY
- * 85  86  84
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0,
- *   3  busaddr = T, busval = A/X/Y, do write
- *
- * (zero page indexed)
- *
- * LDA/LDX/LDY
- * B5  B6  B4
- *
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL += x/y
- *   4  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
- *
- * AND,EOR,ORA
- * 35  55  15
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL += x/y
- *   4  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
- *
- * ADC
- * 75
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL += x/y
- *   4  busaddr = T, do read, A = A+busval+C, set VC, set NZ
- *
- * SBC
- * F5
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL += x/y
- *   4  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
- *
- * CMP
- * D5
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL += x/y
- *   4  busaddr = T, do read, do T - busval, set C, set NZ
- *
- * ASL/LSR/ROL/ROR
- * 16  56  36  76
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL += x
- *   4  busaddr = T, do read, T = busval
- *   5  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
- *   6  busval = T, do write
- *
- * INC/DEC
- * F6  D6
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL += x
- *   4  busaddr = T, do read, T = busval
- *   5  do write, do INC/DEC on T, set C, set NZ
- *   6  busval = T, do write
- *
- * STA/STX/STY
- * 95  96  94
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0,
- *   3  busaddr = T, do read, TL += x/y
- *   4  busaddr = T, busval = A/X/Y, do write
- *
- * (absolute indexed)
- * LDA    LDX LDY
- * BD/B9  BE  BC
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, do read, T = busval, A/X/Y = T, set NZ
- *
- * AND    EOR    ORA
- * 3D/39  5D/59  1D/19
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
- *
- * ADC
- * 7D/79
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, do read, A = A+busval+C, set VC, set NZ
- *
- * SBC
- * FD/F9
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
- *
- * CMP
- * DD/D9
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, do read, do T - busval, set C, set NZ
- *
- * ASL/LSR/ROL/ROR
- * 1E  5E  3E  7E
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, do read
- *   6  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
- *   7  busval = T, do write
- *
- * INC/DEC
- * FE  DE
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, do read
- *   6  do write, do INC/DEC on T, set C, set NZ
- *   7  busval = T, do write
- *
- * STA
- * 9D
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
- *   4+ busaddr = T, do read, fix TH
- *   5  busaddr = T, busval = A, do write
- *
- * (relative)
- * BCC/BCS/BNE/BEQ/BPL/BMI/BVC/BVS
- * 90  B0  D0  F0  10  30  50  70
- *   2  busaddr = PC, do read, T = busval, inc PC, done if branch fails
- *   3? busaddr = PC, do read, PCL += T
- *   4+ busaddr = PC, do read, fix PCH
- *
- * (indexed indirect)
- * LDA
- * A1
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TH = busval, TL += x/y
- *   4  busaddr = T, do read, TL = busval
- *   5  inc busaddr, do read, TH = busval
- *   6  busaddr = T, do read, T = busval, A = T, set NZ
- *
- * AND,EOR,ORA
- * 21  41  01
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TH = busval, TL += x/y
- *   4  busaddr = T, do read, TL = busval
- *   5  inc busaddr, do read, TH = busval
- *   6  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
- *
- * ADC
- * 61
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TH = busval, TL += x/y
- *   4  busaddr = T, do read, TL = busval
- *   5  inc busaddr, do read, TH = busval
- *   6  busaddr = T, do read, A = A+busval+C, set VC, set NZ
- *
- * SBC
- * E1
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TH = busval, TL += x/y
- *   4  busaddr = T, do read, TL = busval
- *   5  inc busaddr, do read, TH = busval
- *   6  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
- *
- * CMP
- * C1
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TH = busval, TL += x/y
- *   4  busaddr = T, do read, TL = busval
- *   5  inc busaddr, do read, TH = busval
- *   6  busaddr = T, do read, do T - busval, set C, set NZ
- *
- * STA
- * 81
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TH = busval, TL += x/y
- *   4  busaddr = T, do read, TL = busval
- *   5  inc busaddr, do read, TH = busval
- *   6  busaddr = T, busval = A, do write
-  *
- * (indirect indexed)
- * LDA
- * B1
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL = busval
- *   4  inc busaddr, do read, TH = busval, TL += y
- *   5+ busaddr = T, do read, fix TH
- *   6  busaddr = T, do read, T = busval, A = T, set NZ
- *
- * AND,EOR,ORA
- * 31  51  11
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL = busval
- *   4  inc busaddr, do read, TH = busval, TL += y
- *   5+ busaddr = T, do read, fix TH
- *   6  busaddr = T, do read, T = A, do T &^| busval, A = T, set NZ
- *
- * ADC
- * 71
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL = busval
- *   4  inc busaddr, do read, TH = busval, TL += y
- *   5+ busaddr = T, do read, fix TH
- *   6  busaddr = T, do read, A = A+busval+C, set VC, set NZ
- *
- * SBC
- * F1
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL = busval
- *   4  inc busaddr, do read, TH = busval, TL += y
- *   5+ busaddr = T, do read, fix TH
- *   6  busaddr = T, do read, A = A-busval-(1-C), set VC, set NZ
- *
- * CMP
- * D1
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL = busval
- *   4  inc busaddr, do read, TH = busval, TL += y
- *   5+ busaddr = T, do read, fix TH
- *   6  busaddr = T, do read, do T - busval, set C, set NZ
- *
- * STA
- * 91
- *   2  busaddr = PC, do read, inc PC, TL = busval, TH = 0
- *   3  busaddr = T, do read, TL = busval
- *   4  inc busaddr, do read, TH = busval, TL += y
- *   5+ busaddr = T, do read, fix TH
- *   6  busaddr = T, busval = A, do write
- *
- * (absolute indirect)
- * JMP
- * 6C
- *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval
- *   4  busaddr = T, do read, T = busval
- *   5  inc busaddr, do read, PCL = T, PCH = busval
- *
- */
-
-//    6666555555555544444444443333333333222222222211111111110000000000
-//    3210987654321098765432109876543210987654321098765432109876543210
-
 static const u64 s_decode = 0b1000001000000000000000000000000000000000000000000000000000100001;
 
 static const u64 s_imp         = 0b0000000000000000000000000000000000000000000000000000000000100001;
@@ -1023,6 +509,8 @@ static const u64 s_and = 0b01000100000000000000010000010000000000000000000010000
 static const u64 s_asl = 0b0000010000000000000000000000000011000000000000000000000000000000;
 static const u64 s_bit = 0b0100000000000000000000000010000000000000000000001000000000100100;
 static const u64 s_cmp = 0b0100010000000000000000000000100000000000000000001000000000100100;
+static const u64 s_cpx = 0b0100010000000000000000000000100000000000000000010000000000100100;
+static const u64 s_cpy = 0b0100010000000000000000000000100000000000000000100000000000100100;
 static const u64 s_dec = 0b0000010000000000000000000000000001000001000000000000000000000000;
 static const u64 s_eor = 0b0100010000000000000001000100000000000000000000001000000000100100;
 static const u64 s_inc = 0b0000010000000000000000000000000001000010000000000000000000000000;
@@ -1041,320 +529,337 @@ static const u64 s_sax = 0b01000000000000000000000000000000010000000000000000000
 static const u64 s_sta = 0b0100000000000000000000000000000001000000000000000000001000000100;
 static const u64 s_stx = 0b0100000000000000000000000000000001000000000000000000010000000100;
 static const u64 s_sty = 0b0100000000000000000000000000000001000000000000000000100000000100;
+
+static const u64 s_rmw2 = 0b0000000000000000000000000000000001000000000000000000000100000000;
 static const u64 s_dcp1 = 0b0000000000000000000000000000000000000001000000000100000000100100;
-static const u64 s_dcp2 = 0b0000000000000000000000000000000001000000000000000000000100000000;
 static const u64 s_dcp3 = 0b0100010000000000000000000000100000000000000000001000000000100000;
 static const u64 s_isb1 = 0b0000000000000000000000000000000000000010000000000100000000100100;
-static const u64 s_isb2 = 0b0000000000000000000000000000000001000000000000000000000100000000;
 static const u64 s_isb3 = 0b0100010000000000000000100000000000000000000000000000000000100000;
+static const u64 s_slo1 = 0b0000000000000000000000000000000010000000000000000100000000100100;
+static const u64 s_slo3 = 0b0100010000000000000001001000000000000000000000001000000000100000;
+static const u64 s_rla1 = 0b0000000000000000000000000000001000000000000000000100000000100100;
+static const u64 s_rla3 = 0b0100010000000000000001000001000000000000000000001000000000100000;
+static const u64 s_sre1 = 0b0000000000000000000000000000000100000000000000000100000000100100;
+static const u64 s_sre3 = 0b0100010000000000000001000100000000000000000000001000000000100000;
+static const u64 s_rra1 = 0b0000000000000000000000000000010000000000000000000100000000100100;
+static const u64 s_rra3 = 0b0100010000000000000000010000000000000000000000000000000000100000;
+
+// One offs... try to combine?
+static const u64 s_php = 0b0100000000001000000000000000000001000000000000000001000000000010;
+static const u64 s_ora_imm = 0b0100011000000000000001001000000000000000000000001000000000100001;
+static const u64 s_asl_a = 0b0100010000000000000001000000000010000000000000001000000000100001;
+static const u64 s_bpl = 0b0001001000000000000000000000000000000000010000000000000000100001;
+static const u64 s_clc = 0b0100000000000000100000000000000000000000000000000010000000100001;
+static const u64 s_jsr1 = 0b0000000000000000000000000000000000000000000000000000000000100010;
+static const u64 s_jsr2 = 0b0000000000001000000000000000000001000000000000000000000010000010;
+static const u64 s_jsr3 = 0b0000000000001000000000000000000001000000000000000000000001000010;
+static const u64 s_plp = 0b0100000000000000010000000000000000000000000000000100000000100010;
+static const u64 s_and_imm = 0b0100011000000000000001000001000000000000000000001000000000100001;
+static const u64 s_rol_a = 0b0100010000000000000001000000001000000000000000001000000000100001;
+static const u64 s_bmi = 0b0001001000000000000000000000000000000000110000000000000000100001;
+static const u64 s_sec = 0b0100000000000000100000000000000000000000100000000010000000100001;
+static const u64 s_rti1 = 0b0000000000010000010000000000000000000000000000000100000000100010;
+static const u64 s_rti3 = 0b0100000010000000000000000000000000000000000000000000000000100010;
+static const u64 s_pha = 0b0100000000001000000000000000000001000000000000000000001000000010;
+static const u64 s_eor_imm = 0b0100011000000000000001000100000000000000000000001000000000100001;
+static const u64 s_lsr_a = 0b0100010000000000000001000000000100000000000000001000000000100001;
+static const u64 s_jmp = 0b0100000010100000000000000000000000000000000000000000000000100001;
+static const u64 s_bvc = 0b0001001000000000000000000000000000000000001000000000000000100001;
+static const u64 s_cli = 0b0100000000000001000000000000000000000000000000000010000000100001;
+static const u64 s_rts1 = 0b0000000010000000000000000000000000000000000000000000000000100010;
+static const u64 s_rts2 = 0b0100001000000000000000000000000000000000000000000000000000000000;
+static const u64 s_pla = 0b0100010000000000000001000000000000000000000000000100000000100010;
+static const u64 s_adc_imm = 0b0100011000000000000000010000000000000000000000001000000000100001;
+static const u64 s_ror_a = 0b0100010000000000000001000000010000000000000000001000000000100001;
+static const u64 s_jmp_ind = 0b0100000010100000000000000000000000000000000000000000000000110000;
+static const u64 s_bvs = 0b0001001000000000000000000000000000000000101000000000000000100001;
+static const u64 s_sei = 0b0100000000000001000000000000000000000000100000000010000000100001;
+static const u64 s_nop_imm = 0b0100001000000000000000000000000000000000000000000000000000100001;
+static const u64 s_dey = 0b0100010000000000000100000000000000000001000000100000000000100001;
+static const u64 s_txa = 0b0100010000000000000001000000000000000000000000010000000000100001;
+static const u64 s_bcc = 0b0001001000000000000000000000000000000000000100000000000000100001;
+static const u64 s_sta_ind_idx = 0b0000000000000000000000000000000000011000000000000000000000110000;
+static const u64 s_tya = 0b0100010000000000000001000000000000000000000000100000000000100001;
+static const u64 s_txs = 0b0100000000000000001000000000000000000000000000010000000000100001;
+static const u64 s_sta_absy = 0b0000001000000000000000000000000000011000000000000000000000100001;
+static const u64 s_sta_absx = 0b0000001000000000000000000000000000010100000000000000000000100001;
+static const u64 s_ldy_imm = 0b0100011000000000000100000000000000000000000000000100000000100001;
+static const u64 s_ldx_imm = 0b0100011000000000000010000000000000000000000000000100000000100001;
+static const u64 s_tay = 0b0100010000000000000100000000000000000000000000001000000000100001;
+static const u64 s_lda_imm = 0b0100011000000000000001000000000000000000000000000100000000100001;
+static const u64 s_tax = 0b0100010000000000000010000000000000000000000000001000000000100001;
+static const u64 s_bcs = 0b0001001000000000000000000000000000000000100100000000000000100001;
+static const u64 s_clv = 0b0100000000000100000000000000000000000000000000000010000000100001;
+static const u64 s_tsx = 0b0100010000000000000010000000000000000000000001000000000000100001;
+static const u64 s_cpy_imm = 0b0100011000000000000000000000100000000000000000100000000000100001;
+static const u64 s_iny = 0b0100010000000000000100000000000000000010000000100000000000100001;
+static const u64 s_cmp_imm = 0b0100011000000000000000000000100000000000000000001000000000100001;
+static const u64 s_dex = 0b0100010000000000000010000000000000000001000000010000000000100001;
+static const u64 s_bne = 0b0001001000000000000000000000000000000000000010000000000000100001;
+static const u64 s_cld = 0b0100000000000010000000000000000000000000000000000010000000100001;
+static const u64 s_cpx_imm = 0b0100011000000000000000000000100000000000000000010000000000100001;
+static const u64 s_sbc_imm = 0b0100011000000000000000100000000000000000000000001000000000100001;
+static const u64 s_inx = 0b0100010000000000000010000000000000000010000000010000000000100001;
+static const u64 s_beq = 0b0001001000000000000000000000000000000000100010000000000000100001;
+static const u64 s_sed = 0b0100000000000010000000000000000000000000100000000010000000100001;
 
 static const u64 s_opcode_bits[256][7] = {
-    //     6666555555555544444444443333333333222222222211111111110000000000
-    //     3210987654321098765432109876543210987654321098765432109876543210
-
-    /*ORA (nn,x)*/ [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},
-    /*NOP nn*/[0x04] = {s_immlo, s_nopm},
-    /*ORA nn*/[0x05] = {s_immlo, s_ora},
-    /*ASL nn*/[0x06] = {s_immlo, s_readlo, s_asl, s_write},
-    /*PHP*/[0x08] =
-        {s_imp,
-         0b0100000000001000000000000000000001000000000000000001000000000010},
-    /*ORA #nn*/[0x09] =
-        {0b0100011000000000000001001000000000000000000000001000000000100001},
-    /*ASL*/[0x0A] =
-        {0b0100010000000000000001000000000010000000000000001000000000100001},
-    /*NOP nnnn*/[0x0C] = {s_immlo, s_immhi, s_nopm},
-    /*ORA nnnn*/[0x0D] = {s_immlo, s_immhi, s_ora},
-    /*ASL nnnn*/[0x0E] = {s_immlo, s_immhi, s_readlo, s_asl, s_write},
-    /*BPL*/[0x10] =
-        {0b0001001000000000000000000000000000000000010000000000000000100001,
-         s_br, s_fixpc},
-    /*ORA (nn),y*/[0x11] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_ora},
-    /*NOP nn,x*/[0x14] = {s_immlo, s_zerox, s_nopm},
-    /*ORA nn,x*/[0x15] = {s_immlo, s_zerox, s_ora},
-    /*ASL nn,x*/[0x16] = {s_immlo, s_zerox, s_readlo, s_asl, s_write},
-    /*CLC*/[0x18] =
-        {0b0100000000000000100000000000000000000000000000000010000000100001},
-    /*ORA nnnn,y*/[0x19] = {s_immlo, s_immhiy, s_fixhi, s_ora},
-    /*NOP*/[0x1A] = {s_nop},
-    /*NOP nnnn,x*/[0x1C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
-    /*ORA nnnn,x*/[0x1D] = {s_immlo, s_immhix, s_fixhi, s_ora},
-    /*ASL nnnn,x*/[0x1E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_asl,
-                            s_write},
-    /*JSR*/[0x20] =
-        {s_immlo,
-         0b0000000000000000000000000000000000000000000000000000000000100010,
-         0b0000000000001000000000000000000001000000000000000000000010000010,
-         0b0000000000001000000000000000000001000000000000000000000001000010,
-         0b0100000010100000000000000000000000000000000000000000000000100001},
-    /*AND (nn,x)*/[0x21] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_and},
-    /*BIT nn*/[0x24] = {s_immlo, s_bit},
-    /*AND nn*/[0x25] = {s_immlo, s_and},
-    /*ROL nn*/[0x26] = {s_immlo, s_readlo, s_rol, s_write},
-    /*PLP*/[0x28] =
-        {s_imp, s_inc_s,
-         0b0100000000000000010000000000000000000000000000000100000000100010},
-    /*AND #nn*/[0x29] =
-        {0b0100011000000000000001000001000000000000000000001000000000100001},
-    /*ROL*/[0x2A] =
-        {0b0100010000000000000001000000001000000000000000001000000000100001},
-    /*BIT nnnn*/[0x2C] = {s_immlo, s_immhi, s_bit},
-    /*AND nnnn*/[0x2D] = {s_immlo, s_immhi, s_and},
-    /*ROL nnnn*/[0x2E] = {s_immlo, s_immhi, s_readlo, s_rol, s_write},
-    /*BMI*/[0x30] =
-        {0b0001001000000000000000000000000000000000110000000000000000100001,
-         s_br, s_fixpc},
-    /*AND (nn),y*/[0x31] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_and},
-    /*NOP nn,x*/[0x34] = {s_immlo, s_zerox, s_nopm},
-    /*AND nn,x*/[0x35] = {s_immlo, s_zerox, s_and},
-    /*ROL nn,x*/[0x36] = {s_immlo, s_zerox, s_readlo, s_rol, s_write},
-    /*SEC*/[0x38] =
-        {0b0100000000000000100000000000000000000000100000000010000000100001},
-    /*AND nnnn,y*/[0x39] = {s_immlo, s_immhiy, s_fixhi, s_and},
-    /*NOP*/[0x3A] = {s_nop},
-    /*NOP nnnn,x*/[0x3C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
-    /*AND nnnn,x*/[0x3D] = {s_immlo, s_immhix, s_fixhi, s_and},
-    /*ROL nnnn,x*/[0x3E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_rol,
-                            s_write},
-    /*RTI*/[0x40] =
-        {s_imp, s_inc_s,
-         0b0000000000010000010000000000000000000000000000000100000000100010,
-         s_pop_pcl,
-         0b0100000010000000000000000000000000000000000000000000000000100010},
-    /*EOR (nn,x)*/[0x41] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_eor},
-    /*NOP nn*/[0x44] = {s_immlo, s_nopm},
-    /*EOR nn*/[0x45] = {s_immlo, s_eor},
-    /*LSR nn*/[0x46] = {s_immlo, s_readlo, s_lsr, s_write},
-    /*PHA*/[0x48] =
-        {s_imp,
-         0b0100000000001000000000000000000001000000000000000000001000000010},
-    /*EOR #nn*/[0x49] =
-        {0b0100011000000000000001000100000000000000000000001000000000100001},
-    /*LSR*/[0x4A] =
-        {0b0100010000000000000001000000000100000000000000001000000000100001},
-    /*JMP*/[0x4C] =
-        {s_immlo,
-         0b0100000010100000000000000000000000000000000000000000000000100001},
-    /*EOR nnnn*/[0x4D] = {s_immlo, s_immhi, s_eor},
-    /*LSR nnnn*/[0x4E] = {s_immlo, s_immhi, s_readlo, s_lsr, s_write},
-    /*BVC*/[0x50] =
-        {0b0001001000000000000000000000000000000000001000000000000000100001,
-         s_br, s_fixpc},
-    /*EOR (nn),y*/[0x51] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_eor},
-    /*NOP nn,x*/[0x54] = {s_immlo, s_zerox, s_nopm},
-    /*EOR nn,x*/[0x55] = {s_immlo, s_zerox, s_eor},
-    /*LSR nn,x*/[0x56] = {s_immlo, s_zerox, s_readlo, s_lsr, s_write},
-    /*CLI*/[0x58] =
-        {0b0100000000000001000000000000000000000000000000000010000000100001},
-    /*EOR nnnn,y*/[0x59] = {s_immlo, s_immhiy, s_fixhi, s_eor},
-    /*NOP*/[0x5A] = {s_nop},
-    /*NOP nnnn,x*/[0x5C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
-    /*EOR nnnn,x*/[0x5D] = {s_immlo, s_immhix, s_fixhi, s_eor},
-    /*LSR nnnn,x*/[0x5E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_lsr,
-                            s_write},
-    /*RTS*/[0x60] =
-        {s_imp, s_inc_s, s_pop_pcl,
-         0b0000000010000000000000000000000000000000000000000000000000100010,
-         0b0100001000000000000000000000000000000000000000000000000000000000},
-    /*ADC (nn,x)*/[0x61] =
-        {s_immlo, s_zerox_indir, s_readlo, s_readhi,
-         0b0100010000000000000000010000000000000000000000001000000000100100},
-    /*NOP nn*/[0x64] = {s_immlo, s_nopm},
-    /*ADC nn*/[0x65] = {s_immlo, s_adc},
-    /*ROR nn*/[0x66] = {s_immlo, s_readlo, s_ror, s_write},
-    /*PLA*/[0x68] =
-        {s_imp, s_inc_s,
-         0b0100010000000000000001000000000000000000000000000100000000100010},
-    /*ADC #nn*/[0x69] =
-        {0b0100011000000000000000010000000000000000000000001000000000100001},
-    /*ROL*/[0x6A] =
-        {0b0100010000000000000001000000010000000000000000001000000000100001},
-    /*JMP ()*/[0x6C] =
-        {s_immlo, s_immhi, s_readlo,
-         0b0100000010100000000000000000000000000000000000000000000000110000},
-    /*ADC nnnn*/[0x6D] = {s_immlo, s_immhi, s_adc},
-    /*ROR nn*/[0x6E] = {s_immlo, s_immhi, s_readlo, s_ror, s_write},
-    /*BVS*/[0x70] =
-        {0b0001001000000000000000000000000000000000101000000000000000100001,
-         s_br, s_fixpc},
-    /*ADC (nn),y*/[0x71] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_adc},
-    /*NOP nn,x*/[0x74] = {s_immlo, s_zerox, s_nopm},
-    /*ADC nn,x*/[0x75] = {s_immlo, s_zerox, s_adc},
-    /*ROR nn,x*/[0x76] = {s_immlo, s_zerox, s_readlo, s_ror, s_write},
-    /*SEI*/[0x78] =
-        {0b0100000000000001000000000000000000000000100000000010000000100001},
-    /*ADC nnnn,y*/[0x79] = {s_immlo, s_immhiy, s_fixhi, s_adc},
-    /*NOP*/[0x7A] = {s_nop},
-    /*NOP nnnn,x*/[0x7C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
-    /*ADC nnnn,x*/[0x7D] = {s_immlo, s_immhix, s_fixhi, s_adc},
-    /*ROR nnnn,x*/[0x7E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_ror,
-                            s_write},
-    /*NOP #nn*/[0x80] =
-        {0b0100001000000000000000000000000000000000000000000000000000100001},
-    /*STA (nn,x)*/[0x81] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sta},
-    /*SAX (nn,x)*/[0x83] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sax},
-    /*STY nn*/[0x84] = {s_immlo, s_sty},
-    /*STA nn*/[0x85] = {s_immlo, s_sta},
-    /*STX nn*/[0x86] = {s_immlo, s_stx},
-    /*SAX nn*/[0x87] = {s_immlo, s_sax},
-    /*DEY*/[0x88] =
-        {0b0100010000000000000100000000000000000001000000100000000000100001},
-    /*TXA*/[0x8A] =
-        {0b0100010000000000000001000000000000000000000000010000000000100001},
-    /*STY nnnn*/[0x8C] = {s_immlo, s_immhi, s_sty},
-    /*STA nnnn*/[0x8D] = {s_immlo, s_immhi, s_sta},
-    /*STX nnnn*/[0x8E] = {s_immlo, s_immhi, s_stx},
-    /*SAX nnnn*/[0x8f] = {s_immlo, s_immhi, s_sax},
-    /*BCC*/[0x90] =
-        {0b0001001000000000000000000000000000000000000100000000000000100001,
-         s_br, s_fixpc},
-    /*STA (nn),y*/[0x91] =
-        {s_immlo, s_readlo,
-         0b0000000000000000000000000000000000011000000000000000000000110000,
-         s_fixhi, s_sta},
-    /*STY nn,x*/[0x94] = {s_immlo, s_zerox, s_sty},
-    /*STA nn,x*/[0x95] = {s_immlo, s_zerox, s_sta},
-    /*STX nn,y*/[0x96] = {s_immlo, s_zeroy, s_stx},
-    /*SAX nn,y*/[0x97] = {s_immlo, s_zeroy, s_sax},
-    /*TYA*/[0x98] =
-        {0b0100010000000000000001000000000000000000000000100000000000100001},
-    /*STA nnnn,y*/[0x99] =
-        {s_immlo,
-         0b0000001000000000000000000000000000011000000000000000000000100001,
-         s_fixhi, s_sta},
-    /*TXS*/[0x9A] =
-        {0b0100000000000000001000000000000000000000000000010000000000100001},
-    /*STA nnnn,x*/[0x9D] =
-        {s_immlo,
-         0b0000001000000000000000000000000000010100000000000000000000100001,
-         s_fixhi, s_sta},
-    /*LDY #nn*/[0xA0] =
-        {0b0100011000000000000100000000000000000000000000000100000000100001},
-    /*LDA (nn,x)*/[0xA1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lda},
-    /*LDX #nn*/[0xA2] =
-        {0b0100011000000000000010000000000000000000000000000100000000100001},
-    /*LAX (nn,x)*/[0xA3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lax},
-    /*LDY nn*/[0xA4] = {s_immlo, s_ldy},
-    /*LDA nn*/[0xA5] = {s_immlo, s_lda},
-    /*LDX nn*/[0xA6] = {s_immlo, s_ldx},
-    /*LAX nn*/[0xA7] = {s_immlo, s_lax},
-    /*TAY*/[0xA8] =
-        {0b0100010000000000000100000000000000000000000000001000000000100001},
-    /*LDA #nn*/[0xA9] =
-        {0b0100011000000000000001000000000000000000000000000100000000100001},
-    /*TAX*/[0xAA] =
-        {0b0100010000000000000010000000000000000000000000001000000000100001},
-    /*LDY nnnn*/[0xAC] = {s_immlo, s_immhi, s_ldy},
-    /*LDA nnnn*/[0xAD] = {s_immlo, s_immhi, s_lda},
-    /*LDX nnnn*/[0xAE] = {s_immlo, s_immhi, s_ldx},
-    /*LAX nnnn*/[0xAF] = {s_immlo, s_immhi, s_lax},
-    /*BCS*/[0xB0] =
-        {0b0001001000000000000000000000000000000000100100000000000000100001,
-         s_br, s_fixpc},
-    /*LDA (nn),y*/[0xB1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lda},
-    /*LAX (nn),y*/[0xB3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lax},
-    /*LDY nn,x*/[0xB4] = {s_immlo, s_zerox, s_ldy},
-    /*LDA nn,x*/[0xB5] = {s_immlo, s_zerox, s_lda},
-    /*LDX nn,y*/[0xB6] = {s_immlo, s_zeroy, s_ldx},
-    /*LAX nn,y*/[0xB7] = {s_immlo, s_zeroy, s_lax},
-    /*CLV*/[0xB8] =
-        {0b0100000000000100000000000000000000000000000000000010000000100001},
-    /*LDA nnnn,y*/[0xB9] = {s_immlo, s_immhiy, s_fixhi, s_lda},
-    /*TSX*/[0xBA] =
-        {0b0100010000000000000010000000000000000000000001000000000000100001},
-    /*LDY nnnn,x*/[0xBC] = {s_immlo, s_immhix, s_fixhi, s_ldy},
-    /*LDA nnnn,x*/[0xBD] = {s_immlo, s_immhix, s_fixhi, s_lda},
-    /*LDX nnnn,y*/[0xBE] = {s_immlo, s_immhiy, s_fixhi, s_ldx},
-    /*LAX nnnn,y*/[0xBF] = {s_immlo, s_immhiy, s_fixhi, s_lax},
-    /*CPY*/[0xC0] =
-        {0b0100011000000000000000000000100000000000000000100000000000100001},
-    /*CMP (nn,x)*/[0xC1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_cmp},
-    /*DCP (nn,x)*/[0xC3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_dcp1,
-                            s_dcp2, s_dcp3},
-    /*CPY nn*/[0xC4] =
-        {s_immlo,
-         0b0100010000000000000000000000100000000000000000100000000000100100},
-    /*CMP nn*/[0xC5] = {s_immlo, s_cmp},
-    /*DEC nn*/[0xC6] = {s_immlo, s_readlo, s_dec, s_write},
-    /*DCP nn*/[0xC7] = {s_immlo, s_dcp1, s_dcp2, s_dcp3},
-    /*INY*/[0xC8] =
-        {0b0100010000000000000100000000000000000010000000100000000000100001},
-    /*CMP*/[0xC9] =
-        {0b0100011000000000000000000000100000000000000000001000000000100001},
-    /*DEX*/[0xCA] =
-        {0b0100010000000000000010000000000000000001000000010000000000100001},
-    /*CPY nnnn*/[0xCC] =
-        {s_immlo, s_immhi,
-         0b0100010000000000000000000000100000000000000000100000000000100100},
-    /*CMP nnnn*/[0xCD] = {s_immlo, s_immhi, s_cmp},
-    /*DEC nnnn*/[0xCE] = {s_immlo, s_immhi, s_readlo, s_dec, s_write},
-    /*DCP nnnn*/[0xCF] = {s_immlo, s_immhi, s_dcp1, s_dcp2, s_dcp3},
-    /*BNE*/[0xD0] =
-        {0b0001001000000000000000000000000000000000000010000000000000100001,
-         s_br, s_fixpc},
-    /*CMP (nn),y*/[0xD1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_cmp},
-    /*DCP (nn),y*/[0xD3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_dcp1,
-                            s_dcp2, s_dcp3},
-    /*NOP nn,x*/[0xD4] = {s_immlo, s_zerox, s_nopm},
-    /*CMP nn,x*/[0xD5] = {s_immlo, s_zerox, s_cmp},
-    /*DEC nn,x*/[0xD6] = {s_immlo, s_zerox, s_readlo, s_dec, s_write},
-    /*DCP nn,x*/[0xD7] = {s_immlo, s_zerox, s_dcp1, s_dcp2, s_dcp3},
-    /*CLD*/[0xD8] =
-        {0b0100000000000010000000000000000000000000000000000010000000100001},
-    /*CMP nnnn,y*/[0xD9] = {s_immlo, s_immhiy, s_fixhi, s_cmp},
-    /*NOP*/[0xDA] = {s_nop},
-    /*DCP nnnn,y*/[0xDB] = {s_immlo, s_immhiy, s_fixhi, s_dcp1, s_dcp2, s_dcp3},
-    /*NOP nnnn,x*/[0xDC] = {s_immlo, s_immhix, s_fixhi, s_nopm},
-    /*CMP nnnn,x*/[0xDD] = {s_immlo, s_immhix, s_fixhi, s_cmp},
-    /*DEC nnnn,x*/[0xDE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_dec,
-                            s_write},
-    /*DCP nnnn,x*/[0xDF] = {s_immlo, s_immhix2, s_fixhi, s_dcp1, s_dcp2,
-                            s_dcp3},
-    /*CPX*/[0xE0] =
-        {0b0100011000000000000000000000100000000000000000010000000000100001},
-    /*SBC (nn,x)*/[0xE1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sbc},
-    /*ISB (nn,x)*/[0xE3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_isb1,
-                            s_isb2, s_isb3},
-    /*CPX nn*/[0xE4] =
-        {s_immlo,
-         0b0100010000000000000000000000100000000000000000010000000000100100},
-    /*SBC nn*/[0xE5] = {s_immlo, s_sbc},
-    /*INC nn*/[0xE6] = {s_immlo, s_readlo, s_inc, s_write},
-    /*ISB nn*/[0xE7] = {s_immlo, s_isb1, s_isb2, s_isb3},
-    /*NOP*/[0xEA] = {s_nop},
-    /*SBC #nn*/[0xEB] =
-        {0b0100011000000000000000100000000000000000000000001000000000100001},
-    /*INX*/[0xE8] =
-        {0b0100010000000000000010000000000000000010000000010000000000100001},
-    /*SBC #nn*/[0xE9] =
-        {0b0100011000000000000000100000000000000000000000001000000000100001},
-    /*CPX nnnn*/[0xEC] =
-        {s_immlo, s_immhi,
-         0b0100010000000000000000000000100000000000000000010000000000100100},
-    /*SBC nnnn*/[0xED] = {s_immlo, s_immhi, s_sbc},
-    /*INC nnnn*/[0xEE] = {s_immlo, s_immhi, s_readlo, s_inc, s_write},
-    /*ISB nnnn*/[0xEF] = {s_immlo, s_immhi, s_isb1, s_isb2, s_isb3},
-    /*BEQ*/[0xF0] =
-        {0b0001001000000000000000000000000000000000100010000000000000100001,
-         s_br, s_fixpc},
-    /*SBC (nn),y*/[0xF1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sbc},
-    /*ISB (nn),y*/[0xF3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_isb1,
-                            s_isb2, s_isb3},
-    /*NOP nn,x*/[0xF4] = {s_immlo, s_zerox, s_nopm},
-    /*SBC nn,x*/[0xF5] = {s_immlo, s_zerox, s_sbc},
-    /*INC nn,x*/[0xF6] = {s_immlo, s_zerox, s_readlo, s_inc, s_write},
-    /*ISB nn,x*/[0xF7] = {s_immlo, s_zerox, s_isb1, s_isb2, s_isb3},
-    /*SED*/[0xF8] =
-        {0b0100000000000010000000000000000000000000100000000010000000100001},
-    /*SBC nnnn,y*/[0xF9] = {s_immlo, s_immhiy, s_fixhi, s_sbc},
-    /*NOP*/[0xFA] = {s_nop},
-    /*ISB nnnn,y*/[0xFB] = {s_immlo, s_immhiy, s_fixhi, s_isb1, s_isb2, s_isb3},
-    /*NOP nnnn,x*/[0xFC] = {s_immlo, s_immhix, s_fixhi, s_nopm},
-    /*SBC nnnn,x*/[0xFD] = {s_immlo, s_immhix, s_fixhi, s_sbc},
-    /*INC nnnn,x*/[0xFE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_inc,
-                            s_write},
-    /*ISB nnnn,x*/[0xFF] = {s_immlo, s_immhix2, s_fixhi, s_isb1, s_isb2,
-                            s_isb3},
+    [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora}, /*ORA (nn,x)*/
+    [0x03] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_slo1, /*SLO (nn,x)*/
+              s_rmw2, s_slo3},
+    [0x04] = {s_immlo, s_nopm},                                  /*NOP nn*/
+    [0x05] = {s_immlo, s_ora},                                   /*ORA nn*/
+    [0x06] = {s_immlo, s_readlo, s_asl, s_write},                /*ASL nn*/
+    [0x07] = {s_immlo, s_slo1, s_rmw2, s_slo3},                  /*SLO nn*/
+    [0x08] = {s_imp, s_php},                                     /*PHP*/
+    [0x09] = {s_ora_imm},                                        /*ORA #nn*/
+    [0x0A] = {s_asl_a},                                          /*ASL*/
+    [0x0C] = {s_immlo, s_immhi, s_nopm},                         /*NOP nnnn*/
+    [0x0D] = {s_immlo, s_immhi, s_ora},                          /*ORA nnnn*/
+    [0x0E] = {s_immlo, s_immhi, s_readlo, s_asl, s_write},       /*ASL nnnn*/
+    [0x0F] = {s_immlo, s_immhi, s_slo1, s_rmw2, s_slo3},         /*SLO nnnn*/
+    [0x10] = {s_bpl, s_br, s_fixpc},                             /*BPL*/
+    [0x11] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_ora}, /*ORA (nn),y*/
+    [0x13] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_slo1, /*SLO (nn),y*/
+              s_rmw2, s_slo3},
+    [0x14] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
+    [0x15] = {s_immlo, s_zerox, s_ora},                    /*ORA nn,x*/
+    [0x16] = {s_immlo, s_zerox, s_readlo, s_asl, s_write}, /*ASL nn,x*/
+    [0x17] = {s_immlo, s_zerox, s_slo1, s_rmw2, s_slo3},   /*SLO nn,x*/
+    [0x18] = {s_clc},                                      /*CLC*/
+    [0x19] = {s_immlo, s_immhiy, s_fixhi, s_ora},          /*ORA nnnn,y*/
+    [0x1A] = {s_nop},                                      /*NOP*/
+    [0x1B] = {s_immlo, s_immhiy, s_fixhi, s_slo1, s_rmw2,
+              s_slo3},                                      /*SLO nnnn,y*/
+    [0x1C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
+    [0x1D] = {s_immlo, s_immhix, s_fixhi, s_ora},           /*ORA nnnn,x*/
+    [0x1E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_asl, /*ASL nnnn,x*/
+              s_write},
+    [0x1F] = {s_immlo, s_immhix2, s_fixhi, s_slo1, s_rmw2, /*SLO nnnn,x*/
+              s_slo3},
+    [0x20] = {s_immlo, s_jsr1, s_jsr2, s_jsr3, s_jmp},            /*JSR*/
+    [0x21] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_and}, /*AND (nn,x)*/
+    [0x23] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_rla1, /*RLA (nn,x)*/
+              s_rmw2, s_rla3},
+    [0x24] = {s_immlo, s_bit},                                   /*BIT nn*/
+    [0x25] = {s_immlo, s_and},                                   /*AND nn*/
+    [0x26] = {s_immlo, s_readlo, s_rol, s_write},                /*ROL nn*/
+    [0x27] = {s_immlo, s_rla1, s_rmw2, s_rla3},                  /*RLA nn*/
+    [0x28] = {s_imp, s_inc_s, s_plp},                            /*PLP*/
+    [0x29] = {s_and_imm},                                        /*AND #nn*/
+    [0x2A] = {s_rol_a},                                          /*ROL*/
+    [0x2C] = {s_immlo, s_immhi, s_bit},                          /*BIT nnnn*/
+    [0x2D] = {s_immlo, s_immhi, s_and},                          /*AND nnnn*/
+    [0x2E] = {s_immlo, s_immhi, s_readlo, s_rol, s_write},       /*ROL nnnn*/
+    [0x2F] = {s_immlo, s_immhi, s_rla1, s_rmw2, s_rla3},         /*RLA nnnn*/
+    [0x30] = {s_bmi, s_br, s_fixpc},                             /*BMI*/
+    [0x31] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_and}, /*AND (nn),y*/
+    [0x33] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_rla1, /*RLA (nn),y*/
+              s_rmw2, s_rla3},
+    [0x34] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
+    [0x35] = {s_immlo, s_zerox, s_and},                    /*AND nn,x*/
+    [0x36] = {s_immlo, s_zerox, s_readlo, s_rol, s_write}, /*ROL nn,x*/
+    [0x37] = {s_immlo, s_zerox, s_rla1, s_rmw2, s_rla3},   /*RLA nn,x*/
+    [0x38] = {s_sec},                                      /*SEC*/
+    [0x39] = {s_immlo, s_immhiy, s_fixhi, s_and},          /*AND nnnn,y*/
+    [0x3A] = {s_nop},                                      /*NOP*/
+    [0x3B] = {s_immlo, s_immhiy, s_fixhi, s_rla1, s_rmw2,
+              s_rla3},                                      /*RLA nnnn,y*/
+    [0x3C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
+    [0x3D] = {s_immlo, s_immhix, s_fixhi, s_and},           /*AND nnnn,x*/
+    [0x3E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_rol, /*ROL nnnn,x*/
+              s_write},
+    [0x3F] = {s_immlo, s_immhix2, s_fixhi, s_rla1, s_rmw2, /*RLA nnnn,x*/
+              s_rla3},
+    [0x40] = {s_imp, s_inc_s, s_rti1, s_pop_pcl, s_rti3},         /*RTI*/
+    [0x41] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_eor}, /*EOR (nn,x)*/
+    [0x43] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sre1, /*SRE (nn,x)*/
+              s_rmw2, s_sre3},
+    [0x44] = {s_immlo, s_nopm},                                  /*NOP nn*/
+    [0x45] = {s_immlo, s_eor},                                   /*EOR nn*/
+    [0x46] = {s_immlo, s_readlo, s_lsr, s_write},                /*LSR nn*/
+    [0x47] = {s_immlo, s_sre1, s_rmw2, s_sre3},                  /*SRE nn*/
+    [0x48] = {s_imp, s_pha},                                     /*PHA*/
+    [0x49] = {s_eor_imm},                                        /*EOR #nn*/
+    [0x4A] = {s_lsr_a},                                          /*LSR*/
+    [0x4C] = {s_immlo, s_jmp},                                   /*JMP*/
+    [0x4D] = {s_immlo, s_immhi, s_eor},                          /*EOR nnnn*/
+    [0x4E] = {s_immlo, s_immhi, s_readlo, s_lsr, s_write},       /*LSR nnnn*/
+    [0x4F] = {s_immlo, s_immhi, s_sre1, s_rmw2, s_sre3},         /*SRE nnnn*/
+    [0x50] = {s_bvc, s_br, s_fixpc},                             /*BVC*/
+    [0x51] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_eor}, /*EOR (nn),y*/
+    [0x53] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sre1, /*SRE (nn),y*/
+              s_rmw2, s_sre3},
+    [0x54] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
+    [0x55] = {s_immlo, s_zerox, s_eor},                    /*EOR nn,x*/
+    [0x56] = {s_immlo, s_zerox, s_readlo, s_lsr, s_write}, /*LSR nn,x*/
+    [0x57] = {s_immlo, s_zerox, s_sre1, s_rmw2, s_sre3},   /*SRE nn,x*/
+    [0x58] = {s_cli},                                      /*CLI*/
+    [0x59] = {s_immlo, s_immhiy, s_fixhi, s_eor},          /*EOR nnnn,y*/
+    [0x5A] = {s_nop},                                      /*NOP*/
+    [0x5B] = {s_immlo, s_immhiy, s_fixhi, s_sre1, s_rmw2,
+              s_sre3},                                      /*SRE nnnn,y*/
+    [0x5C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
+    [0x5D] = {s_immlo, s_immhix, s_fixhi, s_eor},           /*EOR nnnn,x*/
+    [0x5E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_lsr, /*LSR nnnn,x*/
+              s_write},
+    [0x5F] = {s_immlo, s_immhix2, s_fixhi, s_sre1, s_rmw2, /*SRE nnnn,x*/
+              s_sre3},
+    [0x60] = {s_imp, s_inc_s, s_pop_pcl, s_rts1, s_rts2},         /*RTS*/
+    [0x61] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_adc}, /*ADC (nn,x)*/
+    [0x63] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_rra1, /*RRA (nn,x)*/
+              s_rmw2, s_rra3},
+    [0x64] = {s_immlo, s_nopm},                                  /*NOP nn*/
+    [0x65] = {s_immlo, s_adc},                                   /*ADC nn*/
+    [0x66] = {s_immlo, s_readlo, s_ror, s_write},                /*ROR nn*/
+    [0x67] = {s_immlo, s_rra1, s_rmw2, s_rra3},                  /*RRA nn*/
+    [0x68] = {s_imp, s_inc_s, s_pla},                            /*PLA*/
+    [0x69] = {s_adc_imm},                                        /*ADC #nn*/
+    [0x6A] = {s_ror_a},                                          /*ROR*/
+    [0x6C] = {s_immlo, s_immhi, s_readlo, s_jmp_ind},            /*JMP ()*/
+    [0x6D] = {s_immlo, s_immhi, s_adc},                          /*ADC nnnn*/
+    [0x6E] = {s_immlo, s_immhi, s_readlo, s_ror, s_write},       /*ROR nn*/
+    [0x6F] = {s_immlo, s_immhi, s_rra1, s_rmw2, s_rra3},         /*RRA nnnn*/
+    [0x70] = {s_bvs, s_br, s_fixpc},                             /*BVS*/
+    [0x71] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_adc}, /*ADC (nn),y*/
+    [0x73] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_rra1, /*RRA (nn),y*/
+              s_rmw2, s_rra3},
+    [0x74] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
+    [0x75] = {s_immlo, s_zerox, s_adc},                    /*ADC nn,x*/
+    [0x76] = {s_immlo, s_zerox, s_readlo, s_ror, s_write}, /*ROR nn,x*/
+    [0x77] = {s_immlo, s_zerox, s_rra1, s_rmw2, s_rra3},   /*RRA nn,x*/
+    [0x78] = {s_sei},                                      /*SEI*/
+    [0x79] = {s_immlo, s_immhiy, s_fixhi, s_adc},          /*ADC nnnn,y*/
+    [0x7A] = {s_nop},                                      /*NOP*/
+    [0x7B] = {s_immlo, s_immhiy, s_fixhi, s_rra1, s_rmw2,
+              s_rra3},                                      /*RRA nnnn,y*/
+    [0x7C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
+    [0x7D] = {s_immlo, s_immhix, s_fixhi, s_adc},           /*ADC nnnn,x*/
+    [0x7E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_ror, /*ROR nnnn,x*/
+              s_write},
+    [0x7F] = {s_immlo, s_immhix2, s_fixhi, s_rra1, s_rmw2, /*RRA nnnn,x*/
+              s_rra3},
+    [0x80] = {s_nop_imm},                                         /*NOP #nn*/
+    [0x81] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sta}, /*STA (nn,x)*/
+    [0x83] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sax}, /*SAX (nn,x)*/
+    [0x84] = {s_immlo, s_sty},                                    /*STY nn*/
+    [0x85] = {s_immlo, s_sta},                                    /*STA nn*/
+    [0x86] = {s_immlo, s_stx},                                    /*STX nn*/
+    [0x87] = {s_immlo, s_sax},                                    /*SAX nn*/
+    [0x88] = {s_dey},                                             /*DEY*/
+    [0x8A] = {s_txa},                                             /*TXA*/
+    [0x8C] = {s_immlo, s_immhi, s_sty},                           /*STY nnnn*/
+    [0x8D] = {s_immlo, s_immhi, s_sta},                           /*STA nnnn*/
+    [0x8E] = {s_immlo, s_immhi, s_stx},                           /*STX nnnn*/
+    [0x8f] = {s_immlo, s_immhi, s_sax},                           /*SAX nnnn*/
+    [0x90] = {s_bcc, s_br, s_fixpc},                              /*BCC*/
+    [0x91] = {s_immlo, s_readlo, s_sta_ind_idx, s_fixhi, s_sta},  /*STA (nn),y*/
+    [0x94] = {s_immlo, s_zerox, s_sty},                           /*STY nn,x*/
+    [0x95] = {s_immlo, s_zerox, s_sta},                           /*STA nn,x*/
+    [0x96] = {s_immlo, s_zeroy, s_stx},                           /*STX nn,y*/
+    [0x97] = {s_immlo, s_zeroy, s_sax},                           /*SAX nn,y*/
+    [0x98] = {s_tya},                                             /*TYA*/
+    [0x99] = {s_immlo, s_sta_absy, s_fixhi, s_sta},               /*STA nnnn,y*/
+    [0x9A] = {s_txs},                                             /*TXS*/
+    [0x9D] = {s_immlo, s_sta_absx, s_fixhi, s_sta},               /*STA nnnn,x*/
+    [0xA0] = {s_ldy_imm},                                         /*LDY #nn*/
+    [0xA1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lda}, /*LDA (nn,x)*/
+    [0xA2] = {s_ldx_imm},                                         /*LDX #nn*/
+    [0xA3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lax}, /*LAX (nn,x)*/
+    [0xA4] = {s_immlo, s_ldy},                                    /*LDY nn*/
+    [0xA5] = {s_immlo, s_lda},                                    /*LDA nn*/
+    [0xA6] = {s_immlo, s_ldx},                                    /*LDX nn*/
+    [0xA7] = {s_immlo, s_lax},                                    /*LAX nn*/
+    [0xA8] = {s_tay},                                             /*TAY*/
+    [0xA9] = {s_lda_imm},                                         /*LDA #nn*/
+    [0xAA] = {s_tax},                                             /*TAX*/
+    [0xAC] = {s_immlo, s_immhi, s_ldy},                           /*LDY nnnn*/
+    [0xAD] = {s_immlo, s_immhi, s_lda},                           /*LDA nnnn*/
+    [0xAE] = {s_immlo, s_immhi, s_ldx},                           /*LDX nnnn*/
+    [0xAF] = {s_immlo, s_immhi, s_lax},                           /*LAX nnnn*/
+    [0xB0] = {s_bcs, s_br, s_fixpc},                              /*BCS*/
+    [0xB1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lda},  /*LDA (nn),y*/
+    [0xB3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lax},  /*LAX (nn),y*/
+    [0xB4] = {s_immlo, s_zerox, s_ldy},                           /*LDY nn,x*/
+    [0xB5] = {s_immlo, s_zerox, s_lda},                           /*LDA nn,x*/
+    [0xB6] = {s_immlo, s_zeroy, s_ldx},                           /*LDX nn,y*/
+    [0xB7] = {s_immlo, s_zeroy, s_lax},                           /*LAX nn,y*/
+    [0xB8] = {s_clv},                                             /*CLV*/
+    [0xB9] = {s_immlo, s_immhiy, s_fixhi, s_lda},                 /*LDA nnnn,y*/
+    [0xBA] = {s_tsx},                                             /*TSX*/
+    [0xBC] = {s_immlo, s_immhix, s_fixhi, s_ldy},                 /*LDY nnnn,x*/
+    [0xBD] = {s_immlo, s_immhix, s_fixhi, s_lda},                 /*LDA nnnn,x*/
+    [0xBE] = {s_immlo, s_immhiy, s_fixhi, s_ldx},                 /*LDX nnnn,y*/
+    [0xBF] = {s_immlo, s_immhiy, s_fixhi, s_lax},                 /*LAX nnnn,y*/
+    [0xC0] = {s_cpy_imm},                                         /*CPY #nn*/
+    [0xC1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_cmp}, /*CMP (nn,x)*/
+    [0xC3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_dcp1, /*DCP (nn,x)*/
+              s_rmw2, s_dcp3},
+    [0xC4] = {s_immlo, s_cpy},                                   /*CPY nn*/
+    [0xC5] = {s_immlo, s_cmp},                                   /*CMP nn*/
+    [0xC6] = {s_immlo, s_readlo, s_dec, s_write},                /*DEC nn*/
+    [0xC7] = {s_immlo, s_dcp1, s_rmw2, s_dcp3},                  /*DCP nn*/
+    [0xC8] = {s_iny},                                            /*INY*/
+    [0xC9] = {s_cmp_imm},                                        /*CMP #nn*/
+    [0xCA] = {s_dex},                                            /*DEX*/
+    [0xCC] = {s_immlo, s_immhi, s_cpy},                          /*CPY nnnn*/
+    [0xCD] = {s_immlo, s_immhi, s_cmp},                          /*CMP nnnn*/
+    [0xCE] = {s_immlo, s_immhi, s_readlo, s_dec, s_write},       /*DEC nnnn*/
+    [0xCF] = {s_immlo, s_immhi, s_dcp1, s_rmw2, s_dcp3},         /*DCP nnnn*/
+    [0xD0] = {s_bne, s_br, s_fixpc},                             /*BNE*/
+    [0xD1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_cmp}, /*CMP (nn),y*/
+    [0xD3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_dcp1, /*DCP (nn),y*/
+              s_rmw2, s_dcp3},
+    [0xD4] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
+    [0xD5] = {s_immlo, s_zerox, s_cmp},                    /*CMP nn,x*/
+    [0xD6] = {s_immlo, s_zerox, s_readlo, s_dec, s_write}, /*DEC nn,x*/
+    [0xD7] = {s_immlo, s_zerox, s_dcp1, s_rmw2, s_dcp3},   /*DCP nn,x*/
+    [0xD8] = {s_cld},                                      /*CLD*/
+    [0xD9] = {s_immlo, s_immhiy, s_fixhi, s_cmp},          /*CMP nnnn,y*/
+    [0xDA] = {s_nop},                                      /*NOP*/
+    [0xDB] = {s_immlo, s_immhiy, s_fixhi, s_dcp1, s_rmw2,
+              s_dcp3},                                      /*DCP nnnn,y*/
+    [0xDC] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
+    [0xDD] = {s_immlo, s_immhix, s_fixhi, s_cmp},           /*CMP nnnn,x*/
+    [0xDE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_dec, /*DEC nnnn,x*/
+              s_write},
+    [0xDF] = {s_immlo, s_immhix2, s_fixhi, s_dcp1, s_rmw2, /*DCP nnnn,x*/
+              s_dcp3},
+    [0xE0] = {s_cpx_imm},                                         /*CPX*/
+    [0xE1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sbc}, /*SBC (nn,x)*/
+    [0xE3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_isb1, /*ISB (nn,x)*/
+              s_rmw2, s_isb3},
+    [0xE4] = {s_immlo, s_cpx},                                   /*CPX nn*/
+    [0xE5] = {s_immlo, s_sbc},                                   /*SBC nn*/
+    [0xE6] = {s_immlo, s_readlo, s_inc, s_write},                /*INC nn*/
+    [0xE7] = {s_immlo, s_isb1, s_rmw2, s_isb3},                  /*ISB nn*/
+    [0xEA] = {s_nop},                                            /*NOP*/
+    [0xEB] = {s_sbc_imm},                                        /*SBC #nn*/
+    [0xE8] = {s_inx},                                            /*INX*/
+    [0xE9] = {s_sbc_imm},                                        /*SBC #nn*/
+    [0xEC] = {s_immlo, s_immhi, s_cpx},                          /*CPX nnnn*/
+    [0xED] = {s_immlo, s_immhi, s_sbc},                          /*SBC nnnn*/
+    [0xEE] = {s_immlo, s_immhi, s_readlo, s_inc, s_write},       /*INC nnnn*/
+    [0xEF] = {s_immlo, s_immhi, s_isb1, s_rmw2, s_isb3},         /*ISB nnnn*/
+    [0xF0] = {s_beq, s_br, s_fixpc},                             /*BEQ*/
+    [0xF1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sbc}, /*SBC (nn),y*/
+    [0xF3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_isb1, /*ISB (nn),y*/
+              s_rmw2, s_isb3},
+    [0xF4] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
+    [0xF5] = {s_immlo, s_zerox, s_sbc},                    /*SBC nn,x*/
+    [0xF6] = {s_immlo, s_zerox, s_readlo, s_inc, s_write}, /*INC nn,x*/
+    [0xF7] = {s_immlo, s_zerox, s_isb1, s_rmw2, s_isb3},   /*ISB nn,x*/
+    [0xF8] = {s_sed},                                      /*SED*/
+    [0xF9] = {s_immlo, s_immhiy, s_fixhi, s_sbc},          /*SBC nnnn,y*/
+    [0xFA] = {s_nop},                                      /*NOP*/
+    [0xFB] = {s_immlo, s_immhiy, s_fixhi, s_isb1, s_rmw2,
+              s_isb3},                                      /*ISB nnnn,y*/
+    [0xFC] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
+    [0xFD] = {s_immlo, s_immhix, s_fixhi, s_sbc},           /*SBC nnnn,x*/
+    [0xFE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_inc, /*INC nnnn,x*/
+              s_write},
+    [0xFF] = {s_immlo, s_immhix2, s_fixhi, s_isb1, s_rmw2, /*ISB nnnn,x*/
+              s_isb3},
 };
 
 static const char* s_opcode_mnemonic[256] = {
