@@ -1026,6 +1026,7 @@ static const u64 s_cmp = 0b01000100000000000000000000001000000000000000000010000
 static const u64 s_dec = 0b0000010000000000000000000000000001000001000000000000000000000000;
 static const u64 s_eor = 0b0100010000000000000001000100000000000000000000001000000000100100;
 static const u64 s_inc = 0b0000010000000000000000000000000001000010000000000000000000000000;
+static const u64 s_lax = 0b0100010000000000000011000000000000000000000000000100000000100100;
 static const u64 s_lda = 0b0100010000000000000001000000000000000000000000000100000000100100;
 static const u64 s_ldx = 0b0100010000000000000010000000000000000000000000000100000000100100;
 static const u64 s_ldy = 0b0100010000000000000100000000000000000000000000000100000000100100;
@@ -1040,11 +1041,16 @@ static const u64 s_sta = 0b01000000000000000000000000000000010000000000000000000
 static const u64 s_stx = 0b0100000000000000000000000000000001000000000000000000010000000100;
 static const u64 s_sty = 0b0100000000000000000000000000000001000000000000000000100000000100;
 
+#if 0
+    /*SAX (nn,x)*/ [0xA3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sax},
+#endif
+
 static const u64 s_opcode_bits[256][6] = {
     //     6666555555555544444444443333333333222222222211111111110000000000
     //     3210987654321098765432109876543210987654321098765432109876543210
-    /*ORA (nn,x)*/[0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},
-    /*NOP nn*/ [0x04] = {s_immlo, s_nopm},
+
+    /*ORA (nn,x)*/ [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},
+    /*NOP nn*/[0x04] = {s_immlo, s_nopm},
     /*ORA nn*/[0x05] = {s_immlo, s_ora},
     /*ASL nn*/[0x06] = {s_immlo, s_readlo, s_asl, s_write},
     /*PHP*/[0x08] =
@@ -1220,9 +1226,11 @@ static const u64 s_opcode_bits[256][6] = {
     /*LDA (nn,x)*/[0xA1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lda},
     /*LDX #nn*/[0xA2] =
         {0b0100011000000000000010000000000000000000000000000100000000100001},
+    /*LAX (nn,x)*/[0xA3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lax},
     /*LDY nn*/[0xA4] = {s_immlo, s_ldy},
     /*LDA nn*/[0xA5] = {s_immlo, s_lda},
     /*LDX nn*/[0xA6] = {s_immlo, s_ldx},
+    /*LAX nn*/[0xA7] = {s_immlo, s_lax},
     /*TAY*/[0xA8] =
         {0b0100010000000000000100000000000000000000000000001000000000100001},
     /*LDA #nn*/[0xA9] =
@@ -1232,13 +1240,16 @@ static const u64 s_opcode_bits[256][6] = {
     /*LDY nnnn*/[0xAC] = {s_immlo, s_immhi, s_ldy},
     /*LDA nnnn*/[0xAD] = {s_immlo, s_immhi, s_lda},
     /*LDX nnnn*/[0xAE] = {s_immlo, s_immhi, s_ldx},
+    /*LAX nnnn*/[0xAF] = {s_immlo, s_immhi, s_lax},
     /*BCS*/[0xB0] =
         {0b0001001000000000000000000000000000000000100100000000000000100001,
          s_br, s_fixpc},
     /*LDA (nn),y*/[0xB1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lda},
+    /*LAX (nn),y*/[0xB3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lax},
     /*LDY nn,x*/[0xB4] = {s_immlo, s_zerox, s_ldy},
     /*LDA nn,x*/[0xB5] = {s_immlo, s_zerox, s_lda},
     /*LDX nn,y*/[0xB6] = {s_immlo, s_zeroy, s_ldx},
+    /*LAX nn,y*/[0xB7] = {s_immlo, s_zeroy, s_lax},
     /*CLV*/[0xB8] =
         {0b0100000000000100000000000000000000000000000000000010000000100001},
     /*LDA nnnn,y*/[0xB9] = {s_immlo, s_immhiy, s_fixhi, s_lda},
@@ -1247,6 +1258,7 @@ static const u64 s_opcode_bits[256][6] = {
     /*LDY nnnn,x*/[0xBC] = {s_immlo, s_immhix, s_fixhi, s_ldy},
     /*LDA nnnn,x*/[0xBD] = {s_immlo, s_immhix, s_fixhi, s_lda},
     /*LDX nnnn,y*/[0xBE] = {s_immlo, s_immhiy, s_fixhi, s_ldx},
+    /*LAX nnnn,y*/[0xBF] = {s_immlo, s_immhiy, s_fixhi, s_lax},
     /*CPY*/[0xC0] =
         {0b0100011000000000000000000000100000000000000000100000000000100001},
     /*CMP (nn,x)*/[0xC1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_cmp},
