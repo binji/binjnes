@@ -340,7 +340,7 @@ static inline u8 get_P(E* e) {
 static inline void set_P(E* e, u8 val) {
   e->s.N = !!(val & 0x80);
   e->s.V = !!(val & 0x40);
-  e->s.B = !!(val & 0x10);
+  e->s.B = 0;
   e->s.D = !!(val & 0x08);
   e->s.I = !!(val & 0x04);
   e->s.Z = !!(val & 0x02);
@@ -857,10 +857,19 @@ void step(E* e) {
  * ASL/LSR/ROL/ROR
  * 1E  5E  3E  7E
  *   2  busaddr = PC, do read, inc PC, TL = busval
- *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x/y
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x
  *   4+ busaddr = T, do read, fix TH
  *   5  busaddr = T, do read
  *   6  do write, do ASL/LSR/ROL/ROR on T, set C, set NZ
+ *   7  busval = T, do write
+ *
+ * INC/DEC
+ * FE  DE
+ *   2  busaddr = PC, do read, inc PC, TL = busval
+ *   3  busaddr = PC, do read, inc PC, TH = busval, TL += x
+ *   4+ busaddr = T, do read, fix TH
+ *   5  busaddr = T, do read
+ *   6  do write, do INC/DEC on T, set C, set NZ
  *   7  busval = T, do write
  *
  * STA
@@ -994,6 +1003,7 @@ static const u64 s_imp         = 0b000000000000000000000000000000000000000000000
 static const u64 s_immlo       = 0b0000001000000000000000000000000000000000000000000100000000100001;
 static const u64 s_immhi       = 0b0000001000000000000000000000000000010000000000000000000000100001;
 static const u64 s_immhix      = 0b0000101000000000000000000000000000010100000000000000000000100001;
+static const u64 s_immhix2     = 0b0000001000000000000000000000000000010100000000000000000000100001;
 static const u64 s_immhiy      = 0b0000101000000000000000000000000000011000000000000000000000100001;
 static const u64 s_fixhi       = 0b0000000000000000000000000000000000100000000000000000000000100100;
 static const u64 s_inc_s       = 0b0000000000010000000000000000000000000000000000000000000000100010;
@@ -1020,6 +1030,8 @@ static const u64 s_lda = 0b01000100000000000000010000000000000000000000000001000
 static const u64 s_ldx = 0b0100010000000000000010000000000000000000000000000100000000100100;
 static const u64 s_ldy = 0b0100010000000000000100000000000000000000000000000100000000100100;
 static const u64 s_lsr = 0b0000010000000000000000000000000101000000000000000000000000000000;
+static const u64 s_nopm = 0b0100000000000000000000000000000000000000000000000000000000100100;
+static const u64 s_nop = 0b0100000000000000000000000000000000000000000000000000000000100001;
 static const u64 s_ora = 0b0100010000000000000001001000000000000000000000001000000000100100;
 static const u64 s_rol = 0b0000010000000000000000000000001001000000000000000000000000000000;
 static const u64 s_ror = 0b0000010000000000000000000000010001000000000000000000000000000000;
@@ -1031,8 +1043,8 @@ static const u64 s_sty = 0b01000000000000000000000000000000010000000000000000001
 static const u64 s_opcode_bits[256][6] = {
     //     6666555555555544444444443333333333222222222211111111110000000000
     //     3210987654321098765432109876543210987654321098765432109876543210
-
-    /*ORA (nn,x)*/ [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},
+    /*ORA (nn,x)*/[0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},
+    /*NOP nn*/ [0x04] = {s_immlo, s_nopm},
     /*ORA nn*/[0x05] = {s_immlo, s_ora},
     /*ASL nn*/[0x06] = {s_immlo, s_readlo, s_asl, s_write},
     /*PHP*/[0x08] =
@@ -1042,18 +1054,24 @@ static const u64 s_opcode_bits[256][6] = {
         {0b0100011000000000000001001000000000000000000000001000000000100001},
     /*ASL*/[0x0A] =
         {0b0100010000000000000001000000000010000000000000001000000000100001},
+    /*NOP nnnn*/[0x0C] = {s_immlo, s_immhi, s_nopm},
     /*ORA nnnn*/[0x0D] = {s_immlo, s_immhi, s_ora},
     /*ASL nnnn*/[0x0E] = {s_immlo, s_immhi, s_readlo, s_asl, s_write},
     /*BPL*/[0x10] =
         {0b0001001000000000000000000000000000000000010000000000000000100001,
          s_br, s_fixpc},
     /*ORA (nn),y*/[0x11] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_ora},
+    /*NOP nn,x*/[0x14] = {s_immlo, s_zerox, s_nopm},
     /*ORA nn,x*/[0x15] = {s_immlo, s_zerox, s_ora},
     /*ASL nn,x*/[0x16] = {s_immlo, s_zerox, s_readlo, s_asl, s_write},
     /*CLC*/[0x18] =
         {0b0100000000000000100000000000000000000000000000000010000000100001},
     /*ORA nnnn,y*/[0x19] = {s_immlo, s_immhiy, s_fixhi, s_ora},
+    /*NOP*/[0x1A] = {s_nop},
+    /*NOP nnnn,x*/[0x1C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*ORA nnnn,x*/[0x1D] = {s_immlo, s_immhix, s_fixhi, s_ora},
+    /*ASL nnnn,x*/[0x1E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_asl,
+                            s_write},
     /*JSR*/[0x20] =
         {s_immlo,
          0b0000000000000000000000000000000000000000000000000000000000100010,
@@ -1078,18 +1096,24 @@ static const u64 s_opcode_bits[256][6] = {
         {0b0001001000000000000000000000000000000000110000000000000000100001,
          s_br, s_fixpc},
     /*AND (nn),y*/[0x31] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_and},
+    /*NOP nn,x*/[0x34] = {s_immlo, s_zerox, s_nopm},
     /*AND nn,x*/[0x35] = {s_immlo, s_zerox, s_and},
     /*ROL nn,x*/[0x36] = {s_immlo, s_zerox, s_readlo, s_rol, s_write},
     /*SEC*/[0x38] =
         {0b0100000000000000100000000000000000000000100000000010000000100001},
     /*AND nnnn,y*/[0x39] = {s_immlo, s_immhiy, s_fixhi, s_and},
+    /*NOP*/[0x3A] = {s_nop},
+    /*NOP nnnn,x*/[0x3C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*AND nnnn,x*/[0x3D] = {s_immlo, s_immhix, s_fixhi, s_and},
+    /*ROL nnnn,x*/[0x3E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_rol,
+                            s_write},
     /*RTI*/[0x40] =
         {s_imp, s_inc_s,
          0b0000000000010000010000000000000000000000000000000100000000100010,
          s_pop_pcl,
          0b0100000010000000000000000000000000000000000000000000000000100010},
     /*EOR (nn,x)*/[0x41] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_eor},
+    /*NOP nn*/[0x44] = {s_immlo, s_nopm},
     /*EOR nn*/[0x45] = {s_immlo, s_eor},
     /*LSR nn*/[0x46] = {s_immlo, s_readlo, s_lsr, s_write},
     /*PHA*/[0x48] =
@@ -1108,12 +1132,17 @@ static const u64 s_opcode_bits[256][6] = {
         {0b0001001000000000000000000000000000000000001000000000000000100001,
          s_br, s_fixpc},
     /*EOR (nn),y*/[0x51] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_eor},
+    /*NOP nn,x*/[0x54] = {s_immlo, s_zerox, s_nopm},
     /*EOR nn,x*/[0x55] = {s_immlo, s_zerox, s_eor},
     /*LSR nn,x*/[0x56] = {s_immlo, s_zerox, s_readlo, s_lsr, s_write},
     /*CLI*/[0x58] =
         {0b0100000000000001000000000000000000000000000000000010000000100001},
     /*EOR nnnn,y*/[0x59] = {s_immlo, s_immhiy, s_fixhi, s_eor},
+    /*NOP*/[0x5A] = {s_nop},
+    /*NOP nnnn,x*/[0x5C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*EOR nnnn,x*/[0x5D] = {s_immlo, s_immhix, s_fixhi, s_eor},
+    /*LSR nnnn,x*/[0x5E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_lsr,
+                            s_write},
     /*RTS*/[0x60] =
         {s_imp, s_inc_s, s_pop_pcl,
          0b0000000010000000000000000000000000000000000000000000000000100010,
@@ -1121,6 +1150,7 @@ static const u64 s_opcode_bits[256][6] = {
     /*ADC (nn,x)*/[0x61] =
         {s_immlo, s_zerox_indir, s_readlo, s_readhi,
          0b0100010000000000000000010000000000000000000000001000000000100100},
+    /*NOP nn*/[0x64] = {s_immlo, s_nopm},
     /*ADC nn*/[0x65] = {s_immlo, s_adc},
     /*ROR nn*/[0x66] = {s_immlo, s_readlo, s_ror, s_write},
     /*PLA*/[0x68] =
@@ -1139,12 +1169,19 @@ static const u64 s_opcode_bits[256][6] = {
         {0b0001001000000000000000000000000000000000101000000000000000100001,
          s_br, s_fixpc},
     /*ADC (nn),y*/[0x71] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_adc},
+    /*NOP nn,x*/[0x74] = {s_immlo, s_zerox, s_nopm},
     /*ADC nn,x*/[0x75] = {s_immlo, s_zerox, s_adc},
     /*ROR nn,x*/[0x76] = {s_immlo, s_zerox, s_readlo, s_ror, s_write},
     /*SEI*/[0x78] =
         {0b0100000000000001000000000000000000000000100000000010000000100001},
     /*ADC nnnn,y*/[0x79] = {s_immlo, s_immhiy, s_fixhi, s_adc},
+    /*NOP*/[0x7A] = {s_nop},
+    /*NOP nnnn,x*/[0x7C] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*ADC nnnn,x*/[0x7D] = {s_immlo, s_immhix, s_fixhi, s_adc},
+    /*ROR nnnn,x*/[0x7E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_ror,
+                            s_write},
+    /*NOP #nn*/[0x80] =
+        {0b0100001000000000000000000000000000000000000000000000000000100001},
     /*STA (nn,x)*/[0x81] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sta},
     /*STY nn*/[0x84] = {s_immlo, s_sty},
     /*STA nn*/[0x85] = {s_immlo, s_sta},
@@ -1209,6 +1246,7 @@ static const u64 s_opcode_bits[256][6] = {
         {0b0100010000000000000010000000000000000000000001000000000000100001},
     /*LDY nnnn,x*/[0xBC] = {s_immlo, s_immhix, s_fixhi, s_ldy},
     /*LDA nnnn,x*/[0xBD] = {s_immlo, s_immhix, s_fixhi, s_lda},
+    /*LDX nnnn,y*/[0xBE] = {s_immlo, s_immhiy, s_fixhi, s_ldx},
     /*CPY*/[0xC0] =
         {0b0100011000000000000000000000100000000000000000100000000000100001},
     /*CMP (nn,x)*/[0xC1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_cmp},
@@ -1232,12 +1270,17 @@ static const u64 s_opcode_bits[256][6] = {
         {0b0001001000000000000000000000000000000000000010000000000000100001,
          s_br, s_fixpc},
     /*CMP (nn),y*/[0xD1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_cmp},
+    /*NOP nn,x*/[0xD4] = {s_immlo, s_zerox, s_nopm},
     /*CMP nn,x*/[0xD5] = {s_immlo, s_zerox, s_cmp},
     /*DEC nn,x*/[0xD6] = {s_immlo, s_zerox, s_readlo, s_dec, s_write},
     /*CLD*/[0xD8] =
         {0b0100000000000010000000000000000000000000000000000010000000100001},
     /*CMP nnnn,y*/[0xD9] = {s_immlo, s_immhiy, s_fixhi, s_cmp},
+    /*NOP*/[0xDA] = {s_nop},
+    /*NOP nnnn,x*/[0xDC] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*CMP nnnn,x*/[0xDD] = {s_immlo, s_immhix, s_fixhi, s_cmp},
+    /*DEC nnnn,x*/[0xDE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_dec,
+                            s_write},
     /*CPX*/[0xE0] =
         {0b0100011000000000000000000000100000000000000000010000000000100001},
     /*SBC (nn,x)*/[0xE1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sbc},
@@ -1246,8 +1289,7 @@ static const u64 s_opcode_bits[256][6] = {
          0b0100010000000000000000000000100000000000000000010000000000100100},
     /*SBC nn*/[0xE5] = {s_immlo, s_sbc},
     /*INC nn*/[0xE6] = {s_immlo, s_readlo, s_inc, s_write},
-    /*NOP*/[0xEA] =
-        {0b0100000000000000000000000000000000000000000000000000000000100001},
+    /*NOP*/[0xEA] = {s_nop},
     /*INX*/[0xE8] =
         {0b0100010000000000000010000000000000000010000000010000000000100001},
     /*SBC #nn*/[0xE9] =
@@ -1261,12 +1303,17 @@ static const u64 s_opcode_bits[256][6] = {
         {0b0001001000000000000000000000000000000000100010000000000000100001,
          s_br, s_fixpc},
     /*SBC (nn),y*/[0xF1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sbc},
+    /*NOP nn,x*/[0xF4] = {s_immlo, s_zerox, s_nopm},
     /*SBC nn,x*/[0xF5] = {s_immlo, s_zerox, s_sbc},
     /*INC nn,x*/[0xF6] = {s_immlo, s_zerox, s_readlo, s_inc, s_write},
     /*SED*/[0xF8] =
         {0b0100000000000010000000000000000000000000100000000010000000100001},
     /*SBC nnnn,y*/[0xF9] = {s_immlo, s_immhiy, s_fixhi, s_sbc},
+    /*NOP*/[0xFA] = {s_nop},
+    /*NOP nnnn,x*/[0xFC] = {s_immlo, s_immhix, s_fixhi, s_nopm},
     /*SBC nnnn,x*/[0xFD] = {s_immlo, s_immhix, s_fixhi, s_sbc},
+    /*INC nnnn,x*/[0xFE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_inc,
+                            s_write},
 };
 
 static const char* s_opcode_mnemonic[256] = {
@@ -1415,7 +1462,7 @@ static const char* s_opcode_mnemonic[256] = {
   "RRA $%04hx,x",
 
   // 80..8f
-  "NOP",
+  "NOP #$%02hhx",
   "STA ($%02hhx,x)",
   "??? #$%02hhx",
   "SAX ($%02hhx,x)",
