@@ -56,15 +56,6 @@ const u32 kChrBankShift = 13;
 #define xcalloc calloc
 
 typedef enum { MIRROR_HORIZONTAL = 0, MIRROR_VERTICAL = 1 } Mirror;
-enum {
-  FLAG_C = 0x01,
-  FLAG_Z = 0x02,
-  FLAG_I = 0x04,
-  FLAG_D = 0x08,
-  FLAG_B = 0x10,
-  FLAG_V = 0x40,
-  FLAG_N = 0x80,
-};
 
 typedef struct FileData {
   u8 *data;
@@ -85,7 +76,7 @@ typedef struct {
 } CartInfo;
 
 typedef struct {
-  u64 cy, bits;
+  u64 bits;
   const u64* step;
   u8 PCL, PCH, TL, TH, buslo, bushi, fixhi;
   u8 A, X, Y, S;
@@ -93,12 +84,31 @@ typedef struct {
   u8 opcode;
   Bool C, Z, I, D, B, V, N; // Flags.
   Bool bus_en, bus_write;
+} C;
+
+typedef struct {
+  u8 ram[0x800];  // 2Kib internal vram.
+  u8 oam[0x100], oam2[0x20];
+  u16 v, t;
+  u8 x;
+  Bool w;
+  u8 palram[32];
+  u8 ppuctrl, ppumask, ppustatus, ppulast;
+  u8 oamaddr;
+} P;
+
+typedef struct {
+  u64 cy;
+  C c;
+  P p;
 } S;
 
 typedef struct {
   S s;
   CartInfo ci;
-  u8 *cpu_map[2]; // TODO: more remappable regions.
+  // TODO: more remappable regions.
+  u8 *cpu_map[2];
+  u8 *nt_map[4];
 } E;
 
 static const char *s_rom_filename;
@@ -108,12 +118,14 @@ static Result file_read(const char *filename, FileData *out);
 static Result get_cart_info(FileData *file_data, CartInfo *cart_info);
 static Result init_emulator(E *e);
 static Result init_mapper(E *e);
-static u16 read_u16(E *e, u16 addr);
-static u8 read_u8(E *e, u16 addr);
-static void write_u8(E *e, u16 addr, u8 val);
+static u8 read_cpu(E *e, u16 addr);
+static void write_cpu(E *e, u16 addr, u8 val);
+static u8 read_ppu(E *e, u16 addr);
+static void write_ppu(E *e, u16 addr, u8 val);
 static void disasm(E* e, u16 addr);
 static void print_info(E* e);
-static void step(E* e);
+static void step_cpu(E* e);
+static void step_ppu(E* e);
 
 static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
@@ -134,7 +146,10 @@ int main(int argc, char **argv) {
   CHECK(SUCCESS(init_emulator(&e)));
 
   while (1) {
-    step(&e);
+    step_cpu(&e);
+    step_ppu(&e);
+    step_ppu(&e);
+    step_ppu(&e);
   }
 
   result = 0;
@@ -229,15 +244,36 @@ Result get_cart_info(FileData *file_data, CartInfo *cart_info) {
   ON_ERROR_RETURN;
 }
 
-u8 read_u8(E *e, u16 addr) {
-  e->s.bus_write = FALSE;
+static inline void inc_ppu_addr(E* e) {
+  e->s.p.v = (e->s.p.v + (e->s.p.ppuctrl & 2) ? 32 : 1) & 0x3fff;
+}
+
+u8 read_cpu(E *e, u16 addr) {
+  e->s.c.bus_write = FALSE;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
-    return e->s.ram[addr & 0x7ff];
+    return e->s.c.ram[addr & 0x7ff];
 
-  case 2: case 3: // PPU
-    // TODO
-    return 0;
+  case 2: case 3: { // PPU
+    switch (addr & 7) {
+      case 0:
+      case 1:
+      case 3:
+      case 5:
+      case 6:
+        return e->s.p.ppulast;
+
+      case 2: return (e->s.p.ppustatus & 0xe0) | (e->s.p.ppulast & 0x1f);
+      case 4:
+        // TODO: don't increment during vblank/forced blank
+        return e->s.p.oam[e->s.p.oamaddr++];
+      case 7: {
+        u8 val = read_ppu(e, e->s.p.v);
+        inc_ppu_addr(e);
+        return val;
+      }
+    }
+  }
 
   case 4: // APU & I/O
     // TODO
@@ -252,25 +288,106 @@ u8 read_u8(E *e, u16 addr) {
   return 0xff;
 }
 
-u16 read_u16(E *e, u16 addr) {
-  return read_u8(e, addr) | (read_u8(e, addr + 1) << 8);
-}
-
-void write_u8(E *e, u16 addr, u8 val) {
-  e->s.bus_write = TRUE;
+void write_cpu(E *e, u16 addr, u8 val) {
+  e->s.c.bus_write = TRUE;
   printf("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
-    e->s.ram[addr & 0x7ff] = val;
+    e->s.c.ram[addr & 0x7ff] = val;
     break;
 
-  case 2: case 3: // PPU
-    // TODO
+  case 2: case 3: { // PPU
+    e->s.p.ppulast = val;
+    switch (addr & 0x7) {
+    case 0:
+      e->s.p.ppuctrl = val;
+      // t: ...BA.. ........ = d: ......BA
+      e->s.p.t = (e->s.p.t & 0xf300) | ((val & 3) << 10);
+      break;
+    case 1: e->s.p.ppumask = val; break;
+    case 3: e->s.p.oamaddr = val; break;
+    case 4:
+      // TODO: handle writes during rendering.
+      e->s.p.oam[e->s.p.oamaddr++] = val;
+      break;
+    case 5:
+      if ((e->s.p.w = !e->s.p.w)) {
+        // w was 1.
+        // t: CBA..HG FED..... = d: HGFEDCBA
+        e->s.p.t =
+            (e->s.p.t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
+      } else {
+        // w was 0.
+        // t: ....... ...HGFED = d: HGFED...
+        // x:              CBA = d: .....CBA
+        e->s.p.x = val & 7;
+        e->s.p.t = (e->s.p.t & 0xffe0) | (val >> 3);
+      }
+      break;
+    case 6:
+      if ((e->s.p.w = !e->s.p.w)) {
+        // w was 1.
+        // t: ....... HGFEDCBA = d: HGFEDCBA
+        // v                   = t
+        e->s.p.v = e->s.p.t = (e->s.p.t & 0xff00) | val;
+      } else {
+        // w was 0.
+        // t: .FEDCBA ........ = d: ..FEDCBA
+        // t: X...... ........ = 0
+        e->s.p.t = (e->s.p.t & 0x80ff) | (val << 8);
+      }
+      break;
+    case 7:
+      write_ppu(e, e->s.p.v, val);
+      inc_ppu_addr(e);
+    }
     break;
+  }
 
   case 4: // APU & I/O
     // TODO
     break;
+  }
+}
+
+static inline u8 get_pal_addr(u16 addr) {
+  return addr & (((addr & 0x13) == 0x10) ? 0x10 : 0x1f);
+}
+
+u8 read_ppu(E *e, u16 addr) {
+  int top4 = addr >> 10;
+  switch (top4) {
+    case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
+    case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
+      return e->ci.chr_data[addr & 0x1fff];
+
+    case 15:
+      if (addr >= 0x3f00) {
+        // Palette ram.
+        return e->s.p.palram[get_pal_addr(addr)];
+      }
+      // Fallthrough.
+    case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
+    case 12: case 13: case 14:         // 0x3000..0x3bff
+      return e->nt_map[(top4 - 8) & 3][addr & 0x3ff];
+  }
+  return 0xff;
+}
+
+void write_ppu(E *e, u16 addr, u8 val) {
+  int top4 = addr >> 10;
+  switch (top4) {
+    case 15:
+      if (addr >= 0x3f00) {
+        // Palette ram.
+        e->s.p.palram[get_pal_addr(addr)] = val;
+        break;
+      }
+      // Fallthrough.
+    case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
+    case 12: case 13: case 14:        // 0x3000..0x3bff
+      e->nt_map[(top4 - 8) & 3][addr & 0x3ff] = val;
+      break;
   }
 }
 
@@ -279,16 +396,16 @@ Result init_emulator(E *e) {
   CHECK(SUCCESS(init_mapper(e)));
   memset(s, 0, sizeof(S));
 #if 0
-  s->PCL = read_u16(e, 0xfffc);
-  s->PCH = read_u16(e, 0xfffd);
+  s->c.PCL = read_cpu(e, 0xfffc);
+  s->c.PCH = read_cpu(e, 0xfffd);
 #else
-  s->PCH = 0xc0; // automated NESTEST
-  s->PCL = 0;
+  s->c.PCH = 0xc0; // automated NESTEST
+  s->c.PCL = 0;
   s->cy = 7;
 #endif
-  s->S = 0xfd;
-  s->bus_en = TRUE;
-  s->bits = s_decode;
+  s->c.S = 0xfd;
+  s->c.bus_en = TRUE;
+  s->c.bits = s_decode;
 
   return OK;
   ON_ERROR_RETURN;
@@ -302,6 +419,13 @@ Result init_mapper(E *e) {
     e->cpu_map[1] = (e->ci.prg_banks == 2)
                         ? e->ci.prg_data + (1 << kPrgBankShift)
                         : e->cpu_map[0];
+    if (e->ci.mirror == MIRROR_HORIZONTAL) {
+      e->nt_map[0] = e->nt_map[1] = e->ci.chr_data;
+      e->nt_map[2] = e->nt_map[3] = e->ci.chr_data + 0x1000;
+    } else {
+      e->nt_map[0] = e->nt_map[2] = e->ci.chr_data;
+      e->nt_map[1] = e->nt_map[3] = e->ci.chr_data + 0x1000;
+    }
     break;
   default:
     CHECK_MSG(FALSE, "Unsupported mapper: %d", e->ci.mapper);
@@ -311,15 +435,16 @@ Result init_mapper(E *e) {
   ON_ERROR_RETURN;
 }
 
+static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
 void disasm(E* e, u16 addr) {
   printf("   %04x: ", addr);
-  u8 opcode = read_u8(e, addr);
+  u8 opcode = read_cpu(e, addr);
   const char* fmt = s_opcode_mnemonic[opcode];
   u8 bytes = s_opcode_bytes[opcode];
-  u8 b0 = read_u8(e, addr + 1);
-  u8 b1 = read_u8(e, addr + 2);
-  u16 b01 = read_u16(e, addr + 1);
+  u8 b0 = read_cpu(e, addr + 1);
+  u8 b1 = read_cpu(e, addr + 2);
+  u16 b01 = get_u16(b1, b0);
 
   switch (bytes) {
     case 1: printf("%02x     ", opcode); printf(fmt); break;
@@ -333,21 +458,19 @@ void disasm(E* e, u16 addr) {
 }
 
 static inline u8 get_P(E* e) {
-  return (e->s.N << 7) | (e->s.V << 6) | 0x20 | (e->s.B << 4) | (e->s.D << 3) |
-         (e->s.I << 2) | (e->s.Z << 1) | (e->s.C << 0);
+  return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (e->s.c.B << 4) |
+         (e->s.c.D << 3) | (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
 }
 
 static inline void set_P(E* e, u8 val) {
-  e->s.N = !!(val & 0x80);
-  e->s.V = !!(val & 0x40);
-  e->s.B = 0;
-  e->s.D = !!(val & 0x08);
-  e->s.I = !!(val & 0x04);
-  e->s.Z = !!(val & 0x02);
-  e->s.C = !!(val & 0x01);
+  e->s.c.N = !!(val & 0x80);
+  e->s.c.V = !!(val & 0x40);
+  e->s.c.B = 0;
+  e->s.c.D = !!(val & 0x08);
+  e->s.c.I = !!(val & 0x04);
+  e->s.c.Z = !!(val & 0x02);
+  e->s.c.C = !!(val & 0x01);
 }
-
-static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
 static inline void u8_sum(u8 lhs, u8 rhs, u8* sum, u8* fixhi) {
   u16 result = lhs + rhs;
@@ -372,114 +495,117 @@ static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
 }
 
 void print_info(E* e) {
+  C* c = &e->s.c;
   printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c1%c%c%c%c%c(%02hhx) S:%02x  "
          "bus:%c%c %02x%02x  "
          "(cy:%08" PRIu64 ")\n",
-         e->s.PCH, e->s.PCL, e->s.A, e->s.X, e->s.Y, e->s.N ? 'N' : '_',
-         e->s.V ? 'V' : '_', e->s.B ? 'B' : '_', e->s.D ? 'D' : '_',
-         e->s.I ? 'I' : '_', e->s.Z ? 'Z' : '_', e->s.C ? 'C' : '_', get_P(e),
-         e->s.S, e->s.bus_en ? 'Y' : 'N', e->s.bus_write ? 'W' : 'R',
-         e->s.bushi, e->s.buslo, e->s.cy);
+         c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
+         c->B ? 'B' : '_', c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_',
+         c->C ? 'C' : '_', get_P(e), c->S, c->bus_en ? 'Y' : 'N',
+         c->bus_write ? 'W' : 'R', c->bushi, c->buslo, e->s.cy);
 }
 
-void step(E* e) {
+void step_ppu(E* e) {
+}
+
+void step_cpu(E* e) {
   u8 busval;
   print_info(e);
-  S* s = &e->s;
-  u64 bits = s->bits;
+  C* c = &e->s.c;
+  u64 bits = c->bits;
   while (bits) {
     int bit = __builtin_ctzll(bits);
     switch (bit) {
-      case 0: s->bushi = s->PCH; s->buslo = s->PCL; break;
-      case 1: s->bushi = 1; s->buslo = s->S; break;
-      case 2: s->bushi = s->TH; s->buslo = s->TL; break;
-      case 4: ++s->buslo; break;
-      case 5: busval = read_u8(e, get_u16(s->bushi, s->buslo)); break;
-      case 6: s->TL = 0; break;
-      case 7: s->TL = busval; s->TH = 0; break;
-      case 8: s->TL = s->A; break;
-      case 9: s->TL = s->X; break;
-      case 10: s->TL = s->Y; break;
-      case 11: s->TL = s->S; break;
-      case 12: s->TL = get_P(e); break;
-      case 13: s->TL = s->Z; break;
-      case 14: s->TL = s->C; break;
-      case 15: s->TL = s->V; break;
-      case 16: s->TL = s->N; break;
-      case 17: s->TL = !s->TL; break;
-      case 18: --s->TL; break;
-      case 19: ++s->TL; break;
-      case 20: u8_sum(s->TL, s->X, &s->TL, &s->fixhi); break;
-      case 21: u8_sum(s->TL, s->Y, &s->TL, &s->fixhi); break;
-      case 22: s->TH = busval; break;
-      case 23: s->TH += s->fixhi; break;
-      case 24: busval = s->PCL; break;
-      case 25: busval = s->PCH; break;
+      case 0: c->bushi = c->PCH; c->buslo = c->PCL; break;
+      case 1: c->bushi = 1; c->buslo = c->S; break;
+      case 2: c->bushi = c->TH; c->buslo = c->TL; break;
+      case 4: ++c->buslo; break;
+      case 5: busval = read_cpu(e, get_u16(c->bushi, c->buslo)); break;
+      case 6: c->TL = 0; break;
+      case 7: c->TL = busval; c->TH = 0; break;
+      case 8: c->TL = c->A; break;
+      case 9: c->TL = c->X; break;
+      case 10: c->TL = c->Y; break;
+      case 11: c->TL = c->S; break;
+      case 12: c->TL = get_P(e); break;
+      case 13: c->TL = c->Z; break;
+      case 14: c->TL = c->C; break;
+      case 15: c->TL = c->V; break;
+      case 16: c->TL = c->N; break;
+      case 17: c->TL = !c->TL; break;
+      case 18: --c->TL; break;
+      case 19: ++c->TL; break;
+      case 20: u8_sum(c->TL, c->X, &c->TL, &c->fixhi); break;
+      case 21: u8_sum(c->TL, c->Y, &c->TL, &c->fixhi); break;
+      case 22: c->TH = busval; break;
+      case 23: c->TH += c->fixhi; break;
+      case 24: busval = c->PCL; break;
+      case 25: busval = c->PCH; break;
       case 26: busval = get_P(e); break;
-      case 27: busval = s->TL; break;
-      case 28: busval = s->A & s->X; break;
-      case 29: write_u8(e, get_u16(s->bushi, s->buslo), busval); break;
-      case 30: s->C = !!(s->TL & 0x80); s->TL <<= 1; break;
-      case 31: s->C = !!(s->TL & 0x01); s->TL >>= 1; break;
-      case 32: rol(s->TL, s->C, &s->TL, &s->C); break;
-      case 33: ror(s->TL, s->C, &s->TL, &s->C); break;
-      case 34: s->C = s->TL >= busval; s->TL -= busval; break;
-      case 35: s->TL &= busval; break;
+      case 27: busval = c->TL; break;
+      case 28: busval = c->A & c->X; break;
+      case 29: write_cpu(e, get_u16(c->bushi, c->buslo), busval); break;
+      case 30: c->C = !!(c->TL & 0x80); c->TL <<= 1; break;
+      case 31: c->C = !!(c->TL & 0x01); c->TL >>= 1; break;
+      case 32: rol(c->TL, c->C, &c->TL, &c->C); break;
+      case 33: ror(c->TL, c->C, &c->TL, &c->C); break;
+      case 34: c->C = c->TL >= busval; c->TL -= busval; break;
+      case 35: c->TL &= busval; break;
       case 36:
-        s->N = !!(busval & 0x80);
-        s->V = !!(busval & 0x40);
-        s->Z = (s->TL & busval) == 0;
+        c->N = !!(busval & 0x80);
+        c->V = !!(busval & 0x40);
+        c->Z = (c->TL & busval) == 0;
         break;
-      case 37: s->TL ^= busval; break;
-      case 38: s->TL |= busval; break;
+      case 37: c->TL ^= busval; break;
+      case 38: c->TL |= busval; break;
       case 40: busval = ~busval; // Fallthrough.
       case 39: {
-        u16 sum = s->A + busval + s->C;
-        s->C = sum >= 0x100;
-        s->V = !!(~(s->A ^ busval) & (busval ^ sum) & 0x80);
-        s->TL = s->A = sum;
+        u16 sum = c->A + busval + c->C;
+        c->C = sum >= 0x100;
+        c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
+        c->TL = c->A = sum;
         break;
       }
-      case 41: s->A = s->TL; break;
-      case 42: s->X = s->TL; break;
-      case 43: s->Y = s->TL; break;
-      case 44: s->S = s->TL; break;
-      case 45: set_P(e, s->TL); break;
-      case 46: s->C = s->TL; break;
-      case 47: s->I = s->TL; break;
-      case 48: s->D = s->TL; break;
-      case 49: s->V = s->TL; break;
-      case 50: --s->S; break;
-      case 51: ++s->S; break;
-      case 52: s->PCL = s->TL; break;
+      case 41: c->A = c->TL; break;
+      case 42: c->X = c->TL; break;
+      case 43: c->Y = c->TL; break;
+      case 44: c->S = c->TL; break;
+      case 45: set_P(e, c->TL); break;
+      case 46: c->C = c->TL; break;
+      case 47: c->I = c->TL; break;
+      case 48: c->D = c->TL; break;
+      case 49: c->V = c->TL; break;
+      case 50: --c->S; break;
+      case 51: ++c->S; break;
+      case 52: c->PCL = c->TL; break;
       case 53: {
-        u16 result = s->PCL + (s8)s->TL;
-        s->fixhi = result >> 8;
-        s->PCL = result;
+        u16 result = c->PCL + (s8)c->TL;
+        c->fixhi = result >> 8;
+        c->PCL = result;
         break;
       }
-      case 54: s->PCH = busval; break;
-      case 55: s->PCH += s->fixhi; break;
-      case 56: u16_inc(&s->PCH, &s->PCL); break;
-      case 57: s->Z = s->TL == 0; s->N = !!(s->TL & 0x80); break;
-      case 58: if (!s->fixhi) { ++s->step; } break;
-      case 59: if (s->TL) { goto done; } s->TL = busval; break;
-      case 60: if (!s->fixhi) { goto done; } break;
-      case 61: done: s->step = &s_decode; break;
+      case 54: c->PCH = busval; break;
+      case 55: c->PCH += c->fixhi; break;
+      case 56: u16_inc(&c->PCH, &c->PCL); break;
+      case 57: c->Z = c->TL == 0; c->N = !!(c->TL & 0x80); break;
+      case 58: if (!c->fixhi) { ++c->step; } break;
+      case 59: if (c->TL) { goto done; } c->TL = busval; break;
+      case 60: if (!c->fixhi) { goto done; } break;
+      case 61: done: c->step = &s_decode; break;
       case 62:
-        disasm(e, get_u16(s->PCH, s->PCL) - 1);
-        s->step = &s_opcode_bits[s->opcode = busval][0];
+        disasm(e, get_u16(c->PCH, c->PCL) - 1);
+        c->step = &s_opcode_bits[c->opcode = busval][0];
         break;
       default:
         FATAL("NYI: step %d\n", bit);
     }
     bits &= ~(1ull << bit);
   }
-  s->bits = *(s->step++);
-  if (s->bits == 0) {
-    FATAL("NYI: opcode %02x\n", s->opcode);
+  c->bits = *(c->step++);
+  if (c->bits == 0) {
+    FATAL("NYI: opcode %02x\n", c->opcode);
   }
-  s->cy++;
+  e->s.cy++;
 }
 
 static const u64 s_decode       = 0b100000100000000000000000000000000000000000000000000000000100001;
@@ -598,262 +724,232 @@ static const u64 s_beq          = 0b00010010000000000000000000000000000000000000
 static const u64 s_sed          = 0b010000000000001000000000000000000000000000000100000000001100001;
 
 static const u64 s_opcode_bits[256][7] = {
-    [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora}, /*ORA (nn,x)*/
-    [0x03] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_slo1, /*SLO (nn,x)*/
-              s_rmw2, s_slo3},
-    [0x04] = {s_immlo, s_nopm},                                  /*NOP nn*/
-    [0x05] = {s_immlo, s_ora},                                   /*ORA nn*/
-    [0x06] = {s_immlo, s_readlo, s_asl, s_write},                /*ASL nn*/
-    [0x07] = {s_immlo, s_slo1, s_rmw2, s_slo3},                  /*SLO nn*/
-    [0x08] = {s_imp, s_php},                                     /*PHP*/
-    [0x09] = {s_ora_imm},                                        /*ORA #nn*/
-    [0x0A] = {s_asl_a},                                          /*ASL*/
-    [0x0C] = {s_immlo, s_immhi, s_nopm},                         /*NOP nnnn*/
-    [0x0D] = {s_immlo, s_immhi, s_ora},                          /*ORA nnnn*/
-    [0x0E] = {s_immlo, s_immhi, s_readlo, s_asl, s_write},       /*ASL nnnn*/
-    [0x0F] = {s_immlo, s_immhi, s_slo1, s_rmw2, s_slo3},         /*SLO nnnn*/
-    [0x10] = {s_bpl, s_br, s_fixpc},                             /*BPL*/
-    [0x11] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_ora}, /*ORA (nn),y*/
-    [0x13] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_slo1, /*SLO (nn),y*/
-              s_rmw2, s_slo3},
-    [0x14] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
-    [0x15] = {s_immlo, s_zerox, s_ora},                    /*ORA nn,x*/
-    [0x16] = {s_immlo, s_zerox, s_readlo, s_asl, s_write}, /*ASL nn,x*/
-    [0x17] = {s_immlo, s_zerox, s_slo1, s_rmw2, s_slo3},   /*SLO nn,x*/
-    [0x18] = {s_clc},                                      /*CLC*/
-    [0x19] = {s_immlo, s_immhiy, s_fixhi, s_ora},          /*ORA nnnn,y*/
-    [0x1A] = {s_nop},                                      /*NOP*/
-    [0x1B] = {s_immlo, s_immhiy, s_fixhi, s_slo1, s_rmw2,
-              s_slo3},                                      /*SLO nnnn,y*/
-    [0x1C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
-    [0x1D] = {s_immlo, s_immhix, s_fixhi, s_ora},           /*ORA nnnn,x*/
-    [0x1E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_asl, /*ASL nnnn,x*/
-              s_write},
-    [0x1F] = {s_immlo, s_immhix2, s_fixhi, s_slo1, s_rmw2, /*SLO nnnn,x*/
-              s_slo3},
-    [0x20] = {s_immlo, s_jsr1, s_jsr2, s_jsr3, s_jmp},            /*JSR*/
-    [0x21] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_and}, /*AND (nn,x)*/
-    [0x23] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_rla1, /*RLA (nn,x)*/
-              s_rmw2, s_rla3},
-    [0x24] = {s_immlo, s_bit},                                   /*BIT nn*/
-    [0x25] = {s_immlo, s_and},                                   /*AND nn*/
-    [0x26] = {s_immlo, s_readlo, s_rol, s_write},                /*ROL nn*/
-    [0x27] = {s_immlo, s_rla1, s_rmw2, s_rla3},                  /*RLA nn*/
-    [0x28] = {s_imp, s_inc_s, s_plp},                            /*PLP*/
-    [0x29] = {s_and_imm},                                        /*AND #nn*/
-    [0x2A] = {s_rol_a},                                          /*ROL*/
-    [0x2C] = {s_immlo, s_immhi, s_bit},                          /*BIT nnnn*/
-    [0x2D] = {s_immlo, s_immhi, s_and},                          /*AND nnnn*/
-    [0x2E] = {s_immlo, s_immhi, s_readlo, s_rol, s_write},       /*ROL nnnn*/
-    [0x2F] = {s_immlo, s_immhi, s_rla1, s_rmw2, s_rla3},         /*RLA nnnn*/
-    [0x30] = {s_bmi, s_br, s_fixpc},                             /*BMI*/
-    [0x31] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_and}, /*AND (nn),y*/
-    [0x33] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_rla1, /*RLA (nn),y*/
-              s_rmw2, s_rla3},
-    [0x34] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
-    [0x35] = {s_immlo, s_zerox, s_and},                    /*AND nn,x*/
-    [0x36] = {s_immlo, s_zerox, s_readlo, s_rol, s_write}, /*ROL nn,x*/
-    [0x37] = {s_immlo, s_zerox, s_rla1, s_rmw2, s_rla3},   /*RLA nn,x*/
-    [0x38] = {s_sec},                                      /*SEC*/
-    [0x39] = {s_immlo, s_immhiy, s_fixhi, s_and},          /*AND nnnn,y*/
-    [0x3A] = {s_nop},                                      /*NOP*/
-    [0x3B] = {s_immlo, s_immhiy, s_fixhi, s_rla1, s_rmw2,
-              s_rla3},                                      /*RLA nnnn,y*/
-    [0x3C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
-    [0x3D] = {s_immlo, s_immhix, s_fixhi, s_and},           /*AND nnnn,x*/
-    [0x3E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_rol, /*ROL nnnn,x*/
-              s_write},
-    [0x3F] = {s_immlo, s_immhix2, s_fixhi, s_rla1, s_rmw2, /*RLA nnnn,x*/
-              s_rla3},
-    [0x40] = {s_imp, s_inc_s, s_rti1, s_pop_pcl, s_rti3},         /*RTI*/
-    [0x41] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_eor}, /*EOR (nn,x)*/
-    [0x43] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sre1, /*SRE (nn,x)*/
-              s_rmw2, s_sre3},
-    [0x44] = {s_immlo, s_nopm},                                  /*NOP nn*/
-    [0x45] = {s_immlo, s_eor},                                   /*EOR nn*/
-    [0x46] = {s_immlo, s_readlo, s_lsr, s_write},                /*LSR nn*/
-    [0x47] = {s_immlo, s_sre1, s_rmw2, s_sre3},                  /*SRE nn*/
-    [0x48] = {s_imp, s_pha},                                     /*PHA*/
-    [0x49] = {s_eor_imm},                                        /*EOR #nn*/
-    [0x4A] = {s_lsr_a},                                          /*LSR*/
-    [0x4C] = {s_immlo, s_jmp},                                   /*JMP*/
-    [0x4D] = {s_immlo, s_immhi, s_eor},                          /*EOR nnnn*/
-    [0x4E] = {s_immlo, s_immhi, s_readlo, s_lsr, s_write},       /*LSR nnnn*/
-    [0x4F] = {s_immlo, s_immhi, s_sre1, s_rmw2, s_sre3},         /*SRE nnnn*/
-    [0x50] = {s_bvc, s_br, s_fixpc},                             /*BVC*/
-    [0x51] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_eor}, /*EOR (nn),y*/
-    [0x53] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sre1, /*SRE (nn),y*/
-              s_rmw2, s_sre3},
-    [0x54] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
-    [0x55] = {s_immlo, s_zerox, s_eor},                    /*EOR nn,x*/
-    [0x56] = {s_immlo, s_zerox, s_readlo, s_lsr, s_write}, /*LSR nn,x*/
-    [0x57] = {s_immlo, s_zerox, s_sre1, s_rmw2, s_sre3},   /*SRE nn,x*/
-    [0x58] = {s_cli},                                      /*CLI*/
-    [0x59] = {s_immlo, s_immhiy, s_fixhi, s_eor},          /*EOR nnnn,y*/
-    [0x5A] = {s_nop},                                      /*NOP*/
-    [0x5B] = {s_immlo, s_immhiy, s_fixhi, s_sre1, s_rmw2,
-              s_sre3},                                      /*SRE nnnn,y*/
-    [0x5C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
-    [0x5D] = {s_immlo, s_immhix, s_fixhi, s_eor},           /*EOR nnnn,x*/
-    [0x5E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_lsr, /*LSR nnnn,x*/
-              s_write},
-    [0x5F] = {s_immlo, s_immhix2, s_fixhi, s_sre1, s_rmw2, /*SRE nnnn,x*/
-              s_sre3},
-    [0x60] = {s_imp, s_inc_s, s_pop_pcl, s_rts1, s_rts2},         /*RTS*/
-    [0x61] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_adc}, /*ADC (nn,x)*/
-    [0x63] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_rra1, /*RRA (nn,x)*/
-              s_rmw2, s_rra3},
-    [0x64] = {s_immlo, s_nopm},                                  /*NOP nn*/
-    [0x65] = {s_immlo, s_adc},                                   /*ADC nn*/
-    [0x66] = {s_immlo, s_readlo, s_ror, s_write},                /*ROR nn*/
-    [0x67] = {s_immlo, s_rra1, s_rmw2, s_rra3},                  /*RRA nn*/
-    [0x68] = {s_imp, s_inc_s, s_pla},                            /*PLA*/
-    [0x69] = {s_adc_imm},                                        /*ADC #nn*/
-    [0x6A] = {s_ror_a},                                          /*ROR*/
-    [0x6C] = {s_immlo, s_immhi, s_readlo, s_jmp_ind},            /*JMP ()*/
-    [0x6D] = {s_immlo, s_immhi, s_adc},                          /*ADC nnnn*/
-    [0x6E] = {s_immlo, s_immhi, s_readlo, s_ror, s_write},       /*ROR nn*/
-    [0x6F] = {s_immlo, s_immhi, s_rra1, s_rmw2, s_rra3},         /*RRA nnnn*/
-    [0x70] = {s_bvs, s_br, s_fixpc},                             /*BVS*/
-    [0x71] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_adc}, /*ADC (nn),y*/
-    [0x73] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_rra1, /*RRA (nn),y*/
-              s_rmw2, s_rra3},
-    [0x74] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
-    [0x75] = {s_immlo, s_zerox, s_adc},                    /*ADC nn,x*/
-    [0x76] = {s_immlo, s_zerox, s_readlo, s_ror, s_write}, /*ROR nn,x*/
-    [0x77] = {s_immlo, s_zerox, s_rra1, s_rmw2, s_rra3},   /*RRA nn,x*/
-    [0x78] = {s_sei},                                      /*SEI*/
-    [0x79] = {s_immlo, s_immhiy, s_fixhi, s_adc},          /*ADC nnnn,y*/
-    [0x7A] = {s_nop},                                      /*NOP*/
-    [0x7B] = {s_immlo, s_immhiy, s_fixhi, s_rra1, s_rmw2,
-              s_rra3},                                      /*RRA nnnn,y*/
-    [0x7C] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
-    [0x7D] = {s_immlo, s_immhix, s_fixhi, s_adc},           /*ADC nnnn,x*/
-    [0x7E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_ror, /*ROR nnnn,x*/
-              s_write},
-    [0x7F] = {s_immlo, s_immhix2, s_fixhi, s_rra1, s_rmw2, /*RRA nnnn,x*/
-              s_rra3},
-    [0x80] = {s_nop_imm},                                         /*NOP #nn*/
-    [0x81] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sta}, /*STA (nn,x)*/
-    [0x83] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sax}, /*SAX (nn,x)*/
-    [0x84] = {s_immlo, s_sty},                                    /*STY nn*/
-    [0x85] = {s_immlo, s_sta},                                    /*STA nn*/
-    [0x86] = {s_immlo, s_stx},                                    /*STX nn*/
-    [0x87] = {s_immlo, s_sax},                                    /*SAX nn*/
-    [0x88] = {s_dey},                                             /*DEY*/
-    [0x8A] = {s_txa},                                             /*TXA*/
-    [0x8C] = {s_immlo, s_immhi, s_sty},                           /*STY nnnn*/
-    [0x8D] = {s_immlo, s_immhi, s_sta},                           /*STA nnnn*/
-    [0x8E] = {s_immlo, s_immhi, s_stx},                           /*STX nnnn*/
-    [0x8f] = {s_immlo, s_immhi, s_sax},                           /*SAX nnnn*/
-    [0x90] = {s_bcc, s_br, s_fixpc},                              /*BCC*/
-    [0x91] = {s_immlo, s_readlo, s_sta_ind_idx, s_fixhi, s_sta},  /*STA (nn),y*/
-    [0x94] = {s_immlo, s_zerox, s_sty},                           /*STY nn,x*/
-    [0x95] = {s_immlo, s_zerox, s_sta},                           /*STA nn,x*/
-    [0x96] = {s_immlo, s_zeroy, s_stx},                           /*STX nn,y*/
-    [0x97] = {s_immlo, s_zeroy, s_sax},                           /*SAX nn,y*/
-    [0x98] = {s_tya},                                             /*TYA*/
-    [0x99] = {s_immlo, s_sta_absy, s_fixhi, s_sta},               /*STA nnnn,y*/
-    [0x9A] = {s_txs},                                             /*TXS*/
-    [0x9D] = {s_immlo, s_sta_absx, s_fixhi, s_sta},               /*STA nnnn,x*/
-    [0xA0] = {s_ldy_imm},                                         /*LDY #nn*/
-    [0xA1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lda}, /*LDA (nn,x)*/
-    [0xA2] = {s_ldx_imm},                                         /*LDX #nn*/
-    [0xA3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lax}, /*LAX (nn,x)*/
-    [0xA4] = {s_immlo, s_ldy},                                    /*LDY nn*/
-    [0xA5] = {s_immlo, s_lda},                                    /*LDA nn*/
-    [0xA6] = {s_immlo, s_ldx},                                    /*LDX nn*/
-    [0xA7] = {s_immlo, s_lax},                                    /*LAX nn*/
-    [0xA8] = {s_tay},                                             /*TAY*/
-    [0xA9] = {s_lda_imm},                                         /*LDA #nn*/
-    [0xAA] = {s_tax},                                             /*TAX*/
-    [0xAC] = {s_immlo, s_immhi, s_ldy},                           /*LDY nnnn*/
-    [0xAD] = {s_immlo, s_immhi, s_lda},                           /*LDA nnnn*/
-    [0xAE] = {s_immlo, s_immhi, s_ldx},                           /*LDX nnnn*/
-    [0xAF] = {s_immlo, s_immhi, s_lax},                           /*LAX nnnn*/
-    [0xB0] = {s_bcs, s_br, s_fixpc},                              /*BCS*/
-    [0xB1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lda},  /*LDA (nn),y*/
-    [0xB3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lax},  /*LAX (nn),y*/
-    [0xB4] = {s_immlo, s_zerox, s_ldy},                           /*LDY nn,x*/
-    [0xB5] = {s_immlo, s_zerox, s_lda},                           /*LDA nn,x*/
-    [0xB6] = {s_immlo, s_zeroy, s_ldx},                           /*LDX nn,y*/
-    [0xB7] = {s_immlo, s_zeroy, s_lax},                           /*LAX nn,y*/
-    [0xB8] = {s_clv},                                             /*CLV*/
-    [0xB9] = {s_immlo, s_immhiy, s_fixhi, s_lda},                 /*LDA nnnn,y*/
-    [0xBA] = {s_tsx},                                             /*TSX*/
-    [0xBC] = {s_immlo, s_immhix, s_fixhi, s_ldy},                 /*LDY nnnn,x*/
-    [0xBD] = {s_immlo, s_immhix, s_fixhi, s_lda},                 /*LDA nnnn,x*/
-    [0xBE] = {s_immlo, s_immhiy, s_fixhi, s_ldx},                 /*LDX nnnn,y*/
-    [0xBF] = {s_immlo, s_immhiy, s_fixhi, s_lax},                 /*LAX nnnn,y*/
-    [0xC0] = {s_cpy_imm},                                         /*CPY #nn*/
-    [0xC1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_cmp}, /*CMP (nn,x)*/
-    [0xC3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_dcp1, /*DCP (nn,x)*/
-              s_rmw2, s_dcp3},
-    [0xC4] = {s_immlo, s_cpy},                                   /*CPY nn*/
-    [0xC5] = {s_immlo, s_cmp},                                   /*CMP nn*/
-    [0xC6] = {s_immlo, s_readlo, s_dec, s_write},                /*DEC nn*/
-    [0xC7] = {s_immlo, s_dcp1, s_rmw2, s_dcp3},                  /*DCP nn*/
-    [0xC8] = {s_iny},                                            /*INY*/
-    [0xC9] = {s_cmp_imm},                                        /*CMP #nn*/
-    [0xCA] = {s_dex},                                            /*DEX*/
-    [0xCC] = {s_immlo, s_immhi, s_cpy},                          /*CPY nnnn*/
-    [0xCD] = {s_immlo, s_immhi, s_cmp},                          /*CMP nnnn*/
-    [0xCE] = {s_immlo, s_immhi, s_readlo, s_dec, s_write},       /*DEC nnnn*/
-    [0xCF] = {s_immlo, s_immhi, s_dcp1, s_rmw2, s_dcp3},         /*DCP nnnn*/
-    [0xD0] = {s_bne, s_br, s_fixpc},                             /*BNE*/
-    [0xD1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_cmp}, /*CMP (nn),y*/
-    [0xD3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_dcp1, /*DCP (nn),y*/
-              s_rmw2, s_dcp3},
-    [0xD4] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
-    [0xD5] = {s_immlo, s_zerox, s_cmp},                    /*CMP nn,x*/
-    [0xD6] = {s_immlo, s_zerox, s_readlo, s_dec, s_write}, /*DEC nn,x*/
-    [0xD7] = {s_immlo, s_zerox, s_dcp1, s_rmw2, s_dcp3},   /*DCP nn,x*/
-    [0xD8] = {s_cld},                                      /*CLD*/
-    [0xD9] = {s_immlo, s_immhiy, s_fixhi, s_cmp},          /*CMP nnnn,y*/
-    [0xDA] = {s_nop},                                      /*NOP*/
-    [0xDB] = {s_immlo, s_immhiy, s_fixhi, s_dcp1, s_rmw2,
-              s_dcp3},                                      /*DCP nnnn,y*/
-    [0xDC] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
-    [0xDD] = {s_immlo, s_immhix, s_fixhi, s_cmp},           /*CMP nnnn,x*/
-    [0xDE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_dec, /*DEC nnnn,x*/
-              s_write},
-    [0xDF] = {s_immlo, s_immhix2, s_fixhi, s_dcp1, s_rmw2, /*DCP nnnn,x*/
-              s_dcp3},
-    [0xE0] = {s_cpx_imm},                                         /*CPX*/
-    [0xE1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sbc}, /*SBC (nn,x)*/
-    [0xE3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_isb1, /*ISB (nn,x)*/
-              s_rmw2, s_isb3},
-    [0xE4] = {s_immlo, s_cpx},                                   /*CPX nn*/
-    [0xE5] = {s_immlo, s_sbc},                                   /*SBC nn*/
-    [0xE6] = {s_immlo, s_readlo, s_inc, s_write},                /*INC nn*/
-    [0xE7] = {s_immlo, s_isb1, s_rmw2, s_isb3},                  /*ISB nn*/
-    [0xEA] = {s_nop},                                            /*NOP*/
-    [0xEB] = {s_sbc_imm},                                        /*SBC #nn*/
-    [0xE8] = {s_inx},                                            /*INX*/
-    [0xE9] = {s_sbc_imm},                                        /*SBC #nn*/
-    [0xEC] = {s_immlo, s_immhi, s_cpx},                          /*CPX nnnn*/
-    [0xED] = {s_immlo, s_immhi, s_sbc},                          /*SBC nnnn*/
-    [0xEE] = {s_immlo, s_immhi, s_readlo, s_inc, s_write},       /*INC nnnn*/
-    [0xEF] = {s_immlo, s_immhi, s_isb1, s_rmw2, s_isb3},         /*ISB nnnn*/
-    [0xF0] = {s_beq, s_br, s_fixpc},                             /*BEQ*/
-    [0xF1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sbc}, /*SBC (nn),y*/
-    [0xF3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_isb1, /*ISB (nn),y*/
-              s_rmw2, s_isb3},
-    [0xF4] = {s_immlo, s_zerox, s_nopm},                   /*NOP nn,x*/
-    [0xF5] = {s_immlo, s_zerox, s_sbc},                    /*SBC nn,x*/
-    [0xF6] = {s_immlo, s_zerox, s_readlo, s_inc, s_write}, /*INC nn,x*/
-    [0xF7] = {s_immlo, s_zerox, s_isb1, s_rmw2, s_isb3},   /*ISB nn,x*/
-    [0xF8] = {s_sed},                                      /*SED*/
-    [0xF9] = {s_immlo, s_immhiy, s_fixhi, s_sbc},          /*SBC nnnn,y*/
-    [0xFA] = {s_nop},                                      /*NOP*/
-    [0xFB] = {s_immlo, s_immhiy, s_fixhi, s_isb1, s_rmw2,
-              s_isb3},                                      /*ISB nnnn,y*/
-    [0xFC] = {s_immlo, s_immhix, s_fixhi, s_nopm},          /*NOP nnnn,x*/
-    [0xFD] = {s_immlo, s_immhix, s_fixhi, s_sbc},           /*SBC nnnn,x*/
-    [0xFE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_inc, /*INC nnnn,x*/
-              s_write},
-    [0xFF] = {s_immlo, s_immhix2, s_fixhi, s_isb1, s_rmw2, /*ISB nnnn,x*/
-              s_isb3},
+    [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},                  /*ORA (nn,x)*/
+    [0x03] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_slo1, s_rmw2, s_slo3}, /*SLO (nn,x)*/
+    [0x04] = {s_immlo, s_nopm},                                                    /*NOP nn*/
+    [0x05] = {s_immlo, s_ora},                                                     /*ORA nn*/
+    [0x06] = {s_immlo, s_readlo, s_asl, s_write},                                  /*ASL nn*/
+    [0x07] = {s_immlo, s_slo1, s_rmw2, s_slo3},                                    /*SLO nn*/
+    [0x08] = {s_imp, s_php},                                                       /*PHP*/
+    [0x09] = {s_ora_imm},                                                          /*ORA #nn*/
+    [0x0A] = {s_asl_a},                                                            /*ASL*/
+    [0x0C] = {s_immlo, s_immhi, s_nopm},                                           /*NOP nnnn*/
+    [0x0D] = {s_immlo, s_immhi, s_ora},                                            /*ORA nnnn*/
+    [0x0E] = {s_immlo, s_immhi, s_readlo, s_asl, s_write},                         /*ASL nnnn*/
+    [0x0F] = {s_immlo, s_immhi, s_slo1, s_rmw2, s_slo3},                           /*SLO nnnn*/
+    [0x10] = {s_bpl, s_br, s_fixpc},                                               /*BPL*/
+    [0x11] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_ora},                   /*ORA (nn),y*/
+    [0x13] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_slo1, s_rmw2, s_slo3},  /*SLO (nn),y*/
+    [0x14] = {s_immlo, s_zerox, s_nopm},                                           /*NOP nn,x*/
+    [0x15] = {s_immlo, s_zerox, s_ora},                                            /*ORA nn,x*/
+    [0x16] = {s_immlo, s_zerox, s_readlo, s_asl, s_write},                         /*ASL nn,x*/
+    [0x17] = {s_immlo, s_zerox, s_slo1, s_rmw2, s_slo3},                           /*SLO nn,x*/
+    [0x18] = {s_clc},                                                              /*CLC*/
+    [0x19] = {s_immlo, s_immhiy, s_fixhi, s_ora},                                  /*ORA nnnn,y*/
+    [0x1A] = {s_nop},                                                              /*NOP*/
+    [0x1B] = {s_immlo, s_immhiy, s_fixhi, s_slo1, s_rmw2, s_slo3},                 /*SLO nnnn,y*/
+    [0x1C] = {s_immlo, s_immhix, s_fixhi, s_nopm},                                 /*NOP nnnn,x*/
+    [0x1D] = {s_immlo, s_immhix, s_fixhi, s_ora},                                  /*ORA nnnn,x*/
+    [0x1E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_asl, s_write},              /*ASL nnnn,x*/
+    [0x1F] = {s_immlo, s_immhix2, s_fixhi, s_slo1, s_rmw2, s_slo3},                /*SLO nnnn,x*/
+    [0x20] = {s_immlo, s_jsr1, s_jsr2, s_jsr3, s_jmp},                             /*JSR*/
+    [0x21] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_and},                  /*AND (nn,x)*/
+    [0x23] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_rla1, s_rmw2, s_rla3}, /*RLA (nn,x)*/
+    [0x24] = {s_immlo, s_bit},                                                     /*BIT nn*/
+    [0x25] = {s_immlo, s_and},                                                     /*AND nn*/
+    [0x26] = {s_immlo, s_readlo, s_rol, s_write},                                  /*ROL nn*/
+    [0x27] = {s_immlo, s_rla1, s_rmw2, s_rla3},                                    /*RLA nn*/
+    [0x28] = {s_imp, s_inc_s, s_plp},                                              /*PLP*/
+    [0x29] = {s_and_imm},                                                          /*AND #nn*/
+    [0x2A] = {s_rol_a},                                                            /*ROL*/
+    [0x2C] = {s_immlo, s_immhi, s_bit},                                            /*BIT nnnn*/
+    [0x2D] = {s_immlo, s_immhi, s_and},                                            /*AND nnnn*/
+    [0x2E] = {s_immlo, s_immhi, s_readlo, s_rol, s_write},                         /*ROL nnnn*/
+    [0x2F] = {s_immlo, s_immhi, s_rla1, s_rmw2, s_rla3},                           /*RLA nnnn*/
+    [0x30] = {s_bmi, s_br, s_fixpc},                                               /*BMI*/
+    [0x31] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_and},                   /*AND (nn),y*/
+    [0x33] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_rla1, s_rmw2, s_rla3},  /*RLA (nn),y*/
+    [0x34] = {s_immlo, s_zerox, s_nopm},                                           /*NOP nn,x*/
+    [0x35] = {s_immlo, s_zerox, s_and},                                            /*AND nn,x*/
+    [0x36] = {s_immlo, s_zerox, s_readlo, s_rol, s_write},                         /*ROL nn,x*/
+    [0x37] = {s_immlo, s_zerox, s_rla1, s_rmw2, s_rla3},                           /*RLA nn,x*/
+    [0x38] = {s_sec},                                                              /*SEC*/
+    [0x39] = {s_immlo, s_immhiy, s_fixhi, s_and},                                  /*AND nnnn,y*/
+    [0x3A] = {s_nop},                                                              /*NOP*/
+    [0x3B] = {s_immlo, s_immhiy, s_fixhi, s_rla1, s_rmw2, s_rla3},                 /*RLA nnnn,y*/
+    [0x3C] = {s_immlo, s_immhix, s_fixhi, s_nopm},                                 /*NOP nnnn,x*/
+    [0x3D] = {s_immlo, s_immhix, s_fixhi, s_and},                                  /*AND nnnn,x*/
+    [0x3E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_rol, s_write},              /*ROL nnnn,x*/
+    [0x3F] = {s_immlo, s_immhix2, s_fixhi, s_rla1, s_rmw2, s_rla3},                /*RLA nnnn,x*/
+    [0x40] = {s_imp, s_inc_s, s_rti1, s_pop_pcl, s_rti3},                          /*RTI*/
+    [0x41] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_eor},                  /*EOR (nn,x)*/
+    [0x43] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sre1, s_rmw2, s_sre3}, /*SRE (nn,x)*/
+    [0x44] = {s_immlo, s_nopm},                                                    /*NOP nn*/
+    [0x45] = {s_immlo, s_eor},                                                     /*EOR nn*/
+    [0x46] = {s_immlo, s_readlo, s_lsr, s_write},                                  /*LSR nn*/
+    [0x47] = {s_immlo, s_sre1, s_rmw2, s_sre3},                                    /*SRE nn*/
+    [0x48] = {s_imp, s_pha},                                                       /*PHA*/
+    [0x49] = {s_eor_imm},                                                          /*EOR #nn*/
+    [0x4A] = {s_lsr_a},                                                            /*LSR*/
+    [0x4C] = {s_immlo, s_jmp},                                                     /*JMP*/
+    [0x4D] = {s_immlo, s_immhi, s_eor},                                            /*EOR nnnn*/
+    [0x4E] = {s_immlo, s_immhi, s_readlo, s_lsr, s_write},                         /*LSR nnnn*/
+    [0x4F] = {s_immlo, s_immhi, s_sre1, s_rmw2, s_sre3},                           /*SRE nnnn*/
+    [0x50] = {s_bvc, s_br, s_fixpc},                                               /*BVC*/
+    [0x51] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_eor},                   /*EOR (nn),y*/
+    [0x53] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sre1, s_rmw2, s_sre3},  /*SRE (nn),y*/
+    [0x54] = {s_immlo, s_zerox, s_nopm},                                           /*NOP nn,x*/
+    [0x55] = {s_immlo, s_zerox, s_eor},                                            /*EOR nn,x*/
+    [0x56] = {s_immlo, s_zerox, s_readlo, s_lsr, s_write},                         /*LSR nn,x*/
+    [0x57] = {s_immlo, s_zerox, s_sre1, s_rmw2, s_sre3},                           /*SRE nn,x*/
+    [0x58] = {s_cli},                                                              /*CLI*/
+    [0x59] = {s_immlo, s_immhiy, s_fixhi, s_eor},                                  /*EOR nnnn,y*/
+    [0x5A] = {s_nop},                                                              /*NOP*/
+    [0x5B] = {s_immlo, s_immhiy, s_fixhi, s_sre1, s_rmw2, s_sre3},                 /*SRE nnnn,y*/
+    [0x5C] = {s_immlo, s_immhix, s_fixhi, s_nopm},                                 /*NOP nnnn,x*/
+    [0x5D] = {s_immlo, s_immhix, s_fixhi, s_eor},                                  /*EOR nnnn,x*/
+    [0x5E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_lsr, s_write},              /*LSR nnnn,x*/
+    [0x5F] = {s_immlo, s_immhix2, s_fixhi, s_sre1, s_rmw2, s_sre3},                /*SRE nnnn,x*/
+    [0x60] = {s_imp, s_inc_s, s_pop_pcl, s_rts1, s_rts2},                          /*RTS*/
+    [0x61] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_adc},                  /*ADC (nn,x)*/
+    [0x63] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_rra1, s_rmw2, s_rra3}, /*RRA (nn,x)*/
+    [0x64] = {s_immlo, s_nopm},                                                    /*NOP nn*/
+    [0x65] = {s_immlo, s_adc},                                                     /*ADC nn*/
+    [0x66] = {s_immlo, s_readlo, s_ror, s_write},                                  /*ROR nn*/
+    [0x67] = {s_immlo, s_rra1, s_rmw2, s_rra3},                                    /*RRA nn*/
+    [0x68] = {s_imp, s_inc_s, s_pla},                                              /*PLA*/
+    [0x69] = {s_adc_imm},                                                          /*ADC #nn*/
+    [0x6A] = {s_ror_a},                                                            /*ROR*/
+    [0x6C] = {s_immlo, s_immhi, s_readlo, s_jmp_ind},                              /*JMP ()*/
+    [0x6D] = {s_immlo, s_immhi, s_adc},                                            /*ADC nnnn*/
+    [0x6E] = {s_immlo, s_immhi, s_readlo, s_ror, s_write},                         /*ROR nn*/
+    [0x6F] = {s_immlo, s_immhi, s_rra1, s_rmw2, s_rra3},                           /*RRA nnnn*/
+    [0x70] = {s_bvs, s_br, s_fixpc},                                               /*BVS*/
+    [0x71] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_adc},                   /*ADC (nn),y*/
+    [0x73] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_rra1, s_rmw2, s_rra3},  /*RRA (nn),y*/
+    [0x74] = {s_immlo, s_zerox, s_nopm},                                           /*NOP nn,x*/
+    [0x75] = {s_immlo, s_zerox, s_adc},                                            /*ADC nn,x*/
+    [0x76] = {s_immlo, s_zerox, s_readlo, s_ror, s_write},                         /*ROR nn,x*/
+    [0x77] = {s_immlo, s_zerox, s_rra1, s_rmw2, s_rra3},                           /*RRA nn,x*/
+    [0x78] = {s_sei},                                                              /*SEI*/
+    [0x79] = {s_immlo, s_immhiy, s_fixhi, s_adc},                                  /*ADC nnnn,y*/
+    [0x7A] = {s_nop},                                                              /*NOP*/
+    [0x7B] = {s_immlo, s_immhiy, s_fixhi, s_rra1, s_rmw2, s_rra3},                 /*RRA nnnn,y*/
+    [0x7C] = {s_immlo, s_immhix, s_fixhi, s_nopm},                                 /*NOP nnnn,x*/
+    [0x7D] = {s_immlo, s_immhix, s_fixhi, s_adc},                                  /*ADC nnnn,x*/
+    [0x7E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_ror, s_write},              /*ROR nnnn,x*/
+    [0x7F] = {s_immlo, s_immhix2, s_fixhi, s_rra1, s_rmw2, s_rra3},                /*RRA nnnn,x*/
+    [0x80] = {s_nop_imm},                                                          /*NOP #nn*/
+    [0x81] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sta},                  /*STA (nn,x)*/
+    [0x83] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sax},                  /*SAX (nn,x)*/
+    [0x84] = {s_immlo, s_sty},                                                     /*STY nn*/
+    [0x85] = {s_immlo, s_sta},                                                     /*STA nn*/
+    [0x86] = {s_immlo, s_stx},                                                     /*STX nn*/
+    [0x87] = {s_immlo, s_sax},                                                     /*SAX nn*/
+    [0x88] = {s_dey},                                                              /*DEY*/
+    [0x8A] = {s_txa},                                                              /*TXA*/
+    [0x8C] = {s_immlo, s_immhi, s_sty},                                            /*STY nnnn*/
+    [0x8D] = {s_immlo, s_immhi, s_sta},                                            /*STA nnnn*/
+    [0x8E] = {s_immlo, s_immhi, s_stx},                                            /*STX nnnn*/
+    [0x8f] = {s_immlo, s_immhi, s_sax},                                            /*SAX nnnn*/
+    [0x90] = {s_bcc, s_br, s_fixpc},                                               /*BCC*/
+    [0x91] = {s_immlo, s_readlo, s_sta_ind_idx, s_fixhi, s_sta},                   /*STA (nn),y*/
+    [0x94] = {s_immlo, s_zerox, s_sty},                                            /*STY nn,x*/
+    [0x95] = {s_immlo, s_zerox, s_sta},                                            /*STA nn,x*/
+    [0x96] = {s_immlo, s_zeroy, s_stx},                                            /*STX nn,y*/
+    [0x97] = {s_immlo, s_zeroy, s_sax},                                            /*SAX nn,y*/
+    [0x98] = {s_tya},                                                              /*TYA*/
+    [0x99] = {s_immlo, s_sta_absy, s_fixhi, s_sta},                                /*STA nnnn,y*/
+    [0x9A] = {s_txs},                                                              /*TXS*/
+    [0x9D] = {s_immlo, s_sta_absx, s_fixhi, s_sta},                                /*STA nnnn,x*/
+    [0xA0] = {s_ldy_imm},                                                          /*LDY #nn*/
+    [0xA1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lda},                  /*LDA (nn,x)*/
+    [0xA2] = {s_ldx_imm},                                                          /*LDX #nn*/
+    [0xA3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_lax},                  /*LAX (nn,x)*/
+    [0xA4] = {s_immlo, s_ldy},                                                     /*LDY nn*/
+    [0xA5] = {s_immlo, s_lda},                                                     /*LDA nn*/
+    [0xA6] = {s_immlo, s_ldx},                                                     /*LDX nn*/
+    [0xA7] = {s_immlo, s_lax},                                                     /*LAX nn*/
+    [0xA8] = {s_tay},                                                              /*TAY*/
+    [0xA9] = {s_lda_imm},                                                          /*LDA #nn*/
+    [0xAA] = {s_tax},                                                              /*TAX*/
+    [0xAC] = {s_immlo, s_immhi, s_ldy},                                            /*LDY nnnn*/
+    [0xAD] = {s_immlo, s_immhi, s_lda},                                            /*LDA nnnn*/
+    [0xAE] = {s_immlo, s_immhi, s_ldx},                                            /*LDX nnnn*/
+    [0xAF] = {s_immlo, s_immhi, s_lax},                                            /*LAX nnnn*/
+    [0xB0] = {s_bcs, s_br, s_fixpc},                                               /*BCS*/
+    [0xB1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lda},                   /*LDA (nn),y*/
+    [0xB3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_lax},                   /*LAX (nn),y*/
+    [0xB4] = {s_immlo, s_zerox, s_ldy},                                            /*LDY nn,x*/
+    [0xB5] = {s_immlo, s_zerox, s_lda},                                            /*LDA nn,x*/
+    [0xB6] = {s_immlo, s_zeroy, s_ldx},                                            /*LDX nn,y*/
+    [0xB7] = {s_immlo, s_zeroy, s_lax},                                            /*LAX nn,y*/
+    [0xB8] = {s_clv},                                                              /*CLV*/
+    [0xB9] = {s_immlo, s_immhiy, s_fixhi, s_lda},                                  /*LDA nnnn,y*/
+    [0xBA] = {s_tsx},                                                              /*TSX*/
+    [0xBC] = {s_immlo, s_immhix, s_fixhi, s_ldy},                                  /*LDY nnnn,x*/
+    [0xBD] = {s_immlo, s_immhix, s_fixhi, s_lda},                                  /*LDA nnnn,x*/
+    [0xBE] = {s_immlo, s_immhiy, s_fixhi, s_ldx},                                  /*LDX nnnn,y*/
+    [0xBF] = {s_immlo, s_immhiy, s_fixhi, s_lax},                                  /*LAX nnnn,y*/
+    [0xC0] = {s_cpy_imm},                                                          /*CPY #nn*/
+    [0xC1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_cmp},                  /*CMP (nn,x)*/
+    [0xC3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_dcp1, s_rmw2, s_dcp3}, /*DCP (nn,x)*/
+    [0xC4] = {s_immlo, s_cpy},                                                     /*CPY nn*/
+    [0xC5] = {s_immlo, s_cmp},                                                     /*CMP nn*/
+    [0xC6] = {s_immlo, s_readlo, s_dec, s_write},                                  /*DEC nn*/
+    [0xC7] = {s_immlo, s_dcp1, s_rmw2, s_dcp3},                                    /*DCP nn*/
+    [0xC8] = {s_iny},                                                              /*INY*/
+    [0xC9] = {s_cmp_imm},                                                          /*CMP #nn*/
+    [0xCA] = {s_dex},                                                              /*DEX*/
+    [0xCC] = {s_immlo, s_immhi, s_cpy},                                            /*CPY nnnn*/
+    [0xCD] = {s_immlo, s_immhi, s_cmp},                                            /*CMP nnnn*/
+    [0xCE] = {s_immlo, s_immhi, s_readlo, s_dec, s_write},                         /*DEC nnnn*/
+    [0xCF] = {s_immlo, s_immhi, s_dcp1, s_rmw2, s_dcp3},                           /*DCP nnnn*/
+    [0xD0] = {s_bne, s_br, s_fixpc},                                               /*BNE*/
+    [0xD1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_cmp},                   /*CMP (nn),y*/
+    [0xD3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_dcp1, s_rmw2, s_dcp3},  /*DCP (nn),y*/
+    [0xD4] = {s_immlo, s_zerox, s_nopm},                                           /*NOP nn,x*/
+    [0xD5] = {s_immlo, s_zerox, s_cmp},                                            /*CMP nn,x*/
+    [0xD6] = {s_immlo, s_zerox, s_readlo, s_dec, s_write},                         /*DEC nn,x*/
+    [0xD7] = {s_immlo, s_zerox, s_dcp1, s_rmw2, s_dcp3},                           /*DCP nn,x*/
+    [0xD8] = {s_cld},                                                              /*CLD*/
+    [0xD9] = {s_immlo, s_immhiy, s_fixhi, s_cmp},                                  /*CMP nnnn,y*/
+    [0xDA] = {s_nop},                                                              /*NOP*/
+    [0xDB] = {s_immlo, s_immhiy, s_fixhi, s_dcp1, s_rmw2, s_dcp3},                 /*DCP nnnn,y*/
+    [0xDC] = {s_immlo, s_immhix, s_fixhi, s_nopm},                                 /*NOP nnnn,x*/
+    [0xDD] = {s_immlo, s_immhix, s_fixhi, s_cmp},                                  /*CMP nnnn,x*/
+    [0xDE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_dec, s_write},              /*DEC nnnn,x*/
+    [0xDF] = {s_immlo, s_immhix2, s_fixhi, s_dcp1, s_rmw2, s_dcp3},                /*DCP nnnn,x*/
+    [0xE0] = {s_cpx_imm},                                                          /*CPX*/
+    [0xE1] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_sbc},                  /*SBC (nn,x)*/
+    [0xE3] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_isb1, s_rmw2, s_isb3}, /*ISB (nn,x)*/
+    [0xE4] = {s_immlo, s_cpx},                                                     /*CPX nn*/
+    [0xE5] = {s_immlo, s_sbc},                                                     /*SBC nn*/
+    [0xE6] = {s_immlo, s_readlo, s_inc, s_write},                                  /*INC nn*/
+    [0xE7] = {s_immlo, s_isb1, s_rmw2, s_isb3},                                    /*ISB nn*/
+    [0xEA] = {s_nop},                                                              /*NOP*/
+    [0xEB] = {s_sbc_imm},                                                          /*SBC #nn*/
+    [0xE8] = {s_inx},                                                              /*INX*/
+    [0xE9] = {s_sbc_imm},                                                          /*SBC #nn*/
+    [0xEC] = {s_immlo, s_immhi, s_cpx},                                            /*CPX nnnn*/
+    [0xED] = {s_immlo, s_immhi, s_sbc},                                            /*SBC nnnn*/
+    [0xEE] = {s_immlo, s_immhi, s_readlo, s_inc, s_write},                         /*INC nnnn*/
+    [0xEF] = {s_immlo, s_immhi, s_isb1, s_rmw2, s_isb3},                           /*ISB nnnn*/
+    [0xF0] = {s_beq, s_br, s_fixpc},                                               /*BEQ*/
+    [0xF1] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_sbc},                   /*SBC (nn),y*/
+    [0xF3] = {s_immlo, s_readlo, s_zeroy_indir, s_fixhi, s_isb1, s_rmw2, s_isb3},  /*ISB (nn),y*/
+    [0xF4] = {s_immlo, s_zerox, s_nopm},                                           /*NOP nn,x*/
+    [0xF5] = {s_immlo, s_zerox, s_sbc},                                            /*SBC nn,x*/
+    [0xF6] = {s_immlo, s_zerox, s_readlo, s_inc, s_write},                         /*INC nn,x*/
+    [0xF7] = {s_immlo, s_zerox, s_isb1, s_rmw2, s_isb3},                           /*ISB nn,x*/
+    [0xF8] = {s_sed},                                                              /*SED*/
+    [0xF9] = {s_immlo, s_immhiy, s_fixhi, s_sbc},                                  /*SBC nnnn,y*/
+    [0xFA] = {s_nop},                                                              /*NOP*/
+    [0xFB] = {s_immlo, s_immhiy, s_fixhi, s_isb1, s_rmw2, s_isb3},                 /*ISB nnnn,y*/
+    [0xFC] = {s_immlo, s_immhix, s_fixhi, s_nopm},                                 /*NOP nnnn,x*/
+    [0xFD] = {s_immlo, s_immhix, s_fixhi, s_sbc},                                  /*SBC nnnn,x*/
+    [0xFE] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_inc, s_write},              /*INC nnnn,x*/
+    [0xFF] = {s_immlo, s_immhix2, s_fixhi, s_isb1, s_rmw2, s_isb3},                /*ISB nnnn,x*/
 };
 
 static const char* s_opcode_mnemonic[256] = {
