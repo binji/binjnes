@@ -87,14 +87,12 @@ typedef struct {
 } C;
 
 typedef struct {
-  u8 ram[0x800];  // 2Kib internal vram.
-  u8 oam[0x100], oam2[0x20];
-  u16 v, t;
-  u8 x;
-  Bool w;
-  u8 palram[32];
-  u8 ppuctrl, ppumask, ppustatus, ppulast;
-  u8 oamaddr;
+  u8 ram[0x800], oam[0x100], oam2[0x20];
+  u16 cnt1, cnt2, v, t, bgshift[2];
+  u8 state, x, ntb, atb[2], ptbl, ptbh, atshift[2];
+  Bool w, oddframe;
+  u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
+  u32 screenidx;
 } P;
 
 typedef struct {
@@ -109,6 +107,7 @@ typedef struct {
   // TODO: more remappable regions.
   u8 *cpu_map[2];
   u8 *nt_map[4];
+  u8 screen[256*240];
 } E;
 
 static const char *s_rom_filename;
@@ -127,6 +126,8 @@ static void print_info(E* e);
 static void step_cpu(E* e);
 static void step_ppu(E* e);
 
+static const u16 s_ppu_consts[];
+static const u32 s_ppu_bits[];
 static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
 static const u64 s_opcode_bits[256][7];
@@ -150,6 +151,7 @@ int main(int argc, char **argv) {
     step_ppu(&e);
     step_ppu(&e);
     step_ppu(&e);
+    ++e.s.cy;
   }
 
   result = 0;
@@ -395,14 +397,8 @@ Result init_emulator(E *e) {
   S* s = &e->s;
   CHECK(SUCCESS(init_mapper(e)));
   memset(s, 0, sizeof(S));
-#if 0
   s->c.PCL = read_cpu(e, 0xfffc);
   s->c.PCH = read_cpu(e, 0xfffd);
-#else
-  s->c.PCH = 0xc0; // automated NESTEST
-  s->c.PCL = 0;
-  s->cy = 7;
-#endif
   s->c.S = 0xfd;
   s->c.bus_en = TRUE;
   s->c.bits = s_decode;
@@ -505,12 +501,180 @@ void print_info(E* e) {
          c->bus_write ? 'W' : 'R', c->bushi, c->buslo, e->s.cy);
 }
 
-void step_ppu(E* e) {
+static inline void read_ntb(E *e) {
+  e->s.p.ntb = read_ppu(e, 0x2000 | (e->s.p.v & 0xfff));
 }
+
+static inline void read_atb(E *e) {
+  u16 v = e->s.p.v;
+  u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
+  int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
+  u8 atb = (read_ppu(e, at) >> shift) & 3;
+  e->s.p.atb[0] = (atb << 6) & 0x80;
+  e->s.p.atb[1] = (atb << 7) & 0x80;
+}
+
+static inline u8 read_ptb(E *e, u8 addend) {
+  u16 bg_base = (e->s.p.ppuctrl << 6) & 0x1000;
+  return read_ppu(e, (bg_base | e->s.p.ntb) + addend);
+}
+
+static inline void load_hi(u16* dst, u8 src) {
+  *dst = (src << 8) | (*dst & 0xff);
+}
+
+static inline void ppu_t_to_v(P *p, u16 mask) {
+  p->v = (p->v & ~mask) | (p->t & mask);
+}
+
+static inline u16 inch(u16 v) {
+  return (v & 0x1f) == 31 ? (v & 0x1f) ^ 0x0400 : v + 1;
+}
+
+static inline u16 incv(u16 v) {
+  if ((v & 0x7000) != 0x7000) {
+    return v + 0x1000; // fine y++
+  }
+  return (v & ~0x73e0) |
+         ((v & 0x3e0) == 0x3a0 ? v ^ 0x800  // coarse y=0, inc nt
+        : (v & 0x3e0) == 0x3e0 ? 0          // coarse y=0
+        : (v + 0x20) & 0x3e0);              // coarse y++
+}
+
+static inline void shift(E* e) {
+  P* p = &e->s.p;
+  u8 idx = (((p->bgshift[1] >> p->x) << 1) & 2) | ((p->bgshift[0] >> p->x) & 1);
+  u8 pal = (((p->atshift[1] >> p->x) << 1) & 2) | ((p->atshift[0] >> p->x) & 1);
+  p->bgshift[0] >>= 1;
+  p->bgshift[1] >>= 1;
+  p->atshift[0] = p->atb[0] | (p->atshift[0] >> 1);
+  p->atshift[1] = p->atb[1] | (p->atshift[1] >> 1);
+  // TODO: handle sprites
+  u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
+  e->screen[p->screenidx++] = col;
+}
+
+void step_ppu(E* e) {
+  Bool more = FALSE;
+  P* p = &e->s.p;
+  while (more) {
+    u16 next_state = p->state + 1;
+    Bool z = FALSE;
+    u32 bits = s_ppu_bits[p->state];
+    u16 cnst = s_ppu_consts[bits & 0xfff];
+    bits >>= 12;
+    while (bits) {
+      int bit = __builtin_ctzll(bits);
+      switch (bit) {
+        case 0: read_ntb(e); break;
+        case 1: read_atb(e); break;
+        case 2: p->ptbl = read_ptb(e, 0); break;
+        case 3: p->ptbh = read_ptb(e, 8); break;
+        case 4: p->v = inch(p->v); break;
+        case 5: p->v = incv(p->v); break;
+        case 6: shift(e); break;
+        case 7:
+          load_hi(&p->bgshift[0], p->ptbl);
+          load_hi(&p->bgshift[1], p->ptbh);
+          break;
+        case 8: ppu_t_to_v(p, 0x041f); break;
+        case 9: ppu_t_to_v(p, 0xebe0); break;
+        case 10: p->cnt1 = cnst; break;
+        case 11: p->cnt2 = cnst; break;
+        case 12:
+          p->screenidx = 0;
+          more = (p->oddframe ^= 1) && (p->ppumask & 8);
+          break;
+        case 13: z = --p->cnt1 == 0; break;
+        case 14: z = --p->cnt2 == 0; break;
+        case 15: if (!z) { next_state = cnst; } break;
+        case 16: if (z) { next_state = cnst; } break;
+        case 17: if (p->ppuctrl & 0x80) p->ppustatus |= 0x80; break;
+        case 18: p->ppustatus = 0; break;
+        case 19: next_state = cnst; break;
+        default:
+          FATAL("NYI: ppu step %d\n", bit);
+      }
+      bits &= ~(1ul << bit);
+    }
+    p->state = next_state;
+  }
+}
+
+static const u16 s_ppu_consts[] = {
+    [0] = 0,   [1] = 1,    [2] = 2,    [3] = 10,    [4] = 12,  [5] = 14,
+    [6] = 15,  [7] = 22,   [8] = 24,   [9] = 27,    [10] = 29, [11] = 31,
+    [12] = 32, [13] = 39,  [14] = 41,  [15] = 43,   [16] = 45, [17] = 47,
+    [18] = 63, [19] = 240, [20] = 340, [21] = 6819,
+};
+#define X(b,n) ((b)<<12|(n))
+static const u32 s_ppu_bits[] = {
+//    33222222222111111111
+//    10987654321098765432
+  X(0b00000001010000000000,19),  //  0: cnt1=240,(skip if odd frame + BG),cy
+  X(0b00000000100000000001,12),  //  1: ntb=read(nt(v)),cnt2=32,cy
+  X(0b00000000000001000000, 0),  //  2: shift,cy
+  X(0b00000000000001000010, 0),  //  3: atb=read(at(v)),shift,cy
+  X(0b00000000000001000000, 0),  //  4: shift,cy
+  X(0b00000000000001000100, 0),  //  5: ptbl=read(pt(ntb)),shift,cy
+  X(0b00000000000001000000, 0),  //  6: shift,cy
+  X(0b00010100000000001000, 3),  //  7: ptbh=read(pt(ntb)+8),shift,--cnt2,jz #10,cy
+  X(0b00000000000001010000, 0),  //  8: inch(v),shift,cy
+  X(0b10000000000011000001, 2),  //  9: ntb=read(nt(v)),shift,reload,goto #2,cy
+  X(0b00000000000001100000, 0),  // 10: incv(v),shift,cy
+  X(0b00000000100111000000,18),  // 11: hori(v)=hori(t),shift,reload,cnt2=63,cy
+  X(0b00001100000000000000, 4),  // 12: --cnt2,jnz #12,cy
+  X(0b00000000100000000001, 2),  // 13: ntb=read(nt(v)),cnt2=2,cy
+  X(0b00000000000001000000, 0),  // 14: shift,cy
+  X(0b00000000000001000010, 0),  // 15: atb=read(at(v)),shift,cy
+  X(0b00000000000001000000, 0),  // 16: shift,cy
+  X(0b00000000000001000100, 0),  // 17: ptbl=read(pt(ntb)),shift,cy
+  X(0b00000000000001000000, 0),  // 18: shift,cy
+  X(0b00000000000001001000, 0),  // 19: ptbh=read(pt(ntb)+8),shift,cy
+  X(0b00000000000001010000, 0),  // 20: inch(v),shift,cy
+  X(0b00001100000011000001, 5),  // 21: ntb=read(nt(v)),shift,reload,--cnt2,jnz #14,cy
+  X(0b00000000000000000000, 0),  // 22: cy
+  X(0b00000000000000000001, 0),  // 23: ntb=read(nt(v)),cy
+  X(0b00000000000000000000, 0),  // 24: cy
+  X(0b00001010000000000000, 1),  // 25: --cnt1,jnz #1,cy
+  X(0b00000000100000000000,20),  // 26: cnt2=340,cy
+  X(0b00001100000000000000, 9),  // 27: --cnt2,jnz #27,cy
+  X(0b00100000100000000000,21),  // 28: set vblank,cnt2=6819,cy
+  X(0b00001100000000000000,10),  // 29: --cnt2,jnz #29,cy
+  X(0b01000000100000000001,12),  // 30: ntb=read(nt(v)),clear flags,cnt2=32,cy
+  X(0b00000000000000000000, 0),  // 31: cy
+  X(0b00000000000000000010, 0),  // 32: atb=read(at(v)),cy
+  X(0b00000000000000000000, 0),  // 33: cy
+  X(0b00000000000000000100, 0),  // 34: ptbl=read(pt(ntb)),cy
+  X(0b00000000000000000000, 0),  // 35: cy
+  X(0b00010100000000001000,13),  // 36: ptbh=read(pt(ntb)+8),--cnt2,jz #39,cy
+  X(0b00000000000000010000, 0),  // 37: inch(v),cy
+  X(0b10000000000000000001,11),  // 38: ntb=read(nt(v)),goto #31,cy
+  X(0b00000000000000100000, 0),  // 39: incv(v),cy
+  X(0b00000000100100000000, 7),  // 40: hori(v)=hori(t),cnt2=22,cy
+  X(0b00001100000000000000,14),  // 41: --cnt2,jnz #41,cy
+  X(0b00000000100000000000, 8),  // 42: cnt2=24,cy
+  X(0b00001100001000000000,15),  // 43: vert(v)=vert(t),--cnt2,jnz #43,cy
+  X(0b00000000100000000000, 6),  // 44: cnt2=15,cy
+  X(0b00001100000000000000,16),  // 45: --cnt2,jnz #45,cy
+  X(0b00000000100000000001, 2),  // 46: ntb=read(nt(v)),cnt2=2,cy
+  X(0b00000000000001000000, 0),  // 47: shift,cy
+  X(0b00000000000001000010, 0),  // 48: atb=read(at(v)),shift,cy
+  X(0b00000000000001000000, 0),  // 49: shift,cy
+  X(0b00000000000001000100, 0),  // 50: ptbl=read(pt(ntb)),shift,cy
+  X(0b00000000000001000000, 0),  // 51: shift,cy
+  X(0b00000000000001001000, 0),  // 52: ptbh=read(pt(ntb)+8),shift,cy
+  X(0b00000000000001010000, 0),  // 53: inch(v),shift,cy
+  X(0b00001100000011000001,17),  // 54: ntb=read(nt(v)),shift,reload,--cnt2,jnz #47,cy
+  X(0b00000000000000000000, 0),  // 55: cy
+  X(0b00000000000000000001, 0),  // 56: read(nt(v))
+  X(0b10000000000000000000, 0),  // 57: goto #0,cy
+};
+#undef X
 
 void step_cpu(E* e) {
   u8 busval;
-  print_info(e);
+//  print_info(e);
   C* c = &e->s.c;
   u64 bits = c->bits;
   while (bits) {
@@ -593,11 +757,11 @@ void step_cpu(E* e) {
       case 60: if (!c->fixhi) { goto done; } break;
       case 61: done: c->step = &s_decode; break;
       case 62:
-        disasm(e, get_u16(c->PCH, c->PCL) - 1);
+//        disasm(e, get_u16(c->PCH, c->PCL) - 1);
         c->step = &s_opcode_bits[c->opcode = busval][0];
         break;
       default:
-        FATAL("NYI: step %d\n", bit);
+        FATAL("NYI: cpu step %d\n", bit);
     }
     bits &= ~(1ull << bit);
   }
@@ -605,7 +769,6 @@ void step_cpu(E* e) {
   if (c->bits == 0) {
     FATAL("NYI: opcode %02x\n", c->opcode);
   }
-  e->s.cy++;
 }
 
 static const u64 s_decode       = 0b100000100000000000000000000000000000000000000000000000000100001;
