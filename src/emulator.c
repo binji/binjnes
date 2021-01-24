@@ -27,7 +27,7 @@ static void ppu_step(Emulator* e);
 static const u16 s_ppu_consts[];
 static const u32 s_ppu_bits[];
 static const u64 s_opcode_bits[256][7];
-static const u64 s_decode;
+static const u64 s_cpu_decode;
 
 
 static inline void inc_ppu_addr(Emulator* e) {
@@ -516,7 +516,7 @@ void cpu_step(Emulator* e) {
       case 58: if (!c->fixhi) { ++c->step; } break;
       case 59: if (c->TL) { goto done; } c->TL = busval; break;
       case 60: if (!c->fixhi) { goto done; } break;
-      case 61: done: c->step = &s_decode; break;
+      case 61: done: c->step = &s_cpu_decode; break;
       case 62:
         print_info(e);
         disasm(e, get_u16(c->PCH, c->PCL) - 1);
@@ -533,7 +533,7 @@ void cpu_step(Emulator* e) {
   }
 }
 
-static const u64 s_decode       = 0b100000100000000000000000000000000000000000000000000000000100001;
+static const u64 s_cpu_decode   = 0b100000100000000000000000000000000000000000000000000000000100001;
 static const u64 s_imp          = 0b000000000000000000000000000000000000000000000000000000000100001;
 static const u64 s_immlo        = 0b000000100000000000000000000000000000000000000000000000010100001;
 static const u64 s_immhi        = 0b000000100000000000000000000000000000000010000000000000000100001;
@@ -975,7 +975,7 @@ Result init_emulator(Emulator* e, const EmulatorInit* init) {
   s->c.PCH = cpu_read(e, 0xfffd);
   s->c.S = 0xfd;
   s->c.bus_en = TRUE;
-  s->c.bits = s_decode;
+  s->c.bits = s_cpu_decode;
 
   return OK;
   ON_ERROR_RETURN;
