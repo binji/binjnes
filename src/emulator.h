@@ -77,7 +77,7 @@ typedef struct {
   u8 state, x, ntb, atb[2], ptbl, ptbh, atshift[2];
   Bool w, oddframe;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
-  u32 fbidx;
+  u32 fbidx, bits_mask;
 } P;
 
 typedef struct {

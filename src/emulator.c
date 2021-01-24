@@ -12,6 +12,12 @@
 
 #include "emulator.h"
 
+#if 0
+#define LOG(...) printf(__VA_ARGS__)
+#else
+#define LOG(...) (void)0
+#endif
+
 const u32 kPrgBankShift = 14;
 const u32 kChrBankShift = 13;
 
@@ -28,6 +34,8 @@ static const u16 s_ppu_consts[];
 static const u32 s_ppu_bits[];
 static const u64 s_opcode_bits[256][7];
 static const u64 s_cpu_decode;
+static const u32 s_ppu_enabled_mask;
+static const u32 s_ppu_disabled_mask;
 
 
 static inline void inc_ppu_addr(Emulator* e) {
@@ -52,6 +60,8 @@ u8 cpu_read(Emulator *e, u16 addr) {
       case 2: {
         u8 result = (e->s.p.ppustatus & 0xe0) | (e->s.p.ppulast & 0x1f);
         e->s.p.ppustatus &= ~0x80;  // Clear NMI flag.
+        e->s.p.w = 0;
+        LOG("     ppu:status=%02hhx w=0\n", result);
         return result;
       }
       case 4:
@@ -80,7 +90,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
 
 void cpu_write(Emulator *e, u16 addr, u8 val) {
   e->s.c.bus_write = TRUE;
-  printf("     write(%04hx, %02hhx)\n", addr, val);
+  LOG("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
     e->s.c.ram[addr & 0x7ff] = val;
@@ -93,53 +103,57 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
       e->s.p.ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       e->s.p.t = (e->s.p.t & 0xf300) | ((val & 3) << 10);
-      printf("     ppu:t=%04hx\n", e->s.p.t);
+      LOG("     ppu:t=%04hx\n", e->s.p.t);
       break;
-    case 1: e->s.p.ppumask = val; break;
+    case 1:
+      e->s.p.ppumask = val;
+      e->s.p.bits_mask =
+          (val & 0x18) ? s_ppu_enabled_mask : s_ppu_disabled_mask;
+      break;
     case 3: e->s.p.oamaddr = val; break;
     case 4:
       // TODO: handle writes during rendering.
       e->s.p.oam[e->s.p.oamaddr++] = val;
       break;
     case 5:
-      if ((e->s.p.w = !e->s.p.w)) {
-        // w was 1.
-        // t: CBA..HG FED..... = d: HGFEDCBA
-        e->s.p.t =
-            (e->s.p.t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
-        printf("     ppu:t=%04hx\n", e->s.p.t);
-      } else {
+      if ((e->s.p.w ^= 1)) {
         // w was 0.
         // t: ....... ...HGFED = d: HGFED...
         // x:              CBA = d: .....CBA
         e->s.p.x = val & 7;
         e->s.p.t = (e->s.p.t & 0xffe0) | (val >> 3);
-        printf("     ppu:t=%04hx x=%02hhx\n", e->s.p.t, e->s.p.x);
+        LOG("     ppu:t=%04hx x=%02hhx w=0\n", e->s.p.t, e->s.p.x);
+      } else {
+        // w was 1.
+        // t: CBA..HG FED..... = d: HGFEDCBA
+        e->s.p.t =
+            (e->s.p.t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
+        LOG("     ppu:t=%04hx w=1\n", e->s.p.t);
       }
       break;
     case 6:
-      if ((e->s.p.w = !e->s.p.w)) {
-        // w was 1.
-        // t: ....... HGFEDCBA = d: HGFEDCBA
-        // v                   = t
-        e->s.p.v = e->s.p.t = (e->s.p.t & 0xff00) | val;
-        printf("     ppu:v=%04hx t=%04hx\n", e->s.p.v, e->s.p.t);
-      } else {
+      if ((e->s.p.w ^= 1)) {
         // w was 0.
         // t: .FEDCBA ........ = d: ..FEDCBA
         // t: X...... ........ = 0
         e->s.p.t = (e->s.p.t & 0x80ff) | (val << 8);
-        printf("     ppu:t=%04hx\n", e->s.p.t);
+        LOG("     ppu:t=%04hx w=0\n", e->s.p.t);
+      } else {
+        // w was 1.
+        // t: ....... HGFEDCBA = d: HGFEDCBA
+        // v                   = t
+        e->s.p.v = e->s.p.t = (e->s.p.t & 0xff00) | val;
+        LOG("     ppu:v=%04hx t=%04hx w=1\n", e->s.p.v, e->s.p.t);
       }
       break;
     case 7: {
       if(e->s.p.v == 0x117) {
-        printf("here\n");
+        LOG("here\n");
       }
       u16 oldv = e->s.p.v;
       ppu_write(e, e->s.p.v, val);
       inc_ppu_addr(e);
-      printf("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
+      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
     }
     }
     break;
@@ -240,13 +254,14 @@ static inline void read_atb(Emulator *e) {
   u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
   int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
   u8 atb = (ppu_read(e, at) >> shift) & 3;
-  e->s.p.atb[0] = (atb << 6) & 0x80;
-  e->s.p.atb[1] = (atb << 7) & 0x80;
+  e->s.p.atb[0] = atb & 1;
+  e->s.p.atb[1] = (atb >> 1) & 1;
 }
 
 static inline u8 read_ptb(Emulator *e, u8 addend) {
   u16 bg_base = (e->s.p.ppuctrl << 6) & 0x1000;
-  return ppu_read(e, (bg_base | e->s.p.ntb) + addend);
+  return ppu_read(e,
+                  (bg_base | ((e->s.p.ntb << 4) + (e->s.p.v >> 12))) + addend);
 }
 
 static inline void load_hi(u16* dst, u8 src) {
@@ -258,7 +273,7 @@ static inline void ppu_t_to_v(P *p, u16 mask) {
 }
 
 static inline u16 inch(u16 v) {
-  return (v & 0x1f) == 31 ? (v & 0x1f) ^ 0x0400 : v + 1;
+  return (v & 0x1f) == 31 ? (v & ~0x1f) ^ 0x0400 : v + 1;
 }
 
 static inline u16 incv(u16 v) {
@@ -303,28 +318,41 @@ static const RGBA s_nespal[] = {
     MAKE_RGBA(160, 214, 228, 255), MAKE_RGBA(160, 162, 160, 255),
 };
 
-static inline void shift(Emulator* e) {
+static inline void shift(Emulator* e, Bool draw) {
   P* p = &e->s.p;
-  u8 idx = (((p->bgshift[1] >> p->x) << 1) & 2) | ((p->bgshift[0] >> p->x) & 1);
-  u8 pal = (((p->atshift[1] >> p->x) << 1) & 2) | ((p->atshift[0] >> p->x) & 1);
-  p->bgshift[0] >>= 1;
-  p->bgshift[1] >>= 1;
-  p->atshift[0] = p->atb[0] | (p->atshift[0] >> 1);
-  p->atshift[1] = p->atb[1] | (p->atshift[1] >> 1);
-  // TODO: handle sprites
-  u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
-  e->frame_buffer[p->fbidx++] = s_nespal[col];
+  u8 idx = (((p->bgshift[1] << p->x) >> 14) & 2) |
+           (((p->bgshift[0] << p->x) >> 15) & 1);
+  u8 pal = (((p->atshift[1] << p->x) >> 6) & 2) |
+           (((p->atshift[0] << p->x) >> 7) & 1);
+  p->bgshift[0] <<= 1;
+  p->bgshift[1] <<= 1;
+  p->atshift[0] = p->atb[0] | (p->atshift[0] << 1);
+  p->atshift[1] = p->atb[1] | (p->atshift[1] << 1);
+  if (draw) {
+    // TODO: handle sprites
+    u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
+    assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
+    e->frame_buffer[p->fbidx++] = s_nespal[col];
+  }
 }
 
 void ppu_step(Emulator* e) {
-  Bool more = FALSE;
+  Bool more;
   P* p = &e->s.p;
   do {
+    more = FALSE;
+#if 0
+    if (p->bits_mask == s_ppu_enabled_mask) {
+      LOG("cy:%" PRIu64 " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u)\n",
+          e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
+          (p->v >> 5) & 0x1f, (p->v >> 10) & 3);
+    }
+#endif
     u16 next_state = p->state + 1;
     Bool z = FALSE;
     u32 bits = s_ppu_bits[p->state];
-    u16 cnst = s_ppu_consts[bits & 0xfff];
-    bits >>= 12;
+    u16 cnst = s_ppu_consts[bits & 0x7ff];
+    bits = (bits >> 11) & p->bits_mask;
     while (bits) {
       int bit = __builtin_ctzll(bits);
       switch (bit) {
@@ -334,26 +362,34 @@ void ppu_step(Emulator* e) {
         case 3: p->ptbh = read_ptb(e, 8); break;
         case 4: p->v = inch(p->v); break;
         case 5: p->v = incv(p->v); break;
-        case 6: shift(e); break;
-        case 7:
+        case 6: shift(e, TRUE); break;
+        case 7: shift(e, FALSE); break;
+        case 8:
           load_hi(&p->bgshift[0], p->ptbl);
           load_hi(&p->bgshift[1], p->ptbh);
           break;
-        case 8: ppu_t_to_v(p, 0x041f); break;
-        case 9: ppu_t_to_v(p, 0xebe0); break;
-        case 10: p->cnt1 = cnst; break;
-        case 11: p->cnt2 = cnst; break;
-        case 12:
+        case 9: ppu_t_to_v(p, 0x041f); break;
+        case 10: ppu_t_to_v(p, 0xebe0); break;
+        case 11: p->cnt1 = cnst; break;
+        case 12: p->cnt2 = cnst; break;
+        case 13:
           p->fbidx = 0;
           more = (p->oddframe ^= 1) && (p->ppumask & 8);
           break;
-        case 13: z = --p->cnt1 == 0; break;
-        case 14: z = --p->cnt2 == 0; break;
-        case 15: if (!z) { next_state = cnst; } break;
-        case 16: if (z) { next_state = cnst; } break;
-        case 17: p->ppustatus |= 0x80; break;
-        case 18: p->ppustatus = 0; break;
-        case 19: next_state = cnst; break;
+        case 14: z = --p->cnt1 == 0; break;
+        case 15: z = --p->cnt2 == 0; break;
+        case 16: if (!z) { next_state = cnst; } break;
+        case 17: if (z) { next_state = cnst; } break;
+        case 18: {
+//          static u64 last = 0;
+          p->ppustatus |= 0x80;
+          e->s.event |= EMULATOR_EVENT_NEW_FRAME;
+//          LOG("  fbidx=%u, cy=%" PRIu64 "\n", p->fbidx, e->s.cy - last);
+//          last = e->s.cy;
+          break;
+        }
+        case 19: p->ppustatus = 0; break;
+        case 20: next_state = cnst; break;
         default:
           FATAL("NYI: ppu step %d\n", bit);
       }
@@ -369,70 +405,71 @@ static const u16 s_ppu_consts[] = {
     [12] = 32, [13] = 39,  [14] = 41,  [15] = 43,   [16] = 45, [17] = 47,
     [18] = 63, [19] = 240, [20] = 340, [21] = 6819,
 };
-#define X(b,n) ((b)<<12|(n))
+#define X(b,n) ((b)<<11|(n))
 static const u32 s_ppu_bits[] = {
-//    33222222222111111111
-//    10987654321098765432
-  X(0b00000001010000000000,19),  //  0: cnt1=240,(skip if odd frame + BG),cy
-  X(0b00000000100000000001,12),  //  1: ntb=read(nt(v)),cnt2=32,cy
-  X(0b00000000000001000000, 0),  //  2: shift,cy
-  X(0b00000000000001000010, 0),  //  3: atb=read(at(v)),shift,cy
-  X(0b00000000000001000000, 0),  //  4: shift,cy
-  X(0b00000000000001000100, 0),  //  5: ptbl=read(pt(ntb)),shift,cy
-  X(0b00000000000001000000, 0),  //  6: shift,cy
-  X(0b00010100000000001000, 3),  //  7: ptbh=read(pt(ntb)+8),shift,--cnt2,jz #10,cy
-  X(0b00000000000001010000, 0),  //  8: inch(v),shift,cy
-  X(0b10000000000011000001, 2),  //  9: ntb=read(nt(v)),shift,reload,goto #2,cy
-  X(0b00000000000001100000, 0),  // 10: incv(v),shift,cy
-  X(0b00000000100111000000,18),  // 11: hori(v)=hori(t),shift,reload,cnt2=63,cy
-  X(0b00001100000000000000, 4),  // 12: --cnt2,jnz #12,cy
-  X(0b00000000100000000001, 2),  // 13: ntb=read(nt(v)),cnt2=2,cy
-  X(0b00000000000001000000, 0),  // 14: shift,cy
-  X(0b00000000000001000010, 0),  // 15: atb=read(at(v)),shift,cy
-  X(0b00000000000001000000, 0),  // 16: shift,cy
-  X(0b00000000000001000100, 0),  // 17: ptbl=read(pt(ntb)),shift,cy
-  X(0b00000000000001000000, 0),  // 18: shift,cy
-  X(0b00000000000001001000, 0),  // 19: ptbh=read(pt(ntb)+8),shift,cy
-  X(0b00000000000001010000, 0),  // 20: inch(v),shift,cy
-  X(0b00001100000011000001, 5),  // 21: ntb=read(nt(v)),shift,reload,--cnt2,jnz #14,cy
-  X(0b00000000000000000000, 0),  // 22: cy
-  X(0b00000000000000000001, 0),  // 23: ntb=read(nt(v)),cy
-  X(0b00000000000000000000, 0),  // 24: cy
-  X(0b00001010000000000000, 1),  // 25: --cnt1,jnz #1,cy
-  X(0b00000000100000000000,20),  // 26: cnt2=340,cy
-  X(0b00001100000000000000, 9),  // 27: --cnt2,jnz #27,cy
-  X(0b00100000100000000000,21),  // 28: set vblank,cnt2=6819,cy
-  X(0b00001100000000000000,10),  // 29: --cnt2,jnz #29,cy
-  X(0b01000000100000000001,12),  // 30: ntb=read(nt(v)),clear flags,cnt2=32,cy
-  X(0b00000000000000000000, 0),  // 31: cy
-  X(0b00000000000000000010, 0),  // 32: atb=read(at(v)),cy
-  X(0b00000000000000000000, 0),  // 33: cy
-  X(0b00000000000000000100, 0),  // 34: ptbl=read(pt(ntb)),cy
-  X(0b00000000000000000000, 0),  // 35: cy
-  X(0b00010100000000001000,13),  // 36: ptbh=read(pt(ntb)+8),--cnt2,jz #39,cy
-  X(0b00000000000000010000, 0),  // 37: inch(v),cy
-  X(0b10000000000000000001,11),  // 38: ntb=read(nt(v)),goto #31,cy
-  X(0b00000000000000100000, 0),  // 39: incv(v),cy
-  X(0b00000000100100000000, 7),  // 40: hori(v)=hori(t),cnt2=22,cy
-  X(0b00001100000000000000,14),  // 41: --cnt2,jnz #41,cy
-  X(0b00000000100000000000, 8),  // 42: cnt2=24,cy
-  X(0b00001100001000000000,15),  // 43: vert(v)=vert(t),--cnt2,jnz #43,cy
-  X(0b00000000100000000000, 6),  // 44: cnt2=15,cy
-  X(0b00001100000000000000,16),  // 45: --cnt2,jnz #45,cy
-  X(0b00000000100000000001, 2),  // 46: ntb=read(nt(v)),cnt2=2,cy
-  X(0b00000000000001000000, 0),  // 47: shift,cy
-  X(0b00000000000001000010, 0),  // 48: atb=read(at(v)),shift,cy
-  X(0b00000000000001000000, 0),  // 49: shift,cy
-  X(0b00000000000001000100, 0),  // 50: ptbl=read(pt(ntb)),shift,cy
-  X(0b00000000000001000000, 0),  // 51: shift,cy
-  X(0b00000000000001001000, 0),  // 52: ptbh=read(pt(ntb)+8),shift,cy
-  X(0b00000000000001010000, 0),  // 53: inch(v),shift,cy
-  X(0b00001100000011000001,17),  // 54: ntb=read(nt(v)),shift,reload,--cnt2,jnz #47,cy
-  X(0b00000000000000000000, 0),  // 55: cy
-  X(0b00000000000000000001, 0),  // 56: read(nt(v))
-  X(0b10000000000000000000, 0),  // 57: goto #0,cy
+  X(0b000000010100000000000,19),  //  0: cnt1=240,(skip if odd frame + BG)
+  X(0b000000001000000000001,12),  //  1: ntb=read(nt(v)),cnt2=32
+  X(0b000000000000001000000, 0),  //  2: shift
+  X(0b000000000000001000010, 0),  //  3: atb=read(at(v)),shift
+  X(0b000000000000001000000, 0),  //  4: shift
+  X(0b000000000000001000100, 0),  //  5: ptbl=read(pt(ntb)),shift
+  X(0b000000000000001000000, 0),  //  6: shift
+  X(0b000101000000001001000, 3),  //  7: ptbh=read(pt(ntb)+8),shift,--cnt2,jz #10
+  X(0b000000000000001010000, 0),  //  8: inch(v),shift
+  X(0b100000000000101000001, 2),  //  9: ntb=read(nt(v)),shift,reload,goto #2
+  X(0b000000000000001100000, 0),  // 10: incv(v),shift
+  X(0b000000001001101000000,18),  // 11: hori(v)=hori(t),shift,reload,cnt2=63
+  X(0b000011000000000000000, 4),  // 12: --cnt2,jnz #12
+  X(0b000000001000000000001, 2),  // 13: ntb=read(nt(v)),cnt2=2
+  X(0b000000000000010000000, 0),  // 14: shiftN
+  X(0b000000000000010000010, 0),  // 15: atb=read(at(v)),shiftN
+  X(0b000000000000010000000, 0),  // 16: shiftN
+  X(0b000000000000010000100, 0),  // 17: ptbl=read(pt(ntb)),shiftN
+  X(0b000000000000010000000, 0),  // 18: shiftN
+  X(0b000000000000010001000, 0),  // 19: ptbh=read(pt(ntb)+8),shiftN
+  X(0b000000000000010010000, 0),  // 20: inch(v),shiftN
+  X(0b000011000000110000001, 5),  // 21: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #14
+  X(0b000000000000000000000, 0),  // 22:
+  X(0b000000000000000000001, 0),  // 23: ntb=read(nt(v))
+  X(0b000000000000000000000, 0),  // 24:
+  X(0b000010100000000000000, 1),  // 25: --cnt1,jnz #1
+  X(0b000000001000000000000,20),  // 26: cnt2=340
+  X(0b000011000000000000000, 9),  // 27: --cnt2,jnz #27
+  X(0b001000001000000000000,21),  // 28: set vblank,cnt2=6819
+  X(0b000011000000000000000,10),  // 29: --cnt2,jnz #29
+  X(0b010000001000000000001,12),  // 30: ntb=read(nt(v)),clear flags,cnt2=32
+  X(0b000000000000000000000, 0),  // 31:
+  X(0b000000000000000000010, 0),  // 32: atb=read(at(v))
+  X(0b000000000000000000000, 0),  // 33:
+  X(0b000000000000000000100, 0),  // 34: ptbl=read(pt(ntb))
+  X(0b000000000000000000000, 0),  // 35:
+  X(0b000101000000000001000,13),  // 36: ptbh=read(pt(ntb)+8),--cnt2,jz #39
+  X(0b000000000000000010000, 0),  // 37: inch(v)
+  X(0b100000000000000000001,11),  // 38: ntb=read(nt(v)),goto #31
+  X(0b000000000000000100000, 0),  // 39: incv(v)
+  X(0b000000001001000000000, 7),  // 40: hori(v)=hori(t),cnt2=22
+  X(0b000011000000000000000,14),  // 41: --cnt2,jnz #41
+  X(0b000000001000000000000, 8),  // 42: cnt2=24
+  X(0b000011000010000000000,15),  // 43: vert(v)=vert(t),--cnt2,jnz #43
+  X(0b000000001000000000000, 6),  // 44: cnt2=15
+  X(0b000011000000000000000,16),  // 45: --cnt2,jnz #45
+  X(0b000000001000000000001, 2),  // 46: ntb=read(nt(v)),cnt2=2
+  X(0b000000000000010000000, 0),  // 47: shiftN
+  X(0b000000000000010000010, 0),  // 48: atb=read(at(v)),shiftN
+  X(0b000000000000010000000, 0),  // 49: shiftN
+  X(0b000000000000010000100, 0),  // 50: ptbl=read(pt(ntb)),shiftN
+  X(0b000000000000010000000, 0),  // 51: shiftN
+  X(0b000000000000010001000, 0),  // 52: ptbh=read(pt(ntb)+8),shiftN
+  X(0b000000000000010010000, 0),  // 53: inch(v),shiftN
+  X(0b000011000000110000001,17),  // 54: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #47
+  X(0b000000000000000000000, 0),  // 55:
+  X(0b000000000000000000001, 0),  // 56: read(nt(v))
+  X(0b100000000000000000000, 0),  // 57: goto #0
 };
 #undef X
+
+static const u32 s_ppu_enabled_mask =  0b111111111111111111111;
+static const u32 s_ppu_disabled_mask = 0b111111111100000000000;
 
 void cpu_step(Emulator* e) {
   u8 busval;
@@ -518,8 +555,8 @@ void cpu_step(Emulator* e) {
       case 60: if (!c->fixhi) { goto done; } break;
       case 61: done: c->step = &s_cpu_decode; break;
       case 62:
-        print_info(e);
-        disasm(e, get_u16(c->PCH, c->PCL) - 1);
+        // print_info(e);
+        // disasm(e, get_u16(c->PCH, c->PCL) - 1);
         c->step = &s_opcode_bits[c->opcode = busval][0];
         break;
       default:
@@ -976,6 +1013,7 @@ Result init_emulator(Emulator* e, const EmulatorInit* init) {
   s->c.S = 0xfd;
   s->c.bus_en = TRUE;
   s->c.bits = s_cpu_decode;
+  s->p.bits_mask = s_ppu_disabled_mask;
 
   return OK;
   ON_ERROR_RETURN;
