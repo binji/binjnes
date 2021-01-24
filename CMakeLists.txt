@@ -25,13 +25,19 @@ add_custom_target(${name}-copy-to-bin ALL
 )
 endfunction ()
 
-set(OpenGL_GL_PREFERENCE "GLVND")
+set(OpenGL_GL_PREFERENCE "LEGACY")
 find_package(SDL2)
 find_package(OpenGL)
 
 if (SDL2_FOUND AND OPENGL_FOUND)
   add_executable(binjnes
     src/binjnes.c
+    src/common.c
+    src/emulator.c
+    src/host.c
+    src/host-gl.c
+    src/host-ui-simple.c
+    src/joypad.c
   )
   target_link_libraries(binjnes SDL2::SDL2 SDL2::SDL2main ${OPENGL_gl_LIBRARY})
 
