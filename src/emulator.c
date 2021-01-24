@@ -15,19 +15,17 @@
 const u32 kPrgBankShift = 14;
 const u32 kChrBankShift = 13;
 
-static u8 read_cpu(Emulator *e, u16 addr);
-static void write_cpu(Emulator *e, u16 addr, u8 val);
-static u8 read_ppu(Emulator *e, u16 addr);
-static void write_ppu(Emulator *e, u16 addr, u8 val);
+static u8 cpu_read(Emulator *e, u16 addr);
+static void cpu_write(Emulator *e, u16 addr, u8 val);
+static u8 ppu_read(Emulator *e, u16 addr);
+static void ppu_write(Emulator *e, u16 addr, u8 val);
 static void disasm(Emulator* e, u16 addr);
 static void print_info(Emulator* e);
-static void step_cpu(Emulator* e);
-static void step_ppu(Emulator* e);
+static void cpu_step(Emulator* e);
+static void ppu_step(Emulator* e);
 
 static const u16 s_ppu_consts[];
 static const u32 s_ppu_bits[];
-static const char* s_opcode_mnemonic[256];
-static const u8 s_opcode_bytes[256];
 static const u64 s_opcode_bits[256][7];
 static const u64 s_decode;
 
@@ -36,7 +34,7 @@ static inline void inc_ppu_addr(Emulator* e) {
   e->s.p.v = (e->s.p.v + ((e->s.p.ppuctrl & 2) ? 32 : 1)) & 0x3fff;
 }
 
-u8 read_cpu(Emulator *e, u16 addr) {
+u8 cpu_read(Emulator *e, u16 addr) {
   e->s.c.bus_write = FALSE;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
@@ -60,7 +58,7 @@ u8 read_cpu(Emulator *e, u16 addr) {
         // TODO: don't increment during vblank/forced blank
         return e->s.p.oam[e->s.p.oamaddr++];
       case 7: {
-        u8 val = read_ppu(e, e->s.p.v);
+        u8 val = ppu_read(e, e->s.p.v);
         inc_ppu_addr(e);
         return val;
       }
@@ -80,7 +78,7 @@ u8 read_cpu(Emulator *e, u16 addr) {
   return 0xff;
 }
 
-void write_cpu(Emulator *e, u16 addr, u8 val) {
+void cpu_write(Emulator *e, u16 addr, u8 val) {
   e->s.c.bus_write = TRUE;
   printf("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
@@ -139,7 +137,7 @@ void write_cpu(Emulator *e, u16 addr, u8 val) {
         printf("here\n");
       }
       u16 oldv = e->s.p.v;
-      write_ppu(e, e->s.p.v, val);
+      ppu_write(e, e->s.p.v, val);
       inc_ppu_addr(e);
       printf("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
     }
@@ -157,7 +155,7 @@ static inline u8 get_pal_addr(u16 addr) {
   return addr & (((addr & 0x13) == 0x10) ? 0x10 : 0x1f);
 }
 
-u8 read_ppu(Emulator *e, u16 addr) {
+u8 ppu_read(Emulator *e, u16 addr) {
   int top4 = addr >> 10;
   switch (top4) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
@@ -177,7 +175,7 @@ u8 read_ppu(Emulator *e, u16 addr) {
   return 0xff;
 }
 
-void write_ppu(Emulator *e, u16 addr, u8 val) {
+void ppu_write(Emulator *e, u16 addr, u8 val) {
   int top4 = addr >> 10;
   switch (top4) {
     case 15:
@@ -195,26 +193,6 @@ void write_ppu(Emulator *e, u16 addr, u8 val) {
 }
 
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
-
-void disasm(Emulator* e, u16 addr) {
-  printf("   %04x: ", addr);
-  u8 opcode = read_cpu(e, addr);
-  const char* fmt = s_opcode_mnemonic[opcode];
-  u8 bytes = s_opcode_bytes[opcode];
-  u8 b0 = read_cpu(e, addr + 1);
-  u8 b1 = read_cpu(e, addr + 2);
-  u16 b01 = get_u16(b1, b0);
-
-  switch (bytes) {
-    case 1: printf("%02x     ", opcode); printf(fmt); break;
-    case 2: printf("%02x%02x   ", opcode, b0); printf(fmt, b0); break;
-    case 3: printf("%02x%02x%02x ", opcode, b0, b1); printf(fmt, b01); break;
-  }
-  if ((opcode & 0x1f) == 0x10) {  // Branch.
-    printf(" (%04x)", addr + 2 + (s8)b0);
-  }
-  printf("\n");
-}
 
 static inline u8 get_P(Emulator* e) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (e->s.c.B << 4) |
@@ -253,33 +231,22 @@ static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
   *result = (val >> 1) | (C << 7);
 }
 
-void print_info(Emulator* e) {
-  C* c = &e->s.c;
-  printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c1%c%c%c%c%c(%02hhx) S:%02x  "
-         "bus:%c%c %02x%02x  "
-         "(cy:%08" PRIu64 ")\n",
-         c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
-         c->B ? 'B' : '_', c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_',
-         c->C ? 'C' : '_', get_P(e), c->S, c->bus_en ? 'Y' : 'N',
-         c->bus_write ? 'W' : 'R', c->bushi, c->buslo, e->s.cy);
-}
-
 static inline void read_ntb(Emulator *e) {
-  e->s.p.ntb = read_ppu(e, 0x2000 | (e->s.p.v & 0xfff));
+  e->s.p.ntb = ppu_read(e, 0x2000 | (e->s.p.v & 0xfff));
 }
 
 static inline void read_atb(Emulator *e) {
   u16 v = e->s.p.v;
   u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
   int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
-  u8 atb = (read_ppu(e, at) >> shift) & 3;
+  u8 atb = (ppu_read(e, at) >> shift) & 3;
   e->s.p.atb[0] = (atb << 6) & 0x80;
   e->s.p.atb[1] = (atb << 7) & 0x80;
 }
 
 static inline u8 read_ptb(Emulator *e, u8 addend) {
   u16 bg_base = (e->s.p.ppuctrl << 6) & 0x1000;
-  return read_ppu(e, (bg_base | e->s.p.ntb) + addend);
+  return ppu_read(e, (bg_base | e->s.p.ntb) + addend);
 }
 
 static inline void load_hi(u16* dst, u8 src) {
@@ -349,7 +316,7 @@ static inline void shift(Emulator* e) {
   e->frame_buffer[p->fbidx++] = s_nespal[col];
 }
 
-void step_ppu(Emulator* e) {
+void ppu_step(Emulator* e) {
   Bool more = FALSE;
   P* p = &e->s.p;
   do {
@@ -467,7 +434,7 @@ static const u32 s_ppu_bits[] = {
 };
 #undef X
 
-void step_cpu(Emulator* e) {
+void cpu_step(Emulator* e) {
   u8 busval;
   C* c = &e->s.c;
   u64 bits = c->bits;
@@ -478,7 +445,7 @@ void step_cpu(Emulator* e) {
       case 1: c->bushi = 1; c->buslo = c->S; break;
       case 2: c->bushi = c->TH; c->buslo = c->TL; break;
       case 4: ++c->buslo; break;
-      case 5: busval = read_cpu(e, get_u16(c->bushi, c->buslo)); break;
+      case 5: busval = cpu_read(e, get_u16(c->bushi, c->buslo)); break;
       case 6: c->TL = 0; break;
       case 7: c->TL = busval; c->TH = 0; break;
       case 8: c->TL = c->A; break;
@@ -502,7 +469,7 @@ void step_cpu(Emulator* e) {
       case 26: busval = get_P(e); break;
       case 27: busval = c->TL; break;
       case 28: busval = c->A & c->X; break;
-      case 29: write_cpu(e, get_u16(c->bushi, c->buslo), busval); break;
+      case 29: cpu_write(e, get_u16(c->bushi, c->buslo), busval); break;
       case 30: c->C = !!(c->TL & 0x80); c->TL <<= 1; break;
       case 31: c->C = !!(c->TL & 0x01); c->TL >>= 1; break;
       case 32: rol(c->TL, c->C, &c->TL, &c->C); break;
@@ -910,81 +877,6 @@ static const u64 s_opcode_bits[256][7] = {
     [0xFF] = {s_immlo, s_immhix2, s_fixhi, s_isb1, s_rmw2, s_isb3},                /*ISB nnnn,x*/
 };
 
-static const char* s_opcode_mnemonic[256] = {
-  "BRK", "ORA ($%02hhx,x)", "??? #$%02hhx", "SLO ($%02hhx,x)", "NOP $%02hhx",
-  "ORA $%02hhx", "ASL $%02hhx", "SLO $%02hhx", "PHP", "ORA #$%02hhx", "ASL",
-  "ANC #$%02hhx", "NOP $%04hx", "ORA $%04hx", "ASL $%04hx", "SLO $%04hx",
-  "BPL %+hhd", "ORA ($%02hhx),y", "???", "SLO ($%02hhx),y", "NOP $%02hhx,x",
-  "ORA $%02hhx,x", "ASL $%02hhx,x", "SLO $%02hhx,x", "CLC", "ORA $%04hx,y",
-  "NOP", "SLO $%04hx,y", "NOP $%04hx,x", "ORA $%04hx,x", "ASL $%04hx,x",
-  "SLO $%04hx,x", "JSR $%04hx", "AND ($%02hhx,x)", "??? #$%02hhx",
-  "RLA ($%02hhx,x)", "BIT $%02hhx", "AND $%02hhx", "ROL $%02hhx", "RLA $%02hhx",
-  "PLP", "AND #$%02hhx", "ROL", "ANC #$%02hhx", "BIT $%04hx", "AND $%04hx",
-  "ROL $%04hx", "RLA $%04hx", "BMI %+hhd", "AND ($%02hhx),y", "???",
-  "RLA ($%02hhx),y", "NOP $%02hhx,x", "AND $%02hhx,x", "ROL $%02hhx,x",
-  "RLA $%02hhx,x", "SEC", "AND $%04hx,y", "NOP", "RLA $%04hx,y", "NOP $%04hx,x",
-  "AND $%04hx,x", "ROL $%04hx,x", "RLA $%04hx,x", "RTI", "EOR ($%02hhx,x)",
-  "??? #$%02hhx", "SRE ($%02hhx,x)", "NOP $%02hhx", "EOR $%02hhx",
-  "LSR $%02hhx", "SRE $%02hhx", "PHA", "EOR #$%02hhx", "LSR", "ASR #$%02hhx",
-  "JMP $%04hx", "EOR $%04hx", "LSR $%04hx", "SRE $%04hx", "BVC %+hhd",
-  "EOR ($%02hhx),y", "???", "SRE ($%02hhx),y", "NOP $%02hhx,x", "EOR $%02hhx,x",
-  "LSR $%02hhx,x", "SRE $%02hhx,x", "CLI", "EOR $%04hx,y", "NOP",
-  "SRE $%04hx,y", "NOP $%04hx,x", "EOR $%04hx,x", "LSR $%04hx,x",
-  "SRE $%04hx,x", "RTS", "ADC ($%02hhx,x)", "??? #$%02hhx", "RRA ($%02hhx,x)",
-  "NOP $%02hhx", "ADC $%02hhx", "ROR $%02hhx", "RRA $%02hhx", "PLA",
-  "ADC #$%02hhx", "ROR", "ARR #$%02hhx", "JMP ($%04hx)", "ADC $%04hx",
-  "ROR $%04hx", "RRA $%04hx", "BVS %+hhd", "ADC ($%02hhx),y", "???",
-  "RRA ($%02hhx),y", "NOP $%02hhx,x", "ADC $%02hhx,x", "ROR $%02hhx,x",
-  "RRA $%02hhx,x", "SEI", "ADC $%04hx,y", "NOP", "RRA $%04hx,y", "NOP $%04hx,x",
-  "ADC $%04hx,x", "ROR $%04hx,x", "RRA $%04hx,x", "NOP #$%02hhx",
-  "STA ($%02hhx,x)", "??? #$%02hhx", "SAX ($%02hhx,x)", "STY $%02hhx",
-  "STA $%02hhx", "STX $%02hhx", "SAX $%02hhx", "DEY", "NOP #$%02hhx", "TXA",
-  "ANE #$%02hhx", "STY $%04hx", "STA $%04hx", "STX $%04hx", "SAX $%04hx",
-  "BCC %+hhd", "STA ($%02hhx),y", "???", "SHA ($%02hhx),y", "STY $%02hhx,x",
-  "STA $%02hhx,x", "STX $%02hhx,y", "SAX $%02hhx,y", "TYA", "STA $%04hx,y",
-  "TXS", "SHS $%04hx,y", "SHY $%04hx,x", "STA $%04hx,x", "SHX $%04hx,y",
-  "SHA $%04hx,y", "LDY #$%02hhx", "LDA ($%02hhx,x)", "LDX #$%02hhx",
-  "LAX ($%02hhx,x)", "LDY $%02hhx", "LDA $%02hhx", "LDX $%02hhx", "LAX $%02hhx",
-  "TAY", "LDA #$%02hhx", "TAX", "LXA #$%02hhx", "LDY $%04hx", "LDA $%04hx",
-  "LDX $%04hx", "LAX $%04hx", "BCS %+hhd", "LDA ($%02hhx),y", "???",
-  "LAX ($%02hhx),y", "LDY $%02hhx,x", "LDA $%02hhx,x", "LDX $%02hhx,y",
-  "LAX $%02hhx,y", "CLV", "LDA $%04hx,y", "TSX", "LAS $%04hx,y", "LDY $%04hx,x",
-  "LDA $%04hx,x", "LDX $%04hx,y", "LAX $%04hx,y", "CPY #$%02hhx",
-  "CMP ($%02hhx,x)", "NOP #$%02hhx", "DCP ($%02hhx,x)", "CPY $%02hhx",
-  "CMP $%02hhx", "DEC $%02hhx", "DCP $%02hhx", "INY", "CMP #$%02hhx", "DEX",
-  "SBX #$%02hhx", "CPY $%04hx", "CMP $%04hx", "DEC $%04hx", "DCP $%04hx",
-  "BNE %+hhd", "CMP ($%02hhx),y", "???", "DCP ($%02hhx),y", "NOP $%02hhx,x",
-  "CMP $%02hhx,x", "DEC $%02hhx,x", "DCP $%02hhx,x", "CLD", "CMP $%04hx,y",
-  "NOP", "DCP $%04hx,y", "NOP $%04hx,x", "CMP $%04hx,x", "DEC $%04hx,x",
-  "DCP $%04hx,x", "CPX #$%02hhx", "SBC ($%02hhx,x)", "NOP #$%02hhx",
-  "ISB ($%02hhx,x)", "CPX $%02hhx", "SBC $%02hhx", "INC $%02hhx", "ISB $%02hhx",
-  "INX", "SBC #$%02hhx", "NOP", "SBC #$%02hhx", "CPX $%04hx", "SBC $%04hx",
-  "INC $%04hx", "ISB $%04hx", "BEQ %+hhd", "SBC ($%02hhx),y", "???",
-  "ISB ($%02hhx),y", "NOP $%02hhx,x", "SBC $%02hhx,x", "INC $%02hhx,x",
-  "ISB $%02hhx,x", "SED", "SBC $%04hx,y", "NOP", "ISB $%04hx,y", "NOP $%04hx,x",
-  "SBC $%04hx,x", "INC $%04hx,x", "ISB $%04hx,x",
-};
-
-static const u8 s_opcode_bytes[] = {
-    /*       0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f */
-    /* 00 */ 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* 10 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-    /* 20 */ 3, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* 30 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-    /* 40 */ 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* 50 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-    /* 60 */ 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* 70 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-    /* 80 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* 90 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-    /* a0 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* b0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-    /* c0 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* d0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-    /* e0 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
-    /* f0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
-};
-
 Result get_cart_info(const FileData *file_data, CartInfo *cart_info) {
   const u32 kHeaderSize = 16;
   const u32 kTrainerSize = 512;
@@ -1079,8 +971,8 @@ Result init_emulator(Emulator* e, const EmulatorInit* init) {
   S* s = &e->s;
   CHECK(SUCCESS(init_mapper(e)));
   memset(s, 0, sizeof(S));
-  s->c.PCL = read_cpu(e, 0xfffc);
-  s->c.PCH = read_cpu(e, 0xfffd);
+  s->c.PCL = cpu_read(e, 0xfffc);
+  s->c.PCH = cpu_read(e, 0xfffd);
   s->c.S = 0xfd;
   s->c.bus_en = TRUE;
   s->c.bits = s_decode;
@@ -1129,10 +1021,10 @@ EmulatorEvent emulator_step(Emulator* e) {
 }
 
 static void emulator_step_internal(Emulator* e) {
-  step_cpu(e);
-  step_ppu(e);
-  step_ppu(e);
-  step_ppu(e);
+  cpu_step(e);
+  ppu_step(e);
+  ppu_step(e);
+  ppu_step(e);
   e->s.cy += 1;
 }
 
@@ -1147,3 +1039,115 @@ EmulatorEvent emulator_run_until(Emulator* e, Ticks until_ticks) {
   }
   return e->s.event;
 }
+
+
+// Debug stuff /////////////////////////////////////////////////////////////////
+
+static const char* s_opcode_mnemonic[256];
+static const u8 s_opcode_bytes[256];
+
+void disasm(Emulator* e, u16 addr) {
+  printf("   %04x: ", addr);
+  u8 opcode = cpu_read(e, addr);
+  const char* fmt = s_opcode_mnemonic[opcode];
+  u8 bytes = s_opcode_bytes[opcode];
+  u8 b0 = cpu_read(e, addr + 1);
+  u8 b1 = cpu_read(e, addr + 2);
+  u16 b01 = get_u16(b1, b0);
+
+  switch (bytes) {
+    case 1: printf("%02x     ", opcode); printf(fmt); break;
+    case 2: printf("%02x%02x   ", opcode, b0); printf(fmt, b0); break;
+    case 3: printf("%02x%02x%02x ", opcode, b0, b1); printf(fmt, b01); break;
+  }
+  if ((opcode & 0x1f) == 0x10) {  // Branch.
+    printf(" (%04x)", addr + 2 + (s8)b0);
+  }
+  printf("\n");
+}
+
+void print_info(Emulator* e) {
+  C* c = &e->s.c;
+  printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c1%c%c%c%c%c(%02hhx) S:%02x  "
+         "bus:%c%c %02x%02x  "
+         "(cy:%08" PRIu64 ")\n",
+         c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
+         c->B ? 'B' : '_', c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_',
+         c->C ? 'C' : '_', get_P(e), c->S, c->bus_en ? 'Y' : 'N',
+         c->bus_write ? 'W' : 'R', c->bushi, c->buslo, e->s.cy);
+}
+
+static const char* s_opcode_mnemonic[256] = {
+  "BRK", "ORA ($%02hhx,x)", "??? #$%02hhx", "SLO ($%02hhx,x)", "NOP $%02hhx",
+  "ORA $%02hhx", "ASL $%02hhx", "SLO $%02hhx", "PHP", "ORA #$%02hhx", "ASL",
+  "ANC #$%02hhx", "NOP $%04hx", "ORA $%04hx", "ASL $%04hx", "SLO $%04hx",
+  "BPL %+hhd", "ORA ($%02hhx),y", "???", "SLO ($%02hhx),y", "NOP $%02hhx,x",
+  "ORA $%02hhx,x", "ASL $%02hhx,x", "SLO $%02hhx,x", "CLC", "ORA $%04hx,y",
+  "NOP", "SLO $%04hx,y", "NOP $%04hx,x", "ORA $%04hx,x", "ASL $%04hx,x",
+  "SLO $%04hx,x", "JSR $%04hx", "AND ($%02hhx,x)", "??? #$%02hhx",
+  "RLA ($%02hhx,x)", "BIT $%02hhx", "AND $%02hhx", "ROL $%02hhx", "RLA $%02hhx",
+  "PLP", "AND #$%02hhx", "ROL", "ANC #$%02hhx", "BIT $%04hx", "AND $%04hx",
+  "ROL $%04hx", "RLA $%04hx", "BMI %+hhd", "AND ($%02hhx),y", "???",
+  "RLA ($%02hhx),y", "NOP $%02hhx,x", "AND $%02hhx,x", "ROL $%02hhx,x",
+  "RLA $%02hhx,x", "SEC", "AND $%04hx,y", "NOP", "RLA $%04hx,y", "NOP $%04hx,x",
+  "AND $%04hx,x", "ROL $%04hx,x", "RLA $%04hx,x", "RTI", "EOR ($%02hhx,x)",
+  "??? #$%02hhx", "SRE ($%02hhx,x)", "NOP $%02hhx", "EOR $%02hhx",
+  "LSR $%02hhx", "SRE $%02hhx", "PHA", "EOR #$%02hhx", "LSR", "ASR #$%02hhx",
+  "JMP $%04hx", "EOR $%04hx", "LSR $%04hx", "SRE $%04hx", "BVC %+hhd",
+  "EOR ($%02hhx),y", "???", "SRE ($%02hhx),y", "NOP $%02hhx,x", "EOR $%02hhx,x",
+  "LSR $%02hhx,x", "SRE $%02hhx,x", "CLI", "EOR $%04hx,y", "NOP",
+  "SRE $%04hx,y", "NOP $%04hx,x", "EOR $%04hx,x", "LSR $%04hx,x",
+  "SRE $%04hx,x", "RTS", "ADC ($%02hhx,x)", "??? #$%02hhx", "RRA ($%02hhx,x)",
+  "NOP $%02hhx", "ADC $%02hhx", "ROR $%02hhx", "RRA $%02hhx", "PLA",
+  "ADC #$%02hhx", "ROR", "ARR #$%02hhx", "JMP ($%04hx)", "ADC $%04hx",
+  "ROR $%04hx", "RRA $%04hx", "BVS %+hhd", "ADC ($%02hhx),y", "???",
+  "RRA ($%02hhx),y", "NOP $%02hhx,x", "ADC $%02hhx,x", "ROR $%02hhx,x",
+  "RRA $%02hhx,x", "SEI", "ADC $%04hx,y", "NOP", "RRA $%04hx,y", "NOP $%04hx,x",
+  "ADC $%04hx,x", "ROR $%04hx,x", "RRA $%04hx,x", "NOP #$%02hhx",
+  "STA ($%02hhx,x)", "??? #$%02hhx", "SAX ($%02hhx,x)", "STY $%02hhx",
+  "STA $%02hhx", "STX $%02hhx", "SAX $%02hhx", "DEY", "NOP #$%02hhx", "TXA",
+  "ANE #$%02hhx", "STY $%04hx", "STA $%04hx", "STX $%04hx", "SAX $%04hx",
+  "BCC %+hhd", "STA ($%02hhx),y", "???", "SHA ($%02hhx),y", "STY $%02hhx,x",
+  "STA $%02hhx,x", "STX $%02hhx,y", "SAX $%02hhx,y", "TYA", "STA $%04hx,y",
+  "TXS", "SHS $%04hx,y", "SHY $%04hx,x", "STA $%04hx,x", "SHX $%04hx,y",
+  "SHA $%04hx,y", "LDY #$%02hhx", "LDA ($%02hhx,x)", "LDX #$%02hhx",
+  "LAX ($%02hhx,x)", "LDY $%02hhx", "LDA $%02hhx", "LDX $%02hhx", "LAX $%02hhx",
+  "TAY", "LDA #$%02hhx", "TAX", "LXA #$%02hhx", "LDY $%04hx", "LDA $%04hx",
+  "LDX $%04hx", "LAX $%04hx", "BCS %+hhd", "LDA ($%02hhx),y", "???",
+  "LAX ($%02hhx),y", "LDY $%02hhx,x", "LDA $%02hhx,x", "LDX $%02hhx,y",
+  "LAX $%02hhx,y", "CLV", "LDA $%04hx,y", "TSX", "LAS $%04hx,y", "LDY $%04hx,x",
+  "LDA $%04hx,x", "LDX $%04hx,y", "LAX $%04hx,y", "CPY #$%02hhx",
+  "CMP ($%02hhx,x)", "NOP #$%02hhx", "DCP ($%02hhx,x)", "CPY $%02hhx",
+  "CMP $%02hhx", "DEC $%02hhx", "DCP $%02hhx", "INY", "CMP #$%02hhx", "DEX",
+  "SBX #$%02hhx", "CPY $%04hx", "CMP $%04hx", "DEC $%04hx", "DCP $%04hx",
+  "BNE %+hhd", "CMP ($%02hhx),y", "???", "DCP ($%02hhx),y", "NOP $%02hhx,x",
+  "CMP $%02hhx,x", "DEC $%02hhx,x", "DCP $%02hhx,x", "CLD", "CMP $%04hx,y",
+  "NOP", "DCP $%04hx,y", "NOP $%04hx,x", "CMP $%04hx,x", "DEC $%04hx,x",
+  "DCP $%04hx,x", "CPX #$%02hhx", "SBC ($%02hhx,x)", "NOP #$%02hhx",
+  "ISB ($%02hhx,x)", "CPX $%02hhx", "SBC $%02hhx", "INC $%02hhx", "ISB $%02hhx",
+  "INX", "SBC #$%02hhx", "NOP", "SBC #$%02hhx", "CPX $%04hx", "SBC $%04hx",
+  "INC $%04hx", "ISB $%04hx", "BEQ %+hhd", "SBC ($%02hhx),y", "???",
+  "ISB ($%02hhx),y", "NOP $%02hhx,x", "SBC $%02hhx,x", "INC $%02hhx,x",
+  "ISB $%02hhx,x", "SED", "SBC $%04hx,y", "NOP", "ISB $%04hx,y", "NOP $%04hx,x",
+  "SBC $%04hx,x", "INC $%04hx,x", "ISB $%04hx,x",
+};
+
+static const u8 s_opcode_bytes[] = {
+    /*       0  1  2  3  4  5  6  7  8  9  a  b  c  d  e  f */
+    /* 00 */ 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* 10 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+    /* 20 */ 3, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* 30 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+    /* 40 */ 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* 50 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+    /* 60 */ 1, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* 70 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+    /* 80 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* 90 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+    /* a0 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* b0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+    /* c0 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* d0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+    /* e0 */ 2, 2, 2, 2, 2, 2, 2, 2, 1, 2, 1, 2, 3, 3, 3, 3,
+    /* f0 */ 2, 2, 1, 2, 2, 2, 2, 2, 1, 3, 1, 3, 3, 3, 3, 3,
+};
