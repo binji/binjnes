@@ -16,7 +16,7 @@ extern "C" {
 #define SCREEN_WIDTH 256
 #define SCREEN_HEIGHT 240
 
-typedef void (*JoypadCallback)(struct JoypadButtons* joyp, void* user_data);
+typedef void (*JoypadCallback)(struct JoypadButtons joyp[2], void* user_data);
 
 typedef struct JoypadCallbackInfo {
   JoypadCallback callback;
@@ -81,10 +81,16 @@ typedef struct {
 } P;
 
 typedef struct {
+  u8 joyp[2];
+  Bool S;
+} J;
+
+typedef struct {
   u64 cy;
   EmulatorEvent event;
   C c;
   P p;
+  J j;
 } S;
 
 typedef struct Emulator {
@@ -95,13 +101,15 @@ typedef struct Emulator {
   u8 *cpu_map[2];
   u8 *nt_map[4];
   FrameBuffer frame_buffer;
+  JoypadCallbackInfo joypad_info;
 } Emulator;
 
 
 Emulator* emulator_new(const EmulatorInit*);
 void emulator_delete(Emulator*);
 
-void emulator_set_joypad_buttons(Emulator*, JoypadButtons*);
+void emulator_set_joypad_callback(Emulator*, JoypadCallback, void* user_data);
+JoypadCallbackInfo emulator_get_joypad_callback(Emulator*);
 void emulator_set_config(Emulator*, const EmulatorConfig*);
 EmulatorConfig emulator_get_config(Emulator*);
 FrameBuffer* emulator_get_frame_buffer(Emulator*);

@@ -245,6 +245,7 @@ static Result host_init_joypad(Host* host, Emulator* e) {
     CHECK(SUCCESS(joypad_read(&file_data, &host->joypad_buffer)));
     file_data_delete(&file_data);
   } else {
+    emulator_set_joypad_callback(e, joypad_callback, host);
     host->joypad_buffer = joypad_new();
   }
   return OK;

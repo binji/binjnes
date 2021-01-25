@@ -49,6 +49,19 @@ static inline void inc_ppu_addr(Emulator* e) {
   e->s.p.v = (e->s.p.v + ((e->s.p.ppuctrl & 4) ? 32 : 1)) & 0x3fff;
 }
 
+static inline void read_joyp(Emulator *e, Bool write) {
+  if (e->joypad_info.callback && (write || e->s.j.S)) {
+    JoypadButtons btns[2];
+    e->joypad_info.callback(btns, e->joypad_info.user_data);
+    for (int i = 0; i < 2; ++i) {
+      e->s.j.joyp[i] = (btns[i].right << 7) | (btns[i].left << 6) |
+                       (btns[i].down << 5) | (btns[i].up << 4) |
+                       (btns[i].start << 3) | (btns[i].select << 2) |
+                       (btns[i].B << 1) | (btns[i].A << 0);
+    }
+  }
+}
+
 u8 cpu_read(Emulator *e, u16 addr) {
   e->s.c.bus_write = FALSE;
   switch (addr >> 12) {
@@ -83,7 +96,23 @@ u8 cpu_read(Emulator *e, u16 addr) {
   }
 
   case 4: // APU & I/O
-    // TODO
+    switch (addr - 0x4000) {
+      case 0x16: { // JOY1
+        read_joyp(e, FALSE);
+        u8 result = e->s.j.joyp[0];
+        e->s.j.joyp[0] >>= 1;
+        return result & 1;
+      }
+      case 0x17: { // JOY2
+        read_joyp(e, FALSE);
+        u8 result = e->s.j.joyp[1];
+        e->s.j.joyp[1] >>= 1;
+        return result & 1;
+      }
+      default:
+        LOG("*** NYI: read($%04x)", addr);
+        break;
+    }
     break;
 
   case 8: case 9: case 10: case 11: // ROM
@@ -171,7 +200,16 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
   }
 
   case 4: // APU & I/O
-    // TODO
+    switch (addr - 0x4000) {
+      case 0x16: {  // JOY1
+        read_joyp(e, TRUE);
+        e->s.j.S = val & 1;
+        break;
+      }
+      default:
+        LOG("*** NYI: write($%04x, $%02hhx)", addr, val);
+        break;
+    }
     break;
   }
 }
@@ -1071,7 +1109,14 @@ void emulator_delete(Emulator* e) {
   }
 }
 
-void emulator_set_joypad_buttons(Emulator* e, JoypadButtons* joyp) {
+void emulator_set_joypad_callback(Emulator* e, JoypadCallback callback,
+                                  void* user_data) {
+  e->joypad_info.callback = callback;
+  e->joypad_info.user_data = user_data;
+}
+
+JoypadCallbackInfo emulator_get_joypad_callback(Emulator* e) {
+  return e->joypad_info;
 }
 
 void emulator_set_config(Emulator* e, const EmulatorConfig* config) {
