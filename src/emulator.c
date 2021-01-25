@@ -274,10 +274,6 @@ static inline u8 read_ptb(Emulator *e, u8 addend) {
                   (bg_base | ((e->s.p.ntb << 4) + (e->s.p.v >> 12))) + addend);
 }
 
-static inline void load_hi(u16* dst, u8 src) {
-  *dst = (src << 8) | (*dst & 0xff);
-}
-
 static inline void ppu_t_to_v(P *p, u16 mask) {
   p->v = (p->v & ~mask) | (p->t & mask);
 }
@@ -378,8 +374,8 @@ void ppu_step(Emulator* e) {
         case 6: shift(e, TRUE); break;
         case 7: shift(e, FALSE); break;
         case 8:
-          load_hi(&p->bgshift[0], p->ptbl);
-          load_hi(&p->bgshift[1], p->ptbh);
+          p->bgshift[0] = (p->bgshift[0] & 0xff00) | p->ptbl;
+          p->bgshift[1] = (p->bgshift[1] & 0xff00) | p->ptbh;
           break;
         case 9: ppu_t_to_v(p, 0x041f); break;
         case 10: ppu_t_to_v(p, 0xebe0); break;
