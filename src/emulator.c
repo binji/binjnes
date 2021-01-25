@@ -12,10 +12,18 @@
 
 #include "emulator.h"
 
-#if 0
+#define LOGLEVEL 0
+
+#if LOGLEVEL >= 1
 #define LOG(...) printf(__VA_ARGS__)
 #else
 #define LOG(...) (void)0
+#endif
+
+#if LOGLEVEL >= 2
+#define DEBUG(...) printf(__VA_ARGS__)
+#else
+#define DEBUG(...) (void)0
 #endif
 
 const u32 kPrgBankShift = 14;
@@ -32,10 +40,9 @@ static void ppu_step(Emulator* e);
 
 static const u16 s_ppu_consts[];
 static const u32 s_ppu_bits[];
-static const u64 s_opcode_bits[256][7];
-static const u64 s_cpu_decode;
-static const u32 s_ppu_enabled_mask;
-static const u32 s_ppu_disabled_mask;
+static const u64 s_cpu_decode, s_opcode_bits[256][7];
+static const u64 s_nmi[], s_irq[];
+static const u32 s_ppu_enabled_mask, s_ppu_disabled_mask;
 
 
 static inline void inc_ppu_addr(Emulator* e) {
@@ -61,7 +68,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
         u8 result = (e->s.p.ppustatus & 0xe0) | (e->s.p.ppulast & 0x1f);
         e->s.p.ppustatus &= ~0x80;  // Clear NMI flag.
         e->s.p.w = 0;
-        LOG("     ppu:status=%02hhx w=0\n", result);
+        DEBUG("     ppu:status=%02hhx w=0\n", result);
         return result;
       }
       case 4:
@@ -88,6 +95,12 @@ u8 cpu_read(Emulator *e, u16 addr) {
   return 0xff;
 }
 
+void edge_check_nmi(Emulator* e) {
+  if (e->s.p.ppuctrl & e->s.p.ppustatus & 0x80) {
+    e->s.c.has_nmi = TRUE;
+  }
+}
+
 void cpu_write(Emulator *e, u16 addr, u8 val) {
   e->s.c.bus_write = TRUE;
   LOG("     write(%04hx, %02hhx)\n", addr, val);
@@ -103,7 +116,8 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
       e->s.p.ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       e->s.p.t = (e->s.p.t & 0xf300) | ((val & 3) << 10);
-      LOG("     ppu:t=%04hx\n", e->s.p.t);
+      edge_check_nmi(e);
+      DEBUG("     ppu:t=%04hx\n", e->s.p.t);
       break;
     case 1:
       e->s.p.ppumask = val;
@@ -122,13 +136,13 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
         // x:              CBA = d: .....CBA
         e->s.p.x = val & 7;
         e->s.p.t = (e->s.p.t & 0xffe0) | (val >> 3);
-        LOG("     ppu:t=%04hx x=%02hhx w=0\n", e->s.p.t, e->s.p.x);
+        DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", e->s.p.t, e->s.p.x);
       } else {
         // w was 1.
         // t: CBA..HG FED..... = d: HGFEDCBA
         e->s.p.t =
             (e->s.p.t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
-        LOG("     ppu:t=%04hx w=1\n", e->s.p.t);
+        DEBUG("     ppu:t=%04hx w=1\n", e->s.p.t);
       }
       break;
     case 6:
@@ -137,23 +151,20 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
         // t: .FEDCBA ........ = d: ..FEDCBA
         // t: X...... ........ = 0
         e->s.p.t = (e->s.p.t & 0x80ff) | (val << 8);
-        LOG("     ppu:t=%04hx w=0\n", e->s.p.t);
+        DEBUG("     ppu:t=%04hx w=0\n", e->s.p.t);
       } else {
         // w was 1.
         // t: ....... HGFEDCBA = d: HGFEDCBA
         // v                   = t
         e->s.p.v = e->s.p.t = (e->s.p.t & 0xff00) | val;
-        LOG("     ppu:v=%04hx t=%04hx w=1\n", e->s.p.v, e->s.p.t);
+        DEBUG("     ppu:v=%04hx t=%04hx w=1\n", e->s.p.v, e->s.p.t);
       }
       break;
     case 7: {
-      if(e->s.p.v == 0x117) {
-        LOG("here\n");
-      }
       u16 oldv = e->s.p.v;
       ppu_write(e, e->s.p.v, val);
       inc_ppu_addr(e);
-      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
+      DEBUG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
     }
     }
     break;
@@ -208,15 +219,14 @@ void ppu_write(Emulator *e, u16 addr, u8 val) {
 
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
-static inline u8 get_P(Emulator* e) {
-  return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (e->s.c.B << 4) |
-         (e->s.c.D << 3) | (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
+static inline u8 get_P(Emulator* e, Bool B) {
+  return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
+         (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
 }
 
 static inline void set_P(Emulator* e, u8 val) {
   e->s.c.N = !!(val & 0x80);
   e->s.c.V = !!(val & 0x40);
-  e->s.c.B = 0;
   e->s.c.D = !!(val & 0x08);
   e->s.c.I = !!(val & 0x04);
   e->s.c.Z = !!(val & 0x02);
@@ -341,13 +351,12 @@ void ppu_step(Emulator* e) {
   P* p = &e->s.p;
   do {
     more = FALSE;
-#if 0
     if (p->bits_mask == s_ppu_enabled_mask) {
-      LOG("cy:%" PRIu64 " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u)\n",
-          e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
-          (p->v >> 5) & 0x1f, (p->v >> 10) & 3);
+      DEBUG("cy:%" PRIu64
+            " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u)\n",
+            e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
+            (p->v >> 5) & 0x1f, (p->v >> 10) & 3);
     }
-#endif
     u16 next_state = p->state + 1;
     Bool z = FALSE;
     u32 bits = s_ppu_bits[p->state];
@@ -380,14 +389,11 @@ void ppu_step(Emulator* e) {
         case 15: z = --p->cnt2 == 0; break;
         case 16: if (!z) { next_state = cnst; } break;
         case 17: if (z) { next_state = cnst; } break;
-        case 18: {
-//          static u64 last = 0;
+        case 18:
           p->ppustatus |= 0x80;
+          edge_check_nmi(e);
           e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-//          LOG("  fbidx=%u, cy=%" PRIu64 "\n", p->fbidx, e->s.cy - last);
-//          last = e->s.cy;
           break;
-        }
         case 19: p->ppustatus = 0; break;
         case 20: next_state = cnst; break;
         default:
@@ -399,6 +405,8 @@ void ppu_step(Emulator* e) {
   } while (more);
 }
 
+static const u32 s_ppu_enabled_mask =  0b111111111111111111111;
+static const u32 s_ppu_disabled_mask = 0b111111111100000000000;
 static const u16 s_ppu_consts[] = {
     [0] = 0,   [1] = 1,    [2] = 2,    [3] = 10,    [4] = 12,  [5] = 14,
     [6] = 15,  [7] = 22,   [8] = 24,   [9] = 27,    [10] = 29, [11] = 31,
@@ -468,11 +476,9 @@ static const u32 s_ppu_bits[] = {
 };
 #undef X
 
-static const u32 s_ppu_enabled_mask =  0b111111111111111111111;
-static const u32 s_ppu_disabled_mask = 0b111111111100000000000;
-
 void cpu_step(Emulator* e) {
   u8 busval;
+//  print_info(e);
   C* c = &e->s.c;
   u64 bits = c->bits;
   while (bits) {
@@ -481,6 +487,7 @@ void cpu_step(Emulator* e) {
       case 0: c->bushi = c->PCH; c->buslo = c->PCL; break;
       case 1: c->bushi = 1; c->buslo = c->S; break;
       case 2: c->bushi = c->TH; c->buslo = c->TL; break;
+      case 3: c->bushi = 0xff; c->buslo = c->veclo; break;
       case 4: ++c->buslo; break;
       case 5: busval = cpu_read(e, get_u16(c->bushi, c->buslo)); break;
       case 6: c->TL = 0; break;
@@ -489,21 +496,21 @@ void cpu_step(Emulator* e) {
       case 9: c->TL = c->X; break;
       case 10: c->TL = c->Y; break;
       case 11: c->TL = c->S; break;
-      case 12: c->TL = get_P(e); break;
-      case 13: c->TL = c->Z; break;
-      case 14: c->TL = c->C; break;
-      case 15: c->TL = c->V; break;
-      case 16: c->TL = c->N; break;
-      case 17: c->TL = !c->TL; break;
-      case 18: --c->TL; break;
-      case 19: ++c->TL; break;
-      case 20: u8_sum(c->TL, c->X, &c->TL, &c->fixhi); break;
-      case 21: u8_sum(c->TL, c->Y, &c->TL, &c->fixhi); break;
-      case 22: c->TH = busval; break;
-      case 23: c->TH += c->fixhi; break;
-      case 24: busval = c->PCL; break;
-      case 25: busval = c->PCH; break;
-      case 26: busval = get_P(e); break;
+      case 12: c->TL = c->Z; break;
+      case 13: c->TL = c->C; break;
+      case 14: c->TL = c->V; break;
+      case 15: c->TL = c->N; break;
+      case 16: c->TL = !c->TL; break;
+      case 17: --c->TL; break;
+      case 18: ++c->TL; break;
+      case 19: u8_sum(c->TL, c->X, &c->TL, &c->fixhi); break;
+      case 20: u8_sum(c->TL, c->Y, &c->TL, &c->fixhi); break;
+      case 21: c->TH = busval; break;
+      case 22: c->TH += c->fixhi; break;
+      case 23: busval = c->PCL; break;
+      case 24: busval = c->PCH; break;
+      case 25: busval = get_P(e, FALSE); break;
+      case 26: busval = get_P(e, TRUE); c->veclo = 0xfe; break;
       case 27: busval = c->TL; break;
       case 28: busval = c->A & c->X; break;
       case 29: cpu_write(e, get_u16(c->bushi, c->buslo), busval); break;
@@ -532,31 +539,45 @@ void cpu_step(Emulator* e) {
       case 42: c->X = c->TL; break;
       case 43: c->Y = c->TL; break;
       case 44: c->S = c->TL; break;
-      case 45: set_P(e, c->TL); break;
-      case 46: c->C = c->TL; break;
-      case 47: c->I = c->TL; break;
-      case 48: c->D = c->TL; break;
-      case 49: c->V = c->TL; break;
-      case 50: --c->S; break;
-      case 51: ++c->S; break;
-      case 52: c->PCL = c->TL; break;
-      case 53: {
+      case 45:
+        if (c->has_nmi) {
+          c->has_nmi = FALSE;
+          c->next_step = s_nmi;
+          // TODO: determine this in the proper place during the interrupt
+          // sequence.
+          c->veclo = 0xfa;
+        }
+        break;
+      case 46: set_P(e, c->TL); break;
+      case 47: c->C = c->TL; break;
+      case 48: c->I = c->TL; break;
+      case 49: c->I = 1; break;
+      case 50: c->D = c->TL; break;
+      case 51: c->V = c->TL; break;
+      case 52: --c->S; break;
+      case 53: ++c->S; break;
+      case 54: c->PCL = c->TL; break;
+      case 55: {
         u16 result = c->PCL + (s8)c->TL;
         c->fixhi = result >> 8;
         c->PCL = result;
+        if (!c->fixhi) { goto done; }
         break;
       }
-      case 54: c->PCH = busval; break;
-      case 55: c->PCH += c->fixhi; break;
-      case 56: u16_inc(&c->PCH, &c->PCL); break;
-      case 57: c->Z = c->TL == 0; c->N = !!(c->TL & 0x80); break;
-      case 58: if (!c->fixhi) { ++c->step; } break;
-      case 59: if (c->TL) { goto done; } c->TL = busval; break;
-      case 60: if (!c->fixhi) { goto done; } break;
-      case 61: done: c->step = &s_cpu_decode; break;
+      case 56: c->PCH = busval; break;
+      case 57: c->PCH += c->fixhi; break;
+      case 58: u16_inc(&c->PCH, &c->PCL); break;
+      case 59: c->Z = c->TL == 0; c->N = !!(c->TL & 0x80); break;
+      case 60: if (!c->fixhi) { ++c->step; } break;
+      case 61: if (c->TL) { goto done; } c->TL = busval; break;
       case 62:
-        // print_info(e);
-        // disasm(e, get_u16(c->PCH, c->PCL) - 1);
+      done:
+        c->step = c->next_step;
+        c->next_step = &s_cpu_decode;
+        break;
+      case 63:
+//        print_info(e);
+//        disasm(e, get_u16(c->PCH, c->PCL) - 1);
         c->step = &s_opcode_bits[c->opcode = busval][0];
         break;
       default:
@@ -570,122 +591,133 @@ void cpu_step(Emulator* e) {
   }
 }
 
-static const u64 s_cpu_decode   = 0b100000100000000000000000000000000000000000000000000000000100001;
-static const u64 s_imp          = 0b000000000000000000000000000000000000000000000000000000000100001;
-static const u64 s_immlo        = 0b000000100000000000000000000000000000000000000000000000010100001;
-static const u64 s_immhi        = 0b000000100000000000000000000000000000000010000000000000000100001;
-static const u64 s_immhix       = 0b000010100000000000000000000000000000000010100000000000000100001;
-static const u64 s_immhix2      = 0b000000100000000000000000000000000000000010100000000000000100001;
-static const u64 s_immhiy       = 0b000010100000000000000000000000000000000011000000000000000100001;
-static const u64 s_fixhi        = 0b000000000000000000000000000000000000000100000000000000000100100;
-static const u64 s_inc_s        = 0b000000000001000000000000000000000000000000000000000000000100010;
-static const u64 s_br           = 0b001000000100000000000000000000000000000000000000000000000100001;
-static const u64 s_fixpc        = 0b010000010000000000000000000000000000000000000000000000000100001;
-static const u64 s_zerox        = 0b000000000000000000000000000000000000000000100000000000000100100;
-static const u64 s_zeroy        = 0b000000000000000000000000000000000000000001000000000000000100100;
-static const u64 s_zerox_indir  = 0b000000000000000000000000000000000000000000100000000000000100100;
-static const u64 s_zeroy_indir  = 0b000010000000000000000000000000000000000011000000000000000110000;
-static const u64 s_readlo       = 0b000000000000000000000000000000000000000000000000000000010100100;
-static const u64 s_readhi       = 0b000000000000000000000000000000000000000010000000000000000110000;
-static const u64 s_write        = 0b010000000000000000000000000000000101000000000000000000000000000;
-static const u64 s_pop_pcl      = 0b000000000011000000000000000000000000000000000000000000010100010;
-static const u64 s_adc          = 0b010001000000000000000001000000000000000000000000000000000100100;
-static const u64 s_and          = 0b010001000000000000000100000100000000000000000000000000100100100;
-static const u64 s_asl          = 0b000001000000000000000000000000001100000000000000000000000000000;
-static const u64 s_bit          = 0b010000000000000000000000001000000000000000000000000000100100100;
-static const u64 s_cmp          = 0b010001000000000000000000000010000000000000000000000000100100100;
-static const u64 s_cpx          = 0b010001000000000000000000000010000000000000000000000001000100100;
-static const u64 s_cpy          = 0b010001000000000000000000000010000000000000000000000010000100100;
-static const u64 s_dec          = 0b000001000000000000000000000000000100000000001000000000000000000;
-static const u64 s_eor          = 0b010001000000000000000100010000000000000000000000000000100100100;
-static const u64 s_inc          = 0b000001000000000000000000000000000100000000010000000000000000000;
-static const u64 s_lax          = 0b010001000000000000001100000000000000000000000000000000010100100;
-static const u64 s_lda          = 0b010001000000000000000100000000000000000000000000000000010100100;
-static const u64 s_ldx          = 0b010001000000000000001000000000000000000000000000000000010100100;
-static const u64 s_ldy          = 0b010001000000000000010000000000000000000000000000000000010100100;
-static const u64 s_lsr          = 0b000001000000000000000000000000010100000000000000000000000000000;
-static const u64 s_nopm         = 0b010000000000000000000000000000000000000000000000000000000100100;
-static const u64 s_nop          = 0b010000000000000000000000000000000000000000000000000000000100001;
-static const u64 s_ora          = 0b010001000000000000000100100000000000000000000000000000100100100;
-static const u64 s_rol          = 0b000001000000000000000000000000100100000000000000000000000000000;
-static const u64 s_ror          = 0b000001000000000000000000000001000100000000000000000000000000000;
-static const u64 s_sbc          = 0b010001000000000000000010000000000000000000000000000000000100100;
-static const u64 s_sax          = 0b010000000000000000000000000000000110000000000000000000000000100;
-static const u64 s_sta          = 0b010000000000000000000000000000000101000000000000000000100000100;
-static const u64 s_stx          = 0b010000000000000000000000000000000101000000000000000001000000100;
-static const u64 s_sty          = 0b010000000000000000000000000000000101000000000000000010000000100;
-static const u64 s_rmw2         = 0b000000000000000000000000000000000101000000000000000000000000000;
-static const u64 s_dcp1         = 0b000000000000000000000000000000000000000000001000000000010100100;
-static const u64 s_dcp3         = 0b010001000000000000000000000010000000000000000000000000100100000;
-static const u64 s_isb1         = 0b000000000000000000000000000000000000000000010000000000010100100;
-static const u64 s_isb3         = 0b010001000000000000000010000000000000000000000000000000000100000;
-static const u64 s_slo1         = 0b000000000000000000000000000000001000000000000000000000010100100;
-static const u64 s_slo3         = 0b010001000000000000000100100000000000000000000000000000100100000;
-static const u64 s_rla1         = 0b000000000000000000000000000000100000000000000000000000010100100;
-static const u64 s_rla3         = 0b010001000000000000000100000100000000000000000000000000100100000;
-static const u64 s_sre1         = 0b000000000000000000000000000000010000000000000000000000010100100;
-static const u64 s_sre3         = 0b010001000000000000000100010000000000000000000000000000100100000;
-static const u64 s_rra1         = 0b000000000000000000000000000001000000000000000000000000010100100;
-static const u64 s_rra3         = 0b010001000000000000000001000000000000000000000000000000000100000;
-static const u64 s_php          = 0b010000000000100000000000000000000100100000000000000000000000010;
-static const u64 s_ora_imm      = 0b010001100000000000000100100000000000000000000000000000100100001;
-static const u64 s_asl_a        = 0b010001000000000000000100000000001000000000000000000000100100001;
-static const u64 s_bpl          = 0b000100100000000000000000000000000000000000000010000000000100001;
-static const u64 s_clc          = 0b010000000000000010000000000000000000000000000000000000001100001;
-static const u64 s_jsr1         = 0b000000000000000000000000000000000000000000000000000000000100010;
-static const u64 s_jsr2         = 0b000000000000100000000000000000000100010000000000000000000000010;
-static const u64 s_jsr3         = 0b000000000000100000000000000000000100001000000000000000000000010;
-static const u64 s_plp          = 0b010000000000000001000000000000000000000000000000000000010100010;
-static const u64 s_and_imm      = 0b010001100000000000000100000100000000000000000000000000100100001;
-static const u64 s_rol_a        = 0b010001000000000000000100000000100000000000000000000000100100001;
-static const u64 s_bmi          = 0b000100100000000000000000000000000000000000000110000000000100001;
-static const u64 s_sec          = 0b010000000000000010000000000000000000000000000100000000001100001;
-static const u64 s_rti1         = 0b000000000001000001000000000000000000000000000000000000010100010;
-static const u64 s_rti3         = 0b010000001000000000000000000000000000000000000000000000000100010;
-static const u64 s_pha          = 0b010000000000100000000000000000000101000000000000000000100000010;
-static const u64 s_eor_imm      = 0b010001100000000000000100010000000000000000000000000000100100001;
-static const u64 s_lsr_a        = 0b010001000000000000000100000000010000000000000000000000100100001;
-static const u64 s_jmp          = 0b010000001010000000000000000000000000000000000000000000000100001;
-static const u64 s_bvc          = 0b000100100000000000000000000000000000000000000001000000000100001;
-static const u64 s_cli          = 0b010000000000000100000000000000000000000000000000000000001100001;
-static const u64 s_rts1         = 0b000000001000000000000000000000000000000000000000000000000100010;
-static const u64 s_rts2         = 0b010000100000000000000000000000000000000000000000000000000000000;
-static const u64 s_pla          = 0b010001000000000000000100000000000000000000000000000000010100010;
-static const u64 s_adc_imm      = 0b010001100000000000000001000000000000000000000000000000100100001;
-static const u64 s_ror_a        = 0b010001000000000000000100000001000000000000000000000000100100001;
-static const u64 s_jmp_ind      = 0b010000001010000000000000000000000000000000000000000000000110000;
-static const u64 s_bvs          = 0b000100100000000000000000000000000000000000000101000000000100001;
-static const u64 s_sei          = 0b010000000000000100000000000000000000000000000100000000001100001;
-static const u64 s_nop_imm      = 0b010000100000000000000000000000000000000000000000000000000100001;
-static const u64 s_dey          = 0b010001000000000000010000000000000000000000001000000010000100001;
-static const u64 s_txa          = 0b010001000000000000000100000000000000000000000000000001000100001;
-static const u64 s_bcc          = 0b000100100000000000000000000000000000000000000000100000000100001;
-static const u64 s_sta_ind_idx  = 0b000000000000000000000000000000000000000011000000000000000110000;
-static const u64 s_tya          = 0b010001000000000000000100000000000000000000000000000010000100001;
-static const u64 s_txs          = 0b010000000000000000100000000000000000000000000000000001000100001;
-static const u64 s_sta_absy     = 0b000000100000000000000000000000000000000011000000000000000100001;
-static const u64 s_sta_absx     = 0b000000100000000000000000000000000000000010100000000000000100001;
-static const u64 s_ldy_imm      = 0b010001100000000000010000000000000000000000000000000000010100001;
-static const u64 s_ldx_imm      = 0b010001100000000000001000000000000000000000000000000000010100001;
-static const u64 s_tay          = 0b010001000000000000010000000000000000000000000000000000100100001;
-static const u64 s_lda_imm      = 0b010001100000000000000100000000000000000000000000000000010100001;
-static const u64 s_tax          = 0b010001000000000000001000000000000000000000000000000000100100001;
-static const u64 s_bcs          = 0b000100100000000000000000000000000000000000000100100000000100001;
-static const u64 s_clv          = 0b010000000000010000000000000000000000000000000000000000001100001;
-static const u64 s_tsx          = 0b010001000000000000001000000000000000000000000000000100000100001;
-static const u64 s_cpy_imm      = 0b010001100000000000000000000010000000000000000000000010000100001;
-static const u64 s_iny          = 0b010001000000000000010000000000000000000000010000000010000100001;
-static const u64 s_cmp_imm      = 0b010001100000000000000000000010000000000000000000000000100100001;
-static const u64 s_dex          = 0b010001000000000000001000000000000000000000001000000001000100001;
-static const u64 s_bne          = 0b000100100000000000000000000000000000000000000000010000000100001;
-static const u64 s_cld          = 0b010000000000001000000000000000000000000000000000000000001100001;
-static const u64 s_cpx_imm      = 0b010001100000000000000000000010000000000000000000000001000100001;
-static const u64 s_sbc_imm      = 0b010001100000000000000010000000000000000000000000000000100100001;
-static const u64 s_inx          = 0b010001000000000000001000000000000000000000010000000001000100001;
-static const u64 s_beq          = 0b000100100000000000000000000000000000000000000100010000000100001;
-static const u64 s_sed          = 0b010000000000001000000000000000000000000000000100000000001100001;
+//                                  6665555555555444444444443333333333222222222221111111110000000000
+//                                  3210987654321098765432109876543210987654321098765432109876543210
+static const u64 s_cpu_decode   = 0b1000010000000000000000000000000000000000000000000000000000100001;
+static const u64 s_imp          = 0b0000000000000000000000000000000000000000000000000000000000100001;
+static const u64 s_immlo        = 0b0000010000000000000000000000000000000000000000000000000010100001;
+static const u64 s_immhi        = 0b0000010000000000000000000000000000000000001000000000000000100001;
+static const u64 s_immhix       = 0b0001010000000000000000000000000000000000001010000000000000100001;
+static const u64 s_immhix2      = 0b0000010000000000000000000000000000000000001010000000000000100001;
+static const u64 s_immhiy       = 0b0001010000000000000000000000000000000000001100000000000000100001;
+static const u64 s_fixhi        = 0b0000000000000000000000000000000000000000010000000000000000100100;
+static const u64 s_inc_s        = 0b0000000000100000000000000000000000000000000000000000000000100010;
+static const u64 s_br           = 0b0000000010000000000000000000000000000000000000000000000000100001;
+static const u64 s_fixpc        = 0b0100001000000000001000000000000000000000000000000000000000100001;
+static const u64 s_zerox        = 0b0000000000000000000000000000000000000000000010000000000000100100;
+static const u64 s_zeroy        = 0b0000000000000000000000000000000000000000000100000000000000100100;
+static const u64 s_zerox_indir  = 0b0000000000000000000000000000000000000000000010000000000000100100;
+static const u64 s_zeroy_indir  = 0b0001000000000000000000000000000000000000001100000000000000110000;
+static const u64 s_readlo       = 0b0000000000000000000000000000000000000000000000000000000010100100;
+static const u64 s_readhi       = 0b0000000000000000000000000000000000000000001000000000000000110000;
+static const u64 s_write        = 0b0100000000000000001000000000000000101000000000000000000000000000;
+static const u64 s_pop_pcl      = 0b0000000001100000000000000000000000000000000000000000000010100010;
+static const u64 s_adc          = 0b0100100000000000001000001000000000000000000000000000000000100100;
+static const u64 s_and          = 0b0100100000000000001000100000100000000000000000000000000100100100;
+static const u64 s_asl          = 0b0000100000000000000000000000000001100000000000000000000000000000;
+static const u64 s_bit          = 0b0100000000000000001000000001000000000000000000000000000100100100;
+static const u64 s_cmp          = 0b0100100000000000001000000000010000000000000000000000000100100100;
+static const u64 s_cpx          = 0b0100100000000000001000000000010000000000000000000000001000100100;
+static const u64 s_cpy          = 0b0100100000000000001000000000010000000000000000000000010000100100;
+static const u64 s_dec          = 0b0000100000000000000000000000000000100000000000100000000000000000;
+static const u64 s_eor          = 0b0100100000000000001000100010000000000000000000000000000100100100;
+static const u64 s_inc          = 0b0000100000000000000000000000000000100000000001000000000000000000;
+static const u64 s_lax          = 0b0100100000000000001001100000000000000000000000000000000010100100;
+static const u64 s_lda          = 0b0100100000000000001000100000000000000000000000000000000010100100;
+static const u64 s_ldx          = 0b0100100000000000001001000000000000000000000000000000000010100100;
+static const u64 s_ldy          = 0b0100100000000000001010000000000000000000000000000000000010100100;
+static const u64 s_lsr          = 0b0000100000000000000000000000000010100000000000000000000000000000;
+static const u64 s_nopm         = 0b0100000000000000001000000000000000000000000000000000000000100100;
+static const u64 s_nop          = 0b0100000000000000001000000000000000000000000000000000000000100001;
+static const u64 s_ora          = 0b0100100000000000001000100100000000000000000000000000000100100100;
+static const u64 s_rol          = 0b0000100000000000000000000000000100100000000000000000000000000000;
+static const u64 s_ror          = 0b0000100000000000000000000000001000100000000000000000000000000000;
+static const u64 s_sbc          = 0b0100100000000000001000010000000000000000000000000000000000100100;
+static const u64 s_sax          = 0b0100000000000000001000000000000000110000000000000000000000000100;
+static const u64 s_sta          = 0b0100000000000000001000000000000000101000000000000000000100000100;
+static const u64 s_stx          = 0b0100000000000000001000000000000000101000000000000000001000000100;
+static const u64 s_sty          = 0b0100000000000000001000000000000000101000000000000000010000000100;
+static const u64 s_rmw2         = 0b0000000000000000000000000000000000101000000000000000000000000000;
+static const u64 s_dcp1         = 0b0000000000000000000000000000000000000000000000100000000010100100;
+static const u64 s_dcp3         = 0b0100100000000000001000000000010000000000000000000000000100100000;
+static const u64 s_isb1         = 0b0000000000000000000000000000000000000000000001000000000010100100;
+static const u64 s_isb3         = 0b0100100000000000001000010000000000000000000000000000000000100000;
+static const u64 s_slo1         = 0b0000000000000000000000000000000001000000000000000000000010100100;
+static const u64 s_slo3         = 0b0100100000000000001000100100000000000000000000000000000100100000;
+static const u64 s_rla1         = 0b0000000000000000000000000000000100000000000000000000000010100100;
+static const u64 s_rla3         = 0b0100100000000000001000100000100000000000000000000000000100100000;
+static const u64 s_sre1         = 0b0000000000000000000000000000000010000000000000000000000010100100;
+static const u64 s_sre3         = 0b0100100000000000001000100010000000000000000000000000000100100000;
+static const u64 s_rra1         = 0b0000000000000000000000000000001000000000000000000000000010100100;
+static const u64 s_rra3         = 0b0100100000000000001000001000000000000000000000000000000000100000;
+static const u64 s_php          = 0b0100000000010000001000000000000000100010000000000000000000000010;
+static const u64 s_ora_imm      = 0b0100110000000000001000100100000000000000000000000000000100100001;
+static const u64 s_asl_a        = 0b0100100000000000001000100000000001000000000000000000000100100001;
+static const u64 s_bpl          = 0b0010010000000000001000000000000000000000000000001000000000100001;
+static const u64 s_clc          = 0b0100000000000000101000000000000000000000000000000000000001100001;
+static const u64 s_jsr1         = 0b0000000000000000000000000000000000000000000000000000000000100010;
+static const u64 s_push_pch     = 0b0000000000010000000000000000000000100001000000000000000000000010;
+static const u64 s_push_pcl     = 0b0000000000010000000000000000000000100000100000000000000000000010;
+static const u64 s_push_p       = 0b0000000000010000000000000000000000100010000000000000000000000010;
+static const u64 s_push_pb      = 0b0000000000010000000000000000000000100100000000000000000000000010;
+static const u64 s_plp          = 0b0100000000000000011000000000000000000000000000000000000010100010;
+static const u64 s_and_imm      = 0b0100110000000000001000100000100000000000000000000000000100100001;
+static const u64 s_rol_a        = 0b0100100000000000001000100000000100000000000000000000000100100001;
+static const u64 s_bmi          = 0b0010010000000000001000000000000000000000000000011000000000100001;
+static const u64 s_sec          = 0b0100000000000000101000000000000000000000000000010000000001100001;
+static const u64 s_rti1         = 0b0000000000100000010000000000000000000000000000000000000010100010;
+static const u64 s_rti3         = 0b0100000100000000001000000000000000000000000000000000000000100010;
+static const u64 s_pha          = 0b0100000000010000001000000000000000101000000000000000000100000010;
+static const u64 s_eor_imm      = 0b0100110000000000001000100010000000000000000000000000000100100001;
+static const u64 s_lsr_a        = 0b0100100000000000001000100000000010000000000000000000000100100001;
+static const u64 s_jmp          = 0b0100000101000000001000000000000000000000000000000000000000100001;
+static const u64 s_bvc          = 0b0010010000000000001000000000000000000000000000000100000000100001;
+static const u64 s_cli          = 0b0100000000000001001000000000000000000000000000000000000001100001;
+static const u64 s_rts1         = 0b0000000100000000000000000000000000000000000000000000000000100010;
+static const u64 s_rts2         = 0b0100010000000000001000000000000000000000000000000000000000000000;
+static const u64 s_pla          = 0b0100100000000000001000100000000000000000000000000000000010100010;
+static const u64 s_adc_imm      = 0b0100110000000000001000001000000000000000000000000000000100100001;
+static const u64 s_ror_a        = 0b0100100000000000001000100000001000000000000000000000000100100001;
+static const u64 s_jmp_ind      = 0b0100000101000000001000000000000000000000000000000000000000110000;
+static const u64 s_bvs          = 0b0010010000000000001000000000000000000000000000010100000000100001;
+static const u64 s_sei          = 0b0100000000000001001000000000000000000000000000010000000001100001;
+static const u64 s_nop_imm      = 0b0100010000000000001000000000000000000000000000000000000000100001;
+static const u64 s_dey          = 0b0100100000000000001010000000000000000000000000100000010000100001;
+static const u64 s_txa          = 0b0100100000000000001000100000000000000000000000000000001000100001;
+static const u64 s_bcc          = 0b0010010000000000001000000000000000000000000000000010000000100001;
+static const u64 s_sta_ind_idx  = 0b0000000000000000000000000000000000000000001100000000000000110000;
+static const u64 s_tya          = 0b0100100000000000001000100000000000000000000000000000010000100001;
+static const u64 s_txs          = 0b0100000000000000001100000000000000000000000000000000001000100001;
+static const u64 s_sta_absy     = 0b0000010000000000000000000000000000000000001100000000000000100001;
+static const u64 s_sta_absx     = 0b0000010000000000000000000000000000000000001010000000000000100001;
+static const u64 s_ldy_imm      = 0b0100110000000000001010000000000000000000000000000000000010100001;
+static const u64 s_ldx_imm      = 0b0100110000000000001001000000000000000000000000000000000010100001;
+static const u64 s_tay          = 0b0100100000000000001010000000000000000000000000000000000100100001;
+static const u64 s_lda_imm      = 0b0100110000000000001000100000000000000000000000000000000010100001;
+static const u64 s_tax          = 0b0100100000000000001001000000000000000000000000000000000100100001;
+static const u64 s_bcs          = 0b0010010000000000001000000000000000000000000000010010000000100001;
+static const u64 s_clv          = 0b0100000000001000001000000000000000000000000000000000000001100001;
+static const u64 s_tsx          = 0b0100100000000000000001000000000000000000000000000000100000100001;
+static const u64 s_cpy_imm      = 0b0100110000000000001000000000010000000000000000000000010000100001;
+static const u64 s_iny          = 0b0100100000000000001010000000000000000000000001000000010000100001;
+static const u64 s_cmp_imm      = 0b0100110000000000001000000000010000000000000000000000000100100001;
+static const u64 s_dex          = 0b0100100000000000001001000000000000000000000000100000001000100001;
+static const u64 s_bne          = 0b0010010000000000001000000000000000000000000000000001000000100001;
+static const u64 s_cld          = 0b0100000000000100001000000000000000000000000000000000000001100001;
+static const u64 s_cpx_imm      = 0b0100110000000000001000000000010000000000000000000000001000100001;
+static const u64 s_sbc_imm      = 0b0100110000000000001000010000000000000000000000000000000100100001;
+static const u64 s_inx          = 0b0100100000000000001001000000000000000000000001000000001000100001;
+static const u64 s_beq          = 0b0010010000000000001000000000000000000000000000010001000000100001;
+static const u64 s_sed          = 0b0100000000000100001000000000000000000000000000010000000001100001;
+static const u64 s_veclo        = 0b0000000001000000000000000000000000000000000000000000000010101000;
+static const u64 s_veclo_i      = 0b0000000001000010000000000000000000000000000000000000000010101000;
+static const u64 s_vechi        = 0b0100000100000000000000000000000000000000000000000000000000110000;
+
+static const u64 s_nmi[] = {s_imp, s_push_pch, s_push_pcl, s_push_p, s_veclo, s_vechi};
+static const u64 s_irq[] = {s_imp, s_push_pch, s_push_pcl, s_push_p, s_veclo_i, s_vechi};
 
 static const u64 s_opcode_bits[256][7] = {
+    [0x00] = {s_imp, s_push_pch, s_push_pcl, s_push_pb, s_veclo_i, s_vechi},       /*BRK*/
     [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},                  /*ORA (nn,x)*/
     [0x03] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_slo1, s_rmw2, s_slo3}, /*SLO (nn,x)*/
     [0x04] = {s_immlo, s_nopm},                                                    /*NOP nn*/
@@ -714,7 +746,7 @@ static const u64 s_opcode_bits[256][7] = {
     [0x1D] = {s_immlo, s_immhix, s_fixhi, s_ora},                                  /*ORA nnnn,x*/
     [0x1E] = {s_immlo, s_immhix2, s_fixhi, s_readlo, s_asl, s_write},              /*ASL nnnn,x*/
     [0x1F] = {s_immlo, s_immhix2, s_fixhi, s_slo1, s_rmw2, s_slo3},                /*SLO nnnn,x*/
-    [0x20] = {s_immlo, s_jsr1, s_jsr2, s_jsr3, s_jmp},                             /*JSR*/
+    [0x20] = {s_immlo, s_jsr1, s_push_pch, s_push_pcl, s_jmp},                     /*JSR*/
     [0x21] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_and},                  /*AND (nn,x)*/
     [0x23] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_rla1, s_rmw2, s_rla3}, /*RLA (nn,x)*/
     [0x24] = {s_immlo, s_bit},                                                     /*BIT nn*/
@@ -1008,11 +1040,17 @@ Result init_emulator(Emulator* e, const EmulatorInit* init) {
   S* s = &e->s;
   CHECK(SUCCESS(init_mapper(e)));
   memset(s, 0, sizeof(S));
+#if 1
   s->c.PCL = cpu_read(e, 0xfffc);
   s->c.PCH = cpu_read(e, 0xfffd);
+#else
+  s->c.PCL = 0;
+  s->c.PCH = 0xc0;
+#endif
   s->c.S = 0xfd;
   s->c.bus_en = TRUE;
   s->c.bits = s_cpu_decode;
+  s->c.step = s->c.next_step = &s_cpu_decode;
   s->p.bits_mask = s_ppu_disabled_mask;
 
   return OK;
@@ -1106,13 +1144,13 @@ void disasm(Emulator* e, u16 addr) {
 
 void print_info(Emulator* e) {
   C* c = &e->s.c;
-  printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c1%c%c%c%c%c(%02hhx) S:%02x  "
+  printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
          "bus:%c%c %02x%02x  "
          "(cy:%08" PRIu64 ")\n",
          c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
-         c->B ? 'B' : '_', c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_',
-         c->C ? 'C' : '_', get_P(e), c->S, c->bus_en ? 'Y' : 'N',
-         c->bus_write ? 'W' : 'R', c->bushi, c->buslo, e->s.cy);
+         c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_', c->C ? 'C' : '_',
+         get_P(e, FALSE), c->S, c->bus_en ? 'Y' : 'N', c->bus_write ? 'W' : 'R',
+         c->bushi, c->buslo, e->s.cy);
 }
 
 static const char* s_opcode_mnemonic[256] = {
