@@ -68,7 +68,7 @@ typedef struct {
   u8 ram[0x800]; // 2KiB internal ram.
   u8 opcode;
   Bool C, Z, I, D, V, N; // Flags.
-  Bool bus_en, bus_write, has_nmi;
+  Bool bus_write, has_nmi;
 } C;
 
 typedef struct {

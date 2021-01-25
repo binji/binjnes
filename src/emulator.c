@@ -1048,7 +1048,6 @@ Result init_emulator(Emulator* e, const EmulatorInit* init) {
   s->c.PCH = 0xc0;
 #endif
   s->c.S = 0xfd;
-  s->c.bus_en = TRUE;
   s->c.bits = s_cpu_decode;
   s->c.step = s->c.next_step = &s_cpu_decode;
   s->p.bits_mask = s_ppu_disabled_mask;
@@ -1145,12 +1144,11 @@ void disasm(Emulator* e, u16 addr) {
 void print_info(Emulator* e) {
   C* c = &e->s.c;
   printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
-         "bus:%c%c %02x%02x  "
-         "(cy:%08" PRIu64 ")\n",
+         "bus:%c %02x%02x  (cy:%08" PRIu64 ")\n",
          c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
          c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_', c->C ? 'C' : '_',
-         get_P(e, FALSE), c->S, c->bus_en ? 'Y' : 'N', c->bus_write ? 'W' : 'R',
-         c->bushi, c->buslo, e->s.cy);
+         get_P(e, FALSE), c->S, c->bus_write ? 'W' : 'R', c->bushi, c->buslo,
+         e->s.cy);
 }
 
 static const char* s_opcode_mnemonic[256] = {
