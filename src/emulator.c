@@ -576,8 +576,7 @@ void cpu_step(Emulator* e) {
         c->next_step = &s_cpu_decode;
         break;
       case 63:
-//        print_info(e);
-//        disasm(e, get_u16(c->PCH, c->PCL) - 1);
+        disasm(e, get_u16(c->PCH, c->PCL) - 1);
         c->step = &s_opcode_bits[c->opcode = busval][0];
         break;
       default:
@@ -1122,7 +1121,7 @@ static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
 
 void disasm(Emulator* e, u16 addr) {
-  printf("   %04x: ", addr);
+  printf("%04x: ", addr);
   u8 opcode = cpu_read(e, addr);
   const char* fmt = s_opcode_mnemonic[opcode];
   u8 bytes = s_opcode_bytes[opcode];
@@ -1130,21 +1129,35 @@ void disasm(Emulator* e, u16 addr) {
   u8 b1 = cpu_read(e, addr + 2);
   u16 b01 = get_u16(b1, b0);
 
+  int n;
+  char buf[100];
+
   switch (bytes) {
-    case 1: printf("%02x     ", opcode); printf(fmt); break;
-    case 2: printf("%02x%02x   ", opcode, b0); printf(fmt, b0); break;
-    case 3: printf("%02x%02x%02x ", opcode, b0, b1); printf(fmt, b01); break;
+  case 1:
+    printf("%02x     ", opcode);
+    n = snprintf(buf, 100, fmt);
+    break;
+  case 2:
+    printf("%02x%02x   ", opcode, b0);
+    n = snprintf(buf, 100, fmt, b0);
+    break;
+  case 3:
+    printf("%02x%02x%02x ", opcode, b0, b1);
+    n = snprintf(buf, 100, fmt, b01);
+    break;
   }
   if ((opcode & 0x1f) == 0x10) {  // Branch.
-    printf(" (%04x)", addr + 2 + (s8)b0);
+    snprintf(buf + n, 100 - n, " (%04x)", addr + 2 + (s8)b0);
   }
+  printf("%-16s", buf);
+  print_info(e);
   printf("\n");
 }
 
 void print_info(Emulator* e) {
   C* c = &e->s.c;
   printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
-         "bus:%c %02x%02x  (cy:%08" PRIu64 ")\n",
+         "bus:%c %02x%02x  (cy:%08" PRIu64 ")",
          c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
          c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_', c->C ? 'C' : '_',
          get_P(e, FALSE), c->S, c->bus_write ? 'W' : 'R', c->bushi, c->buslo,
