@@ -305,6 +305,7 @@ static const RGBA s_nespal[] = {
     MAKE_RGBA(32, 42, 0, 255),     MAKE_RGBA(8, 58, 0, 255),
     MAKE_RGBA(0, 64, 0, 255),      MAKE_RGBA(0, 60, 0, 255),
     MAKE_RGBA(0, 50, 60, 255),     MAKE_RGBA(0, 0, 0, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
     MAKE_RGBA(152, 150, 152, 255), MAKE_RGBA(8, 76, 196, 255),
     MAKE_RGBA(48, 50, 236, 255),   MAKE_RGBA(92, 30, 228, 255),
     MAKE_RGBA(136, 20, 176, 255),  MAKE_RGBA(160, 20, 100, 255),
@@ -312,6 +313,7 @@ static const RGBA s_nespal[] = {
     MAKE_RGBA(84, 90, 0, 255),     MAKE_RGBA(40, 114, 0, 255),
     MAKE_RGBA(8, 124, 0, 255),     MAKE_RGBA(0, 118, 40, 255),
     MAKE_RGBA(0, 102, 120, 255),   MAKE_RGBA(0, 0, 0, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
     MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(76, 154, 236, 255),
     MAKE_RGBA(120, 124, 236, 255), MAKE_RGBA(176, 98, 236, 255),
     MAKE_RGBA(228, 84, 236, 255),  MAKE_RGBA(236, 88, 180, 255),
@@ -319,6 +321,7 @@ static const RGBA s_nespal[] = {
     MAKE_RGBA(160, 170, 0, 255),   MAKE_RGBA(116, 196, 0, 255),
     MAKE_RGBA(76, 208, 32, 255),   MAKE_RGBA(56, 204, 108, 255),
     MAKE_RGBA(56, 180, 204, 255),  MAKE_RGBA(60, 60, 60, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
     MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(168, 204, 236, 255),
     MAKE_RGBA(188, 188, 236, 255), MAKE_RGBA(212, 178, 236, 255),
     MAKE_RGBA(236, 174, 236, 255), MAKE_RGBA(236, 174, 212, 255),
@@ -326,6 +329,7 @@ static const RGBA s_nespal[] = {
     MAKE_RGBA(204, 210, 120, 255), MAKE_RGBA(180, 222, 120, 255),
     MAKE_RGBA(168, 226, 144, 255), MAKE_RGBA(152, 226, 180, 255),
     MAKE_RGBA(160, 214, 228, 255), MAKE_RGBA(160, 162, 160, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
 };
 
 static inline void shift(Emulator* e, Bool draw) {
@@ -576,7 +580,7 @@ void cpu_step(Emulator* e) {
         c->next_step = &s_cpu_decode;
         break;
       case 63:
-        disasm(e, get_u16(c->PCH, c->PCL) - 1);
+        // disasm(e, get_u16(c->PCH, c->PCL) - 1);
         c->step = &s_opcode_bits[c->opcode = busval][0];
         break;
       default:
