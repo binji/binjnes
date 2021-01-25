@@ -46,7 +46,7 @@ static const u32 s_ppu_enabled_mask, s_ppu_disabled_mask;
 
 
 static inline void inc_ppu_addr(Emulator* e) {
-  e->s.p.v = (e->s.p.v + ((e->s.p.ppuctrl & 2) ? 32 : 1)) & 0x3fff;
+  e->s.p.v = (e->s.p.v + ((e->s.p.ppuctrl & 4) ? 32 : 1)) & 0x3fff;
 }
 
 u8 cpu_read(Emulator *e, u16 addr) {
@@ -269,7 +269,7 @@ static inline void read_atb(Emulator *e) {
 }
 
 static inline u8 read_ptb(Emulator *e, u8 addend) {
-  u16 bg_base = (e->s.p.ppuctrl << 6) & 0x1000;
+  u16 bg_base = (e->s.p.ppuctrl << 8) & 0x1000;
   return ppu_read(e,
                   (bg_base | ((e->s.p.ntb << 4) + (e->s.p.v >> 12))) + addend);
 }
