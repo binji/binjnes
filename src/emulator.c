@@ -13,6 +13,7 @@
 #include "emulator.h"
 
 #define LOGLEVEL 0
+#define DISASM 0
 
 #if LOGLEVEL >= 1
 #define LOG(...) printf(__VA_ARGS__)
@@ -193,7 +194,7 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
       u16 oldv = e->s.p.v;
       ppu_write(e, e->s.p.v, val);
       inc_ppu_addr(e);
-      DEBUG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
+      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
     }
     }
     break;
@@ -241,6 +242,12 @@ u8 ppu_read(Emulator *e, u16 addr) {
 void ppu_write(Emulator *e, u16 addr, u8 val) {
   int top4 = addr >> 10;
   switch (top4) {
+    case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
+    case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
+      // TODO: For now, always allow writes as though it were CHR RAM.
+      e->ci.chr_data[addr & 0x1fff] = val;
+      break;
+
     case 15:
       if (addr >= 0x3f00) {
         // Palette ram.
@@ -614,7 +621,9 @@ void cpu_step(Emulator* e) {
         c->next_step = &s_cpu_decode;
         break;
       case 63:
-        // disasm(e, get_u16(c->PCH, c->PCL) - 1);
+#if DISASM
+        disasm(e, get_u16(c->PCH, c->PCL) - 1);
+#endif
         c->step = &s_opcode_bits[c->opcode = busval][0];
         break;
       default:
@@ -1063,6 +1072,9 @@ Result init_mapper(Emulator *e) {
     } else {
       e->nt_map[0] = e->nt_map[2] = e->s.p.ram;
       e->nt_map[1] = e->nt_map[3] = e->s.p.ram + 0x400;
+    }
+    if (e->ci.chr_banks == 0) {
+      e->ci.chr_data = e->s.p.chr_ram;
     }
     break;
   default:

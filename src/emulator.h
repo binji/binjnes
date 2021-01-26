@@ -72,7 +72,7 @@ typedef struct {
 } C;
 
 typedef struct {
-  u8 ram[0x800], oam[0x100], oam2[0x20];
+  u8 ram[0x800], oam[0x100], oam2[0x20], chr_ram[0x2000];
   u16 cnt1, cnt2, v, t, bgshift[2];
   u8 state, x, ntb, atb[2], ptbl, ptbh, atshift[2];
   Bool w, oddframe;
