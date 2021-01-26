@@ -321,6 +321,7 @@ static inline u8 read_ptb(Emulator *e, u8 addend) {
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
   p->v = (p->v & ~mask) | (p->t & mask);
+  DEBUG("     ppu:v=%04hx t=%04hx\n", p->v, p->t);
 }
 
 static inline u16 inch(u16 v) {
@@ -328,13 +329,10 @@ static inline u16 inch(u16 v) {
 }
 
 static inline u16 incv(u16 v) {
-  if ((v & 0x7000) != 0x7000) {
-    return v + 0x1000; // fine y++
-  }
-  return (v & ~0x73e0) |
-         ((v & 0x3e0) == 0x3a0 ? v ^ 0x800  // coarse y=0, inc nt
-        : (v & 0x3e0) == 0x3e0 ? 0          // coarse y=0
-        : (v + 0x20) & 0x3e0);              // coarse y++
+  if ((v & 0x7000) != 0x7000) return v + 0x1000; // fine y++
+  if ((v & 0x3e0) == 0x3a0) return (v & ~0x73e0) ^ 0x800;
+  if ((v & 0x3e0) == 0x3e0) return (v & ~0x73e0);
+  return (v & ~0x73e0) | ((v + 0x20) & 0x3e0);
 }
 
 // XXX
@@ -423,7 +421,7 @@ void ppu_step(Emulator* e) {
           p->bgshift[1] = (p->bgshift[1] & 0xff00) | p->ptbh;
           break;
         case 9: ppu_t_to_v(p, 0x041f); break;
-        case 10: ppu_t_to_v(p, 0xebe0); break;
+        case 10: ppu_t_to_v(p, 0x7be0); break;
         case 11: p->cnt1 = cnst; break;
         case 12: p->cnt2 = cnst; break;
         case 13:
@@ -555,7 +553,7 @@ void cpu_step(Emulator* e) {
       case 23: busval = c->PCL; break;
       case 24: busval = c->PCH; break;
       case 25: busval = get_P(e, FALSE); break;
-      case 26: busval = get_P(e, TRUE); c->veclo = 0xfe; break;
+      case 26: busval = get_P(e, TRUE); break;
       case 27: busval = c->TL; break;
       case 28: busval = c->A & c->X; break;
       case 29: cpu_write(e, get_u16(c->bushi, c->buslo), busval); break;
@@ -696,7 +694,7 @@ static const u64 s_sre1         = 0b00000000000000000000000000000000100000000000
 static const u64 s_sre3         = 0b0100100000000000001000100010000000000000000000000000000100100000;
 static const u64 s_rra1         = 0b0000000000000000000000000000001000000000000000000000000010100100;
 static const u64 s_rra3         = 0b0100100000000000001000001000000000000000000000000000000000100000;
-static const u64 s_php          = 0b0100000000010000001000000000000000100010000000000000000000000010;
+static const u64 s_php          = 0b0100000000010000001000000000000000100100000000000000000000000010;
 static const u64 s_ora_imm      = 0b0100110000000000001000100100000000000000000000000000000100100001;
 static const u64 s_asl_a        = 0b0100100000000000001000100000000001000000000000000000000100100001;
 static const u64 s_bpl          = 0b0010010000000000001000000000000000000000000000001000000000100001;
@@ -763,7 +761,9 @@ static const u64 s_nmi[] = {s_imp, s_push_pch, s_push_pcl, s_push_p, s_veclo, s_
 static const u64 s_irq[] = {s_imp, s_push_pch, s_push_pcl, s_push_p, s_veclo_i, s_vechi};
 
 static const u64 s_opcode_bits[256][7] = {
+#if 0
     [0x00] = {s_imp, s_push_pch, s_push_pcl, s_push_pb, s_veclo_i, s_vechi},       /*BRK*/
+#endif
     [0x01] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_ora},                  /*ORA (nn,x)*/
     [0x03] = {s_immlo, s_zerox_indir, s_readlo, s_readhi, s_slo1, s_rmw2, s_slo3}, /*SLO (nn,x)*/
     [0x04] = {s_immlo, s_nopm},                                                    /*NOP nn*/
@@ -1005,7 +1005,7 @@ Result get_cart_info(const FileData *file_data, CartInfo *cart_info) {
   const u8 flag7 = file_data->data[7];
   const u8 flag9 = file_data->data[9];
 
-  cart_info->mirror = (flag6 & 1) ? MIRROR_HORIZONTAL : MIRROR_VERTICAL;
+  cart_info->mirror = (flag6 & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
   cart_info->has_bat_ram = (flag6 & 4) != 0;
   cart_info->has_trainer = (flag6 & 8) != 0;
   cart_info->ignore_mirror = (flag6 & 0x10) != 0;
