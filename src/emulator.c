@@ -308,9 +308,7 @@ static inline void read_atb(Emulator *e) {
   u16 v = e->s.p.v;
   u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
   int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
-  u8 atb = (ppu_read(e, at) >> shift) & 3;
-  e->s.p.atb[0] = atb & 1;
-  e->s.p.atb[1] = (atb >> 1) & 1;
+  e->s.p.atb = (ppu_read(e, at) >> shift) & 3;
 }
 
 static inline u8 read_ptb(Emulator *e, u8 addend) {
@@ -379,8 +377,8 @@ static inline void shift(Emulator* e, Bool draw) {
            (((p->atshift[0] << p->x) >> 7) & 1);
   p->bgshift[0] <<= 1;
   p->bgshift[1] <<= 1;
-  p->atshift[0] = p->atb[0] | (p->atshift[0] << 1);
-  p->atshift[1] = p->atb[1] | (p->atshift[1] << 1);
+  p->atshift[0] = (p->atshift[0] << 1) | p->atlatch[0];
+  p->atshift[1] = (p->atshift[1] << 1) | p->atlatch[1];
   if (draw) {
     // TODO: handle sprites
     u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
@@ -419,6 +417,8 @@ void ppu_step(Emulator* e) {
         case 8:
           p->bgshift[0] = (p->bgshift[0] & 0xff00) | p->ptbl;
           p->bgshift[1] = (p->bgshift[1] & 0xff00) | p->ptbh;
+          p->atlatch[0] = p->atb & 1;
+          p->atlatch[1] = (p->atb >> 1) & 1;
           break;
         case 9: ppu_t_to_v(p, 0x041f); break;
         case 10: ppu_t_to_v(p, 0x7be0); break;
