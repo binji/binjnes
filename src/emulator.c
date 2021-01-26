@@ -1144,7 +1144,7 @@ static void emulator_step_internal(Emulator* e) {
   ppu_step(e);
   ppu_step(e);
   ppu_step(e);
-  e->s.cy += 1;
+  e->s.cy += 3;  // Host counts PPU cycles, not CPU.
 }
 
 EmulatorEvent emulator_run_until(Emulator* e, Ticks until_ticks) {
