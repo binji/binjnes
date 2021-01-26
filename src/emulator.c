@@ -27,6 +27,42 @@
 #define DEBUG(...) (void)0
 #endif
 
+// XXX
+static const RGBA s_nespal[] = {
+    MAKE_RGBA(84, 84, 84, 255),    MAKE_RGBA(0, 30, 116, 255),
+    MAKE_RGBA(8, 16, 144, 255),    MAKE_RGBA(48, 0, 136, 255),
+    MAKE_RGBA(68, 0, 100, 255),    MAKE_RGBA(92, 0, 48, 255),
+    MAKE_RGBA(84, 4, 0, 255),      MAKE_RGBA(60, 24, 0, 255),
+    MAKE_RGBA(32, 42, 0, 255),     MAKE_RGBA(8, 58, 0, 255),
+    MAKE_RGBA(0, 64, 0, 255),      MAKE_RGBA(0, 60, 0, 255),
+    MAKE_RGBA(0, 50, 60, 255),     MAKE_RGBA(0, 0, 0, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
+    MAKE_RGBA(152, 150, 152, 255), MAKE_RGBA(8, 76, 196, 255),
+    MAKE_RGBA(48, 50, 236, 255),   MAKE_RGBA(92, 30, 228, 255),
+    MAKE_RGBA(136, 20, 176, 255),  MAKE_RGBA(160, 20, 100, 255),
+    MAKE_RGBA(152, 34, 32, 255),   MAKE_RGBA(120, 60, 0, 255),
+    MAKE_RGBA(84, 90, 0, 255),     MAKE_RGBA(40, 114, 0, 255),
+    MAKE_RGBA(8, 124, 0, 255),     MAKE_RGBA(0, 118, 40, 255),
+    MAKE_RGBA(0, 102, 120, 255),   MAKE_RGBA(0, 0, 0, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
+    MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(76, 154, 236, 255),
+    MAKE_RGBA(120, 124, 236, 255), MAKE_RGBA(176, 98, 236, 255),
+    MAKE_RGBA(228, 84, 236, 255),  MAKE_RGBA(236, 88, 180, 255),
+    MAKE_RGBA(236, 106, 100, 255), MAKE_RGBA(212, 136, 32, 255),
+    MAKE_RGBA(160, 170, 0, 255),   MAKE_RGBA(116, 196, 0, 255),
+    MAKE_RGBA(76, 208, 32, 255),   MAKE_RGBA(56, 204, 108, 255),
+    MAKE_RGBA(56, 180, 204, 255),  MAKE_RGBA(60, 60, 60, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
+    MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(168, 204, 236, 255),
+    MAKE_RGBA(188, 188, 236, 255), MAKE_RGBA(212, 178, 236, 255),
+    MAKE_RGBA(236, 174, 236, 255), MAKE_RGBA(236, 174, 212, 255),
+    MAKE_RGBA(236, 180, 176, 255), MAKE_RGBA(228, 196, 144, 255),
+    MAKE_RGBA(204, 210, 120, 255), MAKE_RGBA(180, 222, 120, 255),
+    MAKE_RGBA(168, 226, 144, 255), MAKE_RGBA(152, 226, 180, 255),
+    MAKE_RGBA(160, 214, 228, 255), MAKE_RGBA(160, 162, 160, 255),
+    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
+};
+
 const u32 kPrgBankShift = 14;
 const u32 kChrBankShift = 13;
 
@@ -45,175 +81,7 @@ static const u64 s_cpu_decode, s_opcode_bits[256][7];
 static const u64 s_nmi[], s_irq[];
 static const u32 s_ppu_enabled_mask, s_ppu_disabled_mask;
 
-
-static inline void inc_ppu_addr(Emulator* e) {
-  e->s.p.v = (e->s.p.v + ((e->s.p.ppuctrl & 4) ? 32 : 1)) & 0x3fff;
-}
-
-static inline void read_joyp(Emulator *e, Bool write) {
-  if (e->joypad_info.callback && (write || e->s.j.S)) {
-    JoypadButtons btns[2];
-    e->joypad_info.callback(btns, e->joypad_info.user_data);
-    for (int i = 0; i < 2; ++i) {
-      e->s.j.joyp[i] = (btns[i].right << 7) | (btns[i].left << 6) |
-                       (btns[i].down << 5) | (btns[i].up << 4) |
-                       (btns[i].start << 3) | (btns[i].select << 2) |
-                       (btns[i].B << 1) | (btns[i].A << 0);
-    }
-  }
-}
-
-u8 cpu_read(Emulator *e, u16 addr) {
-  e->s.c.bus_write = FALSE;
-  switch (addr >> 12) {
-  case 0: case 1: // Internal RAM
-    return e->s.c.ram[addr & 0x7ff];
-
-  case 2: case 3: { // PPU
-    switch (addr & 7) {
-      case 0:
-      case 1:
-      case 3:
-      case 5:
-      case 6:
-        return e->s.p.ppulast;
-
-      case 2: {
-        u8 result = (e->s.p.ppustatus & 0xe0) | (e->s.p.ppulast & 0x1f);
-        e->s.p.ppustatus &= ~0x80;  // Clear NMI flag.
-        e->s.p.w = 0;
-        DEBUG("     ppu:status=%02hhx w=0\n", result);
-        return result;
-      }
-      case 4:
-        // TODO: don't increment during vblank/forced blank
-        return e->s.p.oam[e->s.p.oamaddr++];
-      case 7: {
-        u8 val = ppu_read(e, e->s.p.v);
-        inc_ppu_addr(e);
-        return val;
-      }
-    }
-  }
-
-  case 4: // APU & I/O
-    switch (addr - 0x4000) {
-      case 0x16: { // JOY1
-        read_joyp(e, FALSE);
-        u8 result = e->s.j.joyp[0];
-        e->s.j.joyp[0] >>= 1;
-        return result & 1;
-      }
-      case 0x17: { // JOY2
-        read_joyp(e, FALSE);
-        u8 result = e->s.j.joyp[1];
-        e->s.j.joyp[1] >>= 1;
-        return result & 1;
-      }
-      default:
-        LOG("*** NYI: read($%04x)", addr);
-        break;
-    }
-    break;
-
-  case 8: case 9: case 10: case 11: // ROM
-    return e->cpu_map[0][addr - 0x8000];
-
-  case 12: case 13: case 14: case 15: // ROM
-    return e->cpu_map[1][addr - 0xc000];
-  }
-  return 0xff;
-}
-
-void edge_check_nmi(Emulator* e) {
-  if (e->s.p.ppuctrl & e->s.p.ppustatus & 0x80) {
-    e->s.c.has_nmi = TRUE;
-  }
-}
-
-void cpu_write(Emulator *e, u16 addr, u8 val) {
-  e->s.c.bus_write = TRUE;
-  LOG("     write(%04hx, %02hhx)\n", addr, val);
-  switch (addr >> 12) {
-  case 0: case 1: // Internal RAM
-    e->s.c.ram[addr & 0x7ff] = val;
-    break;
-
-  case 2: case 3: { // PPU
-    e->s.p.ppulast = val;
-    switch (addr & 0x7) {
-    case 0:
-      e->s.p.ppuctrl = val;
-      // t: ...BA.. ........ = d: ......BA
-      e->s.p.t = (e->s.p.t & 0xf300) | ((val & 3) << 10);
-      edge_check_nmi(e);
-      DEBUG("     ppu:t=%04hx\n", e->s.p.t);
-      break;
-    case 1:
-      e->s.p.ppumask = val;
-      e->s.p.bits_mask =
-          (val & 0x18) ? s_ppu_enabled_mask : s_ppu_disabled_mask;
-      break;
-    case 3: e->s.p.oamaddr = val; break;
-    case 4:
-      // TODO: handle writes during rendering.
-      e->s.p.oam[e->s.p.oamaddr++] = val;
-      break;
-    case 5:
-      if ((e->s.p.w ^= 1)) {
-        // w was 0.
-        // t: ....... ...HGFED = d: HGFED...
-        // x:              CBA = d: .....CBA
-        e->s.p.x = val & 7;
-        e->s.p.t = (e->s.p.t & 0xffe0) | (val >> 3);
-        DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", e->s.p.t, e->s.p.x);
-      } else {
-        // w was 1.
-        // t: CBA..HG FED..... = d: HGFEDCBA
-        e->s.p.t =
-            (e->s.p.t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
-        DEBUG("     ppu:t=%04hx w=1\n", e->s.p.t);
-      }
-      break;
-    case 6:
-      if ((e->s.p.w ^= 1)) {
-        // w was 0.
-        // t: .FEDCBA ........ = d: ..FEDCBA
-        // t: X...... ........ = 0
-        e->s.p.t = (e->s.p.t & 0x80ff) | (val << 8);
-        DEBUG("     ppu:t=%04hx w=0\n", e->s.p.t);
-      } else {
-        // w was 1.
-        // t: ....... HGFEDCBA = d: HGFEDCBA
-        // v                   = t
-        e->s.p.v = e->s.p.t = (e->s.p.t & 0xff00) | val;
-        DEBUG("     ppu:v=%04hx t=%04hx w=1\n", e->s.p.v, e->s.p.t);
-      }
-      break;
-    case 7: {
-      u16 oldv = e->s.p.v;
-      ppu_write(e, e->s.p.v, val);
-      inc_ppu_addr(e);
-      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
-    }
-    }
-    break;
-  }
-
-  case 4: // APU & I/O
-    switch (addr - 0x4000) {
-      case 0x16: {  // JOY1
-        read_joyp(e, TRUE);
-        e->s.j.S = val & 1;
-        break;
-      }
-      default:
-        LOG("*** NYI: write($%04x, $%02hhx)", addr, val);
-        break;
-    }
-    break;
-  }
-}
+// PPU stuff ///////////////////////////////////////////////////////////////////
 
 static inline u8 get_pal_addr(u16 addr) {
   return addr & (((addr & 0x13) == 0x10) ? 0x10 : 0x1f);
@@ -262,44 +130,6 @@ void ppu_write(Emulator *e, u16 addr, u8 val) {
   }
 }
 
-static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
-
-static inline u8 get_P(Emulator* e, Bool B) {
-  return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
-         (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
-}
-
-static inline void set_P(Emulator* e, u8 val) {
-  e->s.c.N = !!(val & 0x80);
-  e->s.c.V = !!(val & 0x40);
-  e->s.c.D = !!(val & 0x08);
-  e->s.c.I = !!(val & 0x04);
-  e->s.c.Z = !!(val & 0x02);
-  e->s.c.C = !!(val & 0x01);
-}
-
-static inline void u8_sum(u8 lhs, u8 rhs, u8* sum, u8* fixhi) {
-  u16 result = lhs + rhs;
-  *fixhi = result >> 8;
-  *sum = result;
-}
-
-static inline void u16_inc(u8* hi, u8* lo) {
-  u8 fixhi;
-  u8_sum(*lo, 1, lo, &fixhi);
-  *hi += fixhi;
-}
-
-static inline void rol(u8 val, Bool C, u8 *result, Bool *out_c) {
-  *out_c = !!(val & 0x80);
-  *result = (val << 1) | C;
-}
-
-static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
-  *out_c = !!(val & 0x01);
-  *result = (val >> 1) | (C << 7);
-}
-
 static inline void read_ntb(Emulator *e) {
   e->s.p.ntb = ppu_read(e, 0x2000 | (e->s.p.v & 0xfff));
 }
@@ -333,42 +163,6 @@ static inline u16 incv(u16 v) {
   return (v & ~0x73e0) | ((v + 0x20) & 0x3e0);
 }
 
-// XXX
-static const RGBA s_nespal[] = {
-    MAKE_RGBA(84, 84, 84, 255),    MAKE_RGBA(0, 30, 116, 255),
-    MAKE_RGBA(8, 16, 144, 255),    MAKE_RGBA(48, 0, 136, 255),
-    MAKE_RGBA(68, 0, 100, 255),    MAKE_RGBA(92, 0, 48, 255),
-    MAKE_RGBA(84, 4, 0, 255),      MAKE_RGBA(60, 24, 0, 255),
-    MAKE_RGBA(32, 42, 0, 255),     MAKE_RGBA(8, 58, 0, 255),
-    MAKE_RGBA(0, 64, 0, 255),      MAKE_RGBA(0, 60, 0, 255),
-    MAKE_RGBA(0, 50, 60, 255),     MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(152, 150, 152, 255), MAKE_RGBA(8, 76, 196, 255),
-    MAKE_RGBA(48, 50, 236, 255),   MAKE_RGBA(92, 30, 228, 255),
-    MAKE_RGBA(136, 20, 176, 255),  MAKE_RGBA(160, 20, 100, 255),
-    MAKE_RGBA(152, 34, 32, 255),   MAKE_RGBA(120, 60, 0, 255),
-    MAKE_RGBA(84, 90, 0, 255),     MAKE_RGBA(40, 114, 0, 255),
-    MAKE_RGBA(8, 124, 0, 255),     MAKE_RGBA(0, 118, 40, 255),
-    MAKE_RGBA(0, 102, 120, 255),   MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(76, 154, 236, 255),
-    MAKE_RGBA(120, 124, 236, 255), MAKE_RGBA(176, 98, 236, 255),
-    MAKE_RGBA(228, 84, 236, 255),  MAKE_RGBA(236, 88, 180, 255),
-    MAKE_RGBA(236, 106, 100, 255), MAKE_RGBA(212, 136, 32, 255),
-    MAKE_RGBA(160, 170, 0, 255),   MAKE_RGBA(116, 196, 0, 255),
-    MAKE_RGBA(76, 208, 32, 255),   MAKE_RGBA(56, 204, 108, 255),
-    MAKE_RGBA(56, 180, 204, 255),  MAKE_RGBA(60, 60, 60, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(168, 204, 236, 255),
-    MAKE_RGBA(188, 188, 236, 255), MAKE_RGBA(212, 178, 236, 255),
-    MAKE_RGBA(236, 174, 236, 255), MAKE_RGBA(236, 174, 212, 255),
-    MAKE_RGBA(236, 180, 176, 255), MAKE_RGBA(228, 196, 144, 255),
-    MAKE_RGBA(204, 210, 120, 255), MAKE_RGBA(180, 222, 120, 255),
-    MAKE_RGBA(168, 226, 144, 255), MAKE_RGBA(152, 226, 180, 255),
-    MAKE_RGBA(160, 214, 228, 255), MAKE_RGBA(160, 162, 160, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
-};
-
 static inline void shift(Emulator* e, Bool draw) {
   P* p = &e->s.p;
   u8 idx = (((p->bgshift[1] << p->x) >> 14) & 2) |
@@ -384,6 +178,12 @@ static inline void shift(Emulator* e, Bool draw) {
     u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
     assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
     e->frame_buffer[p->fbidx++] = s_nespal[col];
+  }
+}
+
+void edge_check_nmi(Emulator* e) {
+  if (e->s.p.ppuctrl & e->s.p.ppustatus & 0x80) {
+    e->s.c.has_nmi = TRUE;
   }
 }
 
@@ -518,6 +318,210 @@ static const u32 s_ppu_bits[] = {
   X(0b100000000000000000000, 0),  // 57: goto #0
 };
 #undef X
+
+// CPU stuff ///////////////////////////////////////////////////////////////////
+
+static inline void inc_ppu_addr(Emulator* e) {
+  e->s.p.v = (e->s.p.v + ((e->s.p.ppuctrl & 4) ? 32 : 1)) & 0x3fff;
+}
+
+static inline void read_joyp(Emulator *e, Bool write) {
+  if (e->joypad_info.callback && (write || e->s.j.S)) {
+    JoypadButtons btns[2];
+    e->joypad_info.callback(btns, e->joypad_info.user_data);
+    for (int i = 0; i < 2; ++i) {
+      e->s.j.joyp[i] = (btns[i].right << 7) | (btns[i].left << 6) |
+                       (btns[i].down << 5) | (btns[i].up << 4) |
+                       (btns[i].start << 3) | (btns[i].select << 2) |
+                       (btns[i].B << 1) | (btns[i].A << 0);
+    }
+  }
+}
+
+u8 cpu_read(Emulator *e, u16 addr) {
+  e->s.c.bus_write = FALSE;
+  switch (addr >> 12) {
+  case 0: case 1: // Internal RAM
+    return e->s.c.ram[addr & 0x7ff];
+
+  case 2: case 3: { // PPU
+    switch (addr & 7) {
+      case 0:
+      case 1:
+      case 3:
+      case 5:
+      case 6:
+        return e->s.p.ppulast;
+
+      case 2: {
+        u8 result = (e->s.p.ppustatus & 0xe0) | (e->s.p.ppulast & 0x1f);
+        e->s.p.ppustatus &= ~0x80;  // Clear NMI flag.
+        e->s.p.w = 0;
+        DEBUG("     ppu:status=%02hhx w=0\n", result);
+        return result;
+      }
+      case 4:
+        // TODO: don't increment during vblank/forced blank
+        return e->s.p.oam[e->s.p.oamaddr++];
+      case 7: {
+        u8 val = ppu_read(e, e->s.p.v);
+        inc_ppu_addr(e);
+        return val;
+      }
+    }
+  }
+
+  case 4: // APU & I/O
+    switch (addr - 0x4000) {
+      case 0x16: { // JOY1
+        read_joyp(e, FALSE);
+        u8 result = e->s.j.joyp[0];
+        e->s.j.joyp[0] >>= 1;
+        return result & 1;
+      }
+      case 0x17: { // JOY2
+        read_joyp(e, FALSE);
+        u8 result = e->s.j.joyp[1];
+        e->s.j.joyp[1] >>= 1;
+        return result & 1;
+      }
+      default:
+        LOG("*** NYI: read($%04x)", addr);
+        break;
+    }
+    break;
+
+  case 8: case 9: case 10: case 11: // ROM
+    return e->cpu_map[0][addr - 0x8000];
+
+  case 12: case 13: case 14: case 15: // ROM
+    return e->cpu_map[1][addr - 0xc000];
+  }
+  return 0xff;
+}
+
+void cpu_write(Emulator *e, u16 addr, u8 val) {
+  e->s.c.bus_write = TRUE;
+  LOG("     write(%04hx, %02hhx)\n", addr, val);
+  switch (addr >> 12) {
+  case 0: case 1: // Internal RAM
+    e->s.c.ram[addr & 0x7ff] = val;
+    break;
+
+  case 2: case 3: { // PPU
+    e->s.p.ppulast = val;
+    switch (addr & 0x7) {
+    case 0:
+      e->s.p.ppuctrl = val;
+      // t: ...BA.. ........ = d: ......BA
+      e->s.p.t = (e->s.p.t & 0xf300) | ((val & 3) << 10);
+      edge_check_nmi(e);
+      DEBUG("     ppu:t=%04hx\n", e->s.p.t);
+      break;
+    case 1:
+      e->s.p.ppumask = val;
+      e->s.p.bits_mask =
+          (val & 0x18) ? s_ppu_enabled_mask : s_ppu_disabled_mask;
+      break;
+    case 3: e->s.p.oamaddr = val; break;
+    case 4:
+      // TODO: handle writes during rendering.
+      e->s.p.oam[e->s.p.oamaddr++] = val;
+      break;
+    case 5:
+      if ((e->s.p.w ^= 1)) {
+        // w was 0.
+        // t: ....... ...HGFED = d: HGFED...
+        // x:              CBA = d: .....CBA
+        e->s.p.x = val & 7;
+        e->s.p.t = (e->s.p.t & 0xffe0) | (val >> 3);
+        DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", e->s.p.t, e->s.p.x);
+      } else {
+        // w was 1.
+        // t: CBA..HG FED..... = d: HGFEDCBA
+        e->s.p.t =
+            (e->s.p.t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
+        DEBUG("     ppu:t=%04hx w=1\n", e->s.p.t);
+      }
+      break;
+    case 6:
+      if ((e->s.p.w ^= 1)) {
+        // w was 0.
+        // t: .FEDCBA ........ = d: ..FEDCBA
+        // t: X...... ........ = 0
+        e->s.p.t = (e->s.p.t & 0x80ff) | (val << 8);
+        DEBUG("     ppu:t=%04hx w=0\n", e->s.p.t);
+      } else {
+        // w was 1.
+        // t: ....... HGFEDCBA = d: HGFEDCBA
+        // v                   = t
+        e->s.p.v = e->s.p.t = (e->s.p.t & 0xff00) | val;
+        DEBUG("     ppu:v=%04hx t=%04hx w=1\n", e->s.p.v, e->s.p.t);
+      }
+      break;
+    case 7: {
+      u16 oldv = e->s.p.v;
+      ppu_write(e, e->s.p.v, val);
+      inc_ppu_addr(e);
+      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
+    }
+    }
+    break;
+  }
+
+  case 4: // APU & I/O
+    switch (addr - 0x4000) {
+      case 0x16: {  // JOY1
+        read_joyp(e, TRUE);
+        e->s.j.S = val & 1;
+        break;
+      }
+      default:
+        LOG("*** NYI: write($%04x, $%02hhx)", addr, val);
+        break;
+    }
+    break;
+  }
+}
+
+
+static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
+
+static inline u8 get_P(Emulator* e, Bool B) {
+  return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
+         (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
+}
+
+static inline void set_P(Emulator* e, u8 val) {
+  e->s.c.N = !!(val & 0x80);
+  e->s.c.V = !!(val & 0x40);
+  e->s.c.D = !!(val & 0x08);
+  e->s.c.I = !!(val & 0x04);
+  e->s.c.Z = !!(val & 0x02);
+  e->s.c.C = !!(val & 0x01);
+}
+
+static inline void u8_sum(u8 lhs, u8 rhs, u8* sum, u8* fixhi) {
+  u16 result = lhs + rhs;
+  *fixhi = result >> 8;
+  *sum = result;
+}
+
+static inline void u16_inc(u8* hi, u8* lo) {
+  u8 fixhi;
+  u8_sum(*lo, 1, lo, &fixhi);
+  *hi += fixhi;
+}
+
+static inline void rol(u8 val, Bool C, u8 *result, Bool *out_c) {
+  *out_c = !!(val & 0x80);
+  *result = (val << 1) | C;
+}
+
+static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
+  *out_c = !!(val & 0x01);
+  *result = (val >> 1) | (C << 7);
+}
 
 void cpu_step(Emulator* e) {
   u8 busval;
