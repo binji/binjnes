@@ -79,8 +79,9 @@ typedef struct {
 
 typedef struct {
   u8 ram[0x800], chr_ram[0x2000], oam[0x100], oam2[0x20];
-  u16 cnt1, cnt2, v, t, bgshift[2];
-  u8 state, x, scany, ntb, atb, ptbl, ptbh, atlatch[2], atshift[2];
+  u32 bgshift;
+  u16 cnt1, cnt2, v, t, atshift;
+  u8 state, x, scany, ntb, atb, ptbl, ptbh, atlatch;
   Bool w, oddframe;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   u32 fbidx, bits_mask;

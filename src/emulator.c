@@ -84,6 +84,19 @@ static const u32 s_ppu_enabled_mask, s_ppu_disabled_mask;
 
 // PPU stuff ///////////////////////////////////////////////////////////////////
 
+// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
+static inline u8 reverse(u8 b) {
+  return ((b * 0x80200802ULL) & 0x0884422110ULL) * 0x0101010101ULL >> 32;
+}
+
+// https://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps
+static inline u16 interleave(u8 h, u8 l) {
+  const u64 A = 0x0101010101010101ULL, B = 0x8040201008040201ULL,
+            C = 0x0102040810204081ULL;
+  return (((l * A & B) * C >> 49) & 0x5555) |
+         (((h * A & B) * C >> 48) & 0xAAAA);
+}
+
 static inline u8 get_pal_addr(u16 addr) {
   return addr & (((addr & 0x13) == 0x10) ? 0x10 : 0x1f);
 }
@@ -170,10 +183,8 @@ static inline void shift(Emulator* e, Bool draw) {
   Spr* spr = &p->spr;
   u8 idx = 0, pal = 0;
   if (p->ppumask & 8) { // Show BG.
-    idx = (((p->bgshift[1] << p->x) >> 14) & 2) |
-          (((p->bgshift[0] << p->x) >> 15) & 1);
-    pal = (((p->atshift[1] << p->x) >> 6) & 2) |
-          (((p->atshift[0] << p->x) >> 7) & 1);
+    idx = p->bgshift << (p->x*2) >> 30;
+    pal = p->atshift << (p->x*2) >> 14;
   }
 
   if (draw) {
@@ -204,10 +215,8 @@ static inline void shift(Emulator* e, Bool draw) {
   }
 
   // Shift registers.
-  p->bgshift[0] <<= 1;
-  p->bgshift[1] <<= 1;
-  p->atshift[0] = (p->atshift[0] << 1) | p->atlatch[0];
-  p->atshift[1] = (p->atshift[1] << 1) | p->atlatch[1];
+  p->bgshift <<= 2;
+  p->atshift = (p->atshift << 2) | p->atlatch;
 
   // Shift all active sprites.
   for (i = 0; i < 8; ++i) {
@@ -259,10 +268,8 @@ void ppu_step(Emulator* e) {
         case 6: shift(e, TRUE); break;
         case 7: shift(e, FALSE); break;
         case 8:
-          p->bgshift[0] = (p->bgshift[0] & 0xff00) | p->ptbl;
-          p->bgshift[1] = (p->bgshift[1] & 0xff00) | p->ptbh;
-          p->atlatch[0] = p->atb & 1;
-          p->atlatch[1] = (p->atb >> 1) & 1;
+          p->bgshift = (p->bgshift & 0xffff0000) | interleave(p->ptbh, p->ptbl);
+          p->atlatch = p->atb;
           break;
         case 9:
           spr->state = spr->s = spr->d = 0;
@@ -374,11 +381,6 @@ static const u32 s_ppu_bits[] = {
 
 static inline Bool y_in_range(Emulator *e, u8 y) {
   return y < 240 && (u8)(e->s.p.scany - y) < ((e->s.p.ppuctrl & 0x20) ? 16 : 8);
-}
-
-// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
-static inline u8 reverse(u8 b) {
-  return ((b * 0x80200802ULL) & 0x0884422110ULL) * 0x0101010101ULL >> 32;
 }
 
 static inline void spr_inc(u8 *val, Bool* ovf, u8 addend) {
