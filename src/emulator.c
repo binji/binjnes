@@ -377,7 +377,7 @@ static const u32 s_ppu_bits[] = {
 #undef X
 
 static inline Bool y_in_range(Emulator *e, u8 y) {
-  return y < 240 && (u8)(e->s.p.scany - y) < ((e->s.p.ppuctrl & 0x20) ? 16 : 8);
+  return y < 239 && (u8)(e->s.p.scany - y) < ((e->s.p.ppuctrl & 0x20) ? 16 : 8);
 }
 
 static inline void spr_inc(u8 *val, Bool* ovf, u8 addend) {
