@@ -176,10 +176,12 @@ static inline void shift(Emulator* e, Bool draw) {
           (((p->atshift[0] << p->x) >> 7) & 1);
   }
 
-  // Decrement sprite counters if not active, and set active if zero.
-  for (i = 0; i < 8; ++i) {
-    if (!spr->active[i] && --spr->counter[i]) {
-      spr->active[i] = TRUE;
+  if (draw) {
+    // Decrement sprite counters if not active, and set active if zero.
+    for (i = 0; i < 8; ++i) {
+      if (!spr->active[i] && --spr->counter[i] == 0) {
+        spr->active[i] = TRUE;
+      }
     }
   }
 
@@ -193,7 +195,7 @@ static inline void shift(Emulator* e, Bool draw) {
         if (spridx != 0) {
           if (idx == 0 || spr->pri[i] == 0) {
             idx = spridx;
-            pal = spr->pal[i];
+            pal = spr->pal[i] + 4;
           }
           break;
         }
@@ -267,7 +269,7 @@ void ppu_step(Emulator* e) {
           spr->cnt = 32;
           spr->sovf = FALSE;
           break;
-        case 10: spr->state = 13; spr->cnt = 8; spr->s = 0; break;
+        case 10: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
         case 11: spr_step(e); break;
         case 12: ppu_t_to_v(p, 0x041f); break;
         case 13: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
@@ -307,6 +309,8 @@ static const u16 s_ppu_consts[] = {
 };
 #define X(b,n) ((b)<<8|(n))
 static const u32 s_ppu_bits[] = {
+//    222211111111110000000000
+//    321098765432109876543210
   X(0b000000010100001000000000,19),  //  0: cnt1=240,+spreval,(skip if odd frame + BG)
   X(0b000000001000100000000001,12),  //  1: ntb=read(nt(v)),cnt2=32,spr
   X(0b000000000000100001000000, 0),  //  2: shift,spr
@@ -332,7 +336,7 @@ static const u32 s_ppu_bits[] = {
   X(0b000000000000000000000000, 0),  // 22:
   X(0b000000000000000000000001, 0),  // 23: ntb=read(nt(v))
   X(0b000000000000000000000000, 0),  // 24:
-  X(0b000010100000000000000000, 1),  // 25: --cnt1,jnz #1
+  X(0b000010100000001000000000, 1),  // 25: --cnt1,+spreval,jnz #1
   X(0b000000001000000000000000,20),  // 26: cnt2=340
   X(0b000011000000000000000000, 9),  // 27: --cnt2,jnz #27
   X(0b001000001000000000000000,21),  // 28: set vblank,cnt2=6819
@@ -369,7 +373,7 @@ static const u32 s_ppu_bits[] = {
 #undef X
 
 static inline Bool y_in_range(Emulator *e, u8 y) {
-  return y - e->s.p.scany < (e->s.p.ppuctrl & 0x20 ? 16 : 8);
+  return y < 240 && (u8)(e->s.p.scany - y) < ((e->s.p.ppuctrl & 0x20) ? 16 : 8);
 }
 
 // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
@@ -377,9 +381,9 @@ static inline u8 reverse(u8 b) {
   return ((b * 0x80200802ULL) & 0x0884422110ULL) * 0x0101010101ULL >> 32;
 }
 
-static inline void spr_inc(u8 *val, Bool* ovf, u8 mask, u8 addend) {
-  *ovf = *val + addend > mask;
-  *val = (*val + addend) & mask;
+static inline void spr_inc(u8 *val, Bool* ovf, u8 addend) {
+  *ovf = *val + addend > 255;
+  *val += addend;
 }
 
 void spr_step(Emulator* e) {
@@ -391,37 +395,37 @@ void spr_step(Emulator* e) {
     u16 next_state = spr->state + 1;
     Bool z = FALSE;
     u32 bits = s_spr_bits[spr->state];
-    u16 cnst = s_spr_consts[bits & 0x3ff];
-    bits = (bits >> 10);
+    u16 cnst = s_spr_consts[bits & 0x1ff];
+    bits = (bits >> 9);
     while (bits) {
       int bit = __builtin_ctzl(bits);
       switch (bit) {
-        case 0: spr->t = p->oam[spr->s]; break;
-        case 1: spr->t = 0xff; break;
-        case 2: p->oam2[spr->d] = spr->t; break;
-        case 3: spr_inc(&spr->s, &spr->sovf, 63, 1); break;
-        case 4: spr->d++; break;
-        case 5: z = --spr->cnt == 0; break;
-        case 6: more = TRUE; z = spr->d >= 32; break;
-        case 7: z = spr->sovf; break;
-        case 8: if (!z) { next_state = cnst; more = FALSE; bits = 0;} break;
-        case 9: if (z) { next_state = cnst; more = FALSE; bits = 0;} break;
-        case 10: spr->d = 0; break;
-        case 11: spr->cnt = cnst; break;
-        case 12: if (y_in_range(e, spr->t)) { more = TRUE; bits = 0; } break;
-        case 13: spr_inc(&spr->s, &spr->sovf, 63, 3); break;
-        case 14: spr_inc(&spr->s, &spr->sovf, 63, 4); break;
-        case 15: next_state = cnst; break;
-        case 16: p->ppustatus |= 0x20; break;
-        case 17: spr->t = p->oam2[spr->s++]; break;
-        case 18: spr->y = spr->t; break;
-        case 19: spr->tile = spr->t; break;
-        case 20: spr->at = spr->t; break;
-        case 21: {
+        case 0: more = TRUE; break;
+        case 1: spr->t = p->oam[spr->s]; break;
+        case 2: spr->t = 0xff; break;
+        case 3: p->oam2[spr->d] = spr->t; break;
+        case 4: spr_inc(&spr->s, &spr->sovf, 1); break;
+        case 5: spr->d++; break;
+        case 6: z = --spr->cnt == 0; break;
+        case 7: z = spr->d >= 32; break;
+        case 8: z = spr->sovf; break;
+        case 9: if (!z) { next_state = cnst; more = FALSE; bits = 0;} break;
+        case 10: if (z) { next_state = cnst; more = FALSE; bits = 0;} break;
+        case 11: spr->d = 0; break;
+        case 12: spr->cnt = cnst; break;
+        case 13: if (y_in_range(e, spr->t)) { more = TRUE; bits = 0; } break;
+        case 14: spr_inc(&spr->s, &spr->sovf, 3); break;
+        case 15: spr_inc(&spr->s, &spr->sovf, 4); break;
+        case 16: next_state = cnst; break;
+        case 17: p->ppustatus |= 0x20; break;
+        case 18: spr->t = p->oam2[spr->s++]; break;
+        case 19: spr->y = spr->t; break;
+        case 20: spr->tile = spr->t; break;
+        case 21: spr->at = spr->t; break;
+        case 22: {
           u8 cur = (spr->s >> 2) - 1;
           if (spr->s <= spr->d) {
-            spr->counter[cur] = spr->t;  // X coord.
-            u8 y = spr->y - p->scany;
+            u8 y = (p->scany - 1) - spr->y;
             if (spr->at & 0x80) { y = ~y; }  // Flip Y.
             u16 chr = (p->ppuctrl & 0x20) ?
               // 8x16 sprites.
@@ -433,6 +437,8 @@ void spr_step(Emulator* e) {
             spr->shift[cur][1] = (spr->at & 0x40) ? reverse(ptbh) : ptbh;
             spr->pal[cur] = spr->at & 3;
             spr->pri[cur] = !!(spr->at & 0x20);
+            spr->counter[cur] = spr->t;  // X coord.
+            spr->active[cur] = FALSE;
           } else {
             // empty sprite.
             spr->counter[cur] = 0xff;
@@ -440,6 +446,7 @@ void spr_step(Emulator* e) {
             spr->shift[cur][1] = 0;
             spr->pal[cur] = 0;
             spr->pri[cur] = 0;
+            spr->active[cur] = FALSE;
           }
           break;
         }
@@ -453,32 +460,40 @@ void spr_step(Emulator* e) {
 }
 
 static const u16 s_spr_consts[] = {
-    [0] = 0, [1] = 1, [2] = 2,  [3] = 3,  [4] = 4,
-    [5] = 7, [6] = 9, [7] = 11, [8] = 12, [9] = 13,
+    [0] = 0,  [1] = 2,  [2] = 11, [3] = 13,
+    [4] = 14, [5] = 17, [6] = 18, [7] = 26,
 };
-#define X(b,n) ((b)<<10|(n))
+#define X(b,n) ((b)<<9|(n))
 static const u32 s_spr_bits[] = {
-  X(0b0000000000000000000010, 0),  // 0: t=0xff
-  X(0b0000000000010100110100, 0),  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
-  X(0b0000000000100000001000, 0),  // 2: t=oam[s],s++,cnt=3
-  X(0b0000001011000000000000, 5),  // 3: next if y in range,s+=3,goto 7
-  X(0b0000000000000000010100, 0),  // 4: oam2[d]=t,d++
-  X(0b0000000000000100101000, 4),  // 5: t=oam[s],s++,--cnt,jnz 4
-  X(0b0000000000000101000000, 2),  // 6: more=T,z=dovf,jnz 2
-  X(0b0000000000001010000000, 7),  // 7: z=sovf,jz 11
-  X(0b0000000000000000001000, 0),  // 8: t=oam[s],s++
-  X(0b0000001101000000000000, 6),  // 9: next if y in range,s+=4,goto 9
-  X(0b0000010000000000000000, 0),  // 10: set overflow bit
-  X(0b0000000000000000001001, 0),  // 11: t=oam[s],s++
-  X(0b0000000000000000000000, 8),  // 12: goto 12
-  X(0b0001100000000000000000, 0),  // 13: t=oam2[s],s++,do y
-  X(0b0010100000000000000000, 1),  // 14: t=oam2[s],s++,do tile
-  X(0b0100100000000000000000, 2),  // 15: t=oam2[s],s++,do attr
-  X(0b1000100000000000000000, 3),  // 16: t=oam2[s],s++,do x
-  X(0b0000000000000000000000, 0),  // 17:
-  X(0b0000000000000000000000, 0),  // 18:
-  X(0b0000000000000000000000, 0),  // 19:
-  X(0b0000001000000000000000, 9),  // 20: goto 13
+    //22211111111110000000000
+    //21098765432109876543210
+  X(0b00000000000000000000100, 0),  // 0: t=0xff
+  X(0b00000000000101001101000, 0),  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
+  X(0b00000000000000000010010, 0),  // 2: t=oam[s],s++
+  X(0b00000010110000000000001, 2),  // 3: next if y in range,s+=3,goto 11
+  X(0b00000000000000000101000, 0),  // 4: oam2[d]=t,d++
+  X(0b00000000000000000010010, 0),  // 5: t=oam[s],s++
+  X(0b00000000000000000101000, 0),  // 6: oam2[d]=t,d++
+  X(0b00000000000000000010010, 0),  // 7: t=oam[s],s++
+  X(0b00000000000000000101000, 0),  // 8: oam2[d]=t,d++
+  X(0b00000000000000000010010, 0),  // 9: t=oam[s],s++
+  X(0b00000000000000000101000, 0),  // 10: oam2[d]=t,d++
+  X(0b00000000000010100000001, 3),  // 11: more=T,z=sovf,jz 13
+  X(0b00000000000001010000000, 1),  // 12: z=dovf,jnz 2
+  X(0b00000000000000000010010, 0),  // 13: t=oam[s],s++
+  X(0b00000011010000000000000, 4),  // 14: next if y in range,s+=4,goto 14
+  X(0b00000100000000000000000, 0),  // 15: set overflow bit
+  X(0b00000000000000000010010, 0),  // 16: t=oam[s],s++
+  X(0b00000010000000000000000, 5),  // 17: goto 17
+  X(0b00011000000000000000000, 0),  // 18: t=oam2[s],s++,do y
+  X(0b00101000000000000000000, 0),  // 19: t=oam2[s],s++,do tile
+  X(0b01001000000000000000000, 0),  // 20: t=oam2[s],s++,do attr
+  X(0b10001000000000000000000, 0),  // 21: t=oam2[s],s++,do x
+  X(0b00000000000000000000000, 0),  // 22:
+  X(0b00000000000000000000000, 0),  // 23:
+  X(0b00000000000000000000000, 0),  // 24:
+  X(0b00000000000001001000000, 6),  // 25: --cnt,jnz 18
+  X(0b00000010000000000000000, 7),  // 26: goto 26
 };
 #undef X
 
@@ -500,6 +515,8 @@ static inline void read_joyp(Emulator *e, Bool write) {
     }
   }
 }
+
+static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
 u8 cpu_read(Emulator *e, u16 addr) {
   e->s.c.bus_write = FALSE;
@@ -634,6 +651,13 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
 
   case 4: // APU & I/O
     switch (addr - 0x4000) {
+      case 0x14: {   // OAMDMA
+        // TODO: proper timing
+        for (int i = 0; i < 256; ++i) {
+          e->s.p.oam[i] = cpu_read(e, get_u16(val, i));
+        }
+        break;
+      }
       case 0x16: {  // JOY1
         read_joyp(e, TRUE);
         e->s.j.S = val & 1;
@@ -647,8 +671,6 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
   }
 }
 
-
-static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
 static inline u8 get_P(Emulator* e, Bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
