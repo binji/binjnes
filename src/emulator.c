@@ -165,17 +165,57 @@ static inline u16 incv(u16 v) {
 }
 
 static inline void shift(Emulator* e, Bool draw) {
+  int i;
   P* p = &e->s.p;
-  u8 idx = (((p->bgshift[1] << p->x) >> 14) & 2) |
-           (((p->bgshift[0] << p->x) >> 15) & 1);
-  u8 pal = (((p->atshift[1] << p->x) >> 6) & 2) |
-           (((p->atshift[0] << p->x) >> 7) & 1);
+  Spr* spr = &p->spr;
+  u8 idx = 0, pal = 0;
+  if (p->ppumask & 8) { // Show BG.
+    idx = (((p->bgshift[1] << p->x) >> 14) & 2) |
+          (((p->bgshift[0] << p->x) >> 15) & 1);
+    pal = (((p->atshift[1] << p->x) >> 6) & 2) |
+          (((p->atshift[0] << p->x) >> 7) & 1);
+  }
+
+  // Decrement sprite counters if not active, and set active if zero.
+  for (i = 0; i < 8; ++i) {
+    if (!spr->active[i] && --spr->counter[i]) {
+      spr->active[i] = TRUE;
+    }
+  }
+
+  if (p->ppumask & 0x10) { // Show sprites.
+    // Find first non-zero sprite, if any.
+    int s = 0;
+    for (i = 0; i < 8; ++i) {
+      if (spr->active[i]) {
+        u8 spridx =
+            ((spr->shift[i][1] >> 6) & 2) | ((spr->shift[i][0] >> 7) & 1);
+        if (spridx != 0) {
+          if (idx == 0 || spr->pri[i] == 0) {
+            idx = spridx;
+            pal = spr->pal[i];
+          }
+          break;
+        }
+      }
+    }
+  }
+
+  // Shift registers.
   p->bgshift[0] <<= 1;
   p->bgshift[1] <<= 1;
   p->atshift[0] = (p->atshift[0] << 1) | p->atlatch[0];
   p->atshift[1] = (p->atshift[1] << 1) | p->atlatch[1];
+
+  // Shift all active sprites.
+  for (i = 0; i < 8; ++i) {
+    if (spr->active[i]) {
+      spr->shift[i][0] <<= 1;
+      spr->shift[i][1] <<= 1;
+    }
+  }
+
   if (draw) {
-    // TODO: handle sprites
     u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
     assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
     e->frame_buffer[p->fbidx++] = s_nespal[col];
@@ -222,7 +262,11 @@ void ppu_step(Emulator* e) {
           p->atlatch[0] = p->atb & 1;
           p->atlatch[1] = (p->atb >> 1) & 1;
           break;
-        case 9: spr->state = 0; spr->cnt = 32; spr->s = spr->d = 0; break;
+        case 9:
+          spr->state = spr->s = spr->d = 0;
+          spr->cnt = 32;
+          spr->sovf = FALSE;
+          break;
         case 10: spr->state = 13; spr->cnt = 8; spr->s = 0; break;
         case 11: spr_step(e); break;
         case 12: ppu_t_to_v(p, 0x041f); break;
@@ -345,7 +389,7 @@ void spr_step(Emulator* e) {
   do {
     more = FALSE;
     u16 next_state = spr->state + 1;
-    Bool z = FALSE, dovf = FALSE, sovf = FALSE;
+    Bool z = FALSE;
     u32 bits = s_spr_bits[spr->state];
     u16 cnst = s_spr_consts[bits & 0x3ff];
     bits = (bits >> 10);
@@ -355,18 +399,18 @@ void spr_step(Emulator* e) {
         case 0: spr->t = p->oam[spr->s]; break;
         case 1: spr->t = 0xff; break;
         case 2: p->oam2[spr->d] = spr->t; break;
-        case 3: spr_inc(&spr->s, &sovf, 63, 1); break;
-        case 4: spr_inc(&spr->d, &dovf, 31, 1); break;
+        case 3: spr_inc(&spr->s, &spr->sovf, 63, 1); break;
+        case 4: spr->d++; break;
         case 5: z = --spr->cnt == 0; break;
-        case 6: more = TRUE; z = dovf; break;
-        case 7: z = sovf; break;
+        case 6: more = TRUE; z = spr->d >= 32; break;
+        case 7: z = spr->sovf; break;
         case 8: if (!z) { next_state = cnst; more = FALSE; bits = 0;} break;
         case 9: if (z) { next_state = cnst; more = FALSE; bits = 0;} break;
         case 10: spr->d = 0; break;
         case 11: spr->cnt = cnst; break;
         case 12: if (y_in_range(e, spr->t)) { more = TRUE; bits = 0; } break;
-        case 13: spr_inc(&spr->s, &sovf, 63, 3); break;
-        case 14: spr_inc(&spr->s, &sovf, 63, 4); break;
+        case 13: spr_inc(&spr->s, &spr->sovf, 63, 3); break;
+        case 14: spr_inc(&spr->s, &spr->sovf, 63, 4); break;
         case 15: next_state = cnst; break;
         case 16: p->ppustatus |= 0x20; break;
         case 17: spr->t = p->oam2[spr->s++]; break;
@@ -375,19 +419,28 @@ void spr_step(Emulator* e) {
         case 20: spr->at = spr->t; break;
         case 21: {
           u8 cur = (spr->s >> 2) - 1;
-          spr->counter[cur] = spr->t;  // X coord.
-          u8 y = spr->y - p->scany;
-          if (spr->at & 0x80) { y = ~y; }  // Flip Y.
-          u16 chr = (p->ppuctrl & 0x20) ?
-            // 8x16 sprites.
-            ((spr->tile & 1) << 12) + ((spr->tile & 0xfe) << 4) + (y & 15) :
-            // 8x8 sprites.
-            ((p->ppuctrl & 8) << 9) + (spr->tile << 4) + (y & 7);
-          u8 ptbl = ppu_read(e, chr), ptbh = ppu_read(e, chr + 8);
-          spr->shift[cur][0] = (spr->at & 0x40) ? reverse(ptbl) : ptbl;
-          spr->shift[cur][1] = (spr->at & 0x40) ? reverse(ptbh) : ptbh;
-          spr->pal[cur] = spr->at & 3;
-          spr->pri[cur] = !!(spr->at & 0x20);
+          if (spr->s <= spr->d) {
+            spr->counter[cur] = spr->t;  // X coord.
+            u8 y = spr->y - p->scany;
+            if (spr->at & 0x80) { y = ~y; }  // Flip Y.
+            u16 chr = (p->ppuctrl & 0x20) ?
+              // 8x16 sprites.
+              ((spr->tile & 1) << 12) + ((spr->tile & 0xfe) << 4) + (y & 15) :
+              // 8x8 sprites.
+              ((p->ppuctrl & 8) << 9) + (spr->tile << 4) + (y & 7);
+            u8 ptbl = ppu_read(e, chr), ptbh = ppu_read(e, chr + 8);
+            spr->shift[cur][0] = (spr->at & 0x40) ? reverse(ptbl) : ptbl;
+            spr->shift[cur][1] = (spr->at & 0x40) ? reverse(ptbh) : ptbh;
+            spr->pal[cur] = spr->at & 3;
+            spr->pri[cur] = !!(spr->at & 0x20);
+          } else {
+            // empty sprite.
+            spr->counter[cur] = 0xff;
+            spr->shift[cur][0] = 0;
+            spr->shift[cur][1] = 0;
+            spr->pal[cur] = 0;
+            spr->pri[cur] = 0;
+          }
           break;
         }
         default:
