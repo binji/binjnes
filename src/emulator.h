@@ -72,9 +72,9 @@ typedef struct {
 } C;
 
 typedef struct {
-  u8 shift[8][2], counter[8], pal[8]; // TODO: bit parallel?
+  u64 shift[2], counter, active, pri, pal;
   u8 state, cnt, s, d, y, t, at, tile;
-  Bool pri[8], active[8], sovf;
+  Bool sovf;
 } Spr;
 
 typedef struct {

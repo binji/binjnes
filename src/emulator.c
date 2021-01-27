@@ -178,39 +178,38 @@ static inline u16 incv(u16 v) {
 }
 
 static inline void shift(Emulator* e, Bool draw) {
+  const u64 los = 0x0101010101010101ull;
+  const u64 his = 0x8080808080808080ull;
   int i;
   P* p = &e->s.p;
   Spr* spr = &p->spr;
   u8 idx = 0, pal = 0;
   if (p->ppumask & 8) { // Show BG.
-    idx = p->bgshift << (p->x*2) >> 30;
-    pal = p->atshift << (p->x*2) >> 14;
+    idx = p->bgshift << (p->x * 2) >> 30;
+    pal = p->atshift << (p->x * 2) >> 14;
   }
 
   if (draw) {
-    // Decrement sprite counters if not active, and set active if zero.
-    for (i = 0; i < 8; ++i) {
-      if (!spr->active[i] && --spr->counter[i] == 0) {
-        spr->active[i] = TRUE;
-      }
-    }
+    // Decrement inactive counters. Active counters are always 0.
+    spr->counter -= los & ~spr->active;
+    // Mark any zero counter lanes as active (i.e. set the active mask to
+    // 0xff). See
+    // https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord.
+    u64 active = (spr->counter - los) & ~spr->counter & his;
+    // Only top bit of lane is set, fill the rest of the lane.
+    active |= active >> 1;
+    active |= active >> 2;
+    active |= active >> 4;
+    spr->active = active;
   }
 
   if (p->ppumask & 0x10) { // Show sprites.
     // Find first non-zero sprite, if any.
-    int s = 0;
-    for (i = 0; i < 8; ++i) {
-      if (spr->active[i]) {
-        u8 spridx =
-            ((spr->shift[i][1] >> 6) & 2) | ((spr->shift[i][0] >> 7) & 1);
-        if (spridx != 0) {
-          if (idx == 0 || spr->pri[i] == 0) {
-            idx = spridx;
-            pal = spr->pal[i] + 4;
-          }
-          break;
-        }
-      }
+    u64 non0 = (spr->shift[0] | spr->shift[1]) & spr->active & his;
+    if (non0 && (!idx || (non0 & (-non0) & spr->pri))) {
+      int s = __builtin_ctzll(non0);
+      idx = (((spr->shift[1] >> s) << 1) & 2) | ((spr->shift[0] >> s) & 1);
+      pal = ((spr->pal >> (s - 7)) & 3) + 4;
     }
   }
 
@@ -218,15 +217,13 @@ static inline void shift(Emulator* e, Bool draw) {
   p->bgshift <<= 2;
   p->atshift = (p->atshift << 2) | p->atlatch;
 
-  // Shift all active sprites.
-  for (i = 0; i < 8; ++i) {
-    if (spr->active[i]) {
-      spr->shift[i][0] <<= 1;
-      spr->shift[i][1] <<= 1;
-    }
-  }
-
   if (draw) {
+    // Shift all active sprites.
+    spr->shift[0] = ((spr->shift[0] << 1) & spr->active & ~los) |
+                    (spr->shift[0] & ~spr->active);
+    spr->shift[1] = ((spr->shift[1] << 1) & spr->active & ~los) |
+                    (spr->shift[1] & ~spr->active);
+
     u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
     assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
     e->frame_buffer[p->fbidx++] = s_nespal[col];
@@ -388,6 +385,10 @@ static inline void spr_inc(u8 *val, Bool* ovf, u8 addend) {
   *val += addend;
 }
 
+static inline void shift_in(u64* word, u8 byte) {
+  *word = (*word >> 8) | ((u64)byte << 56);
+}
+
 void spr_step(Emulator* e) {
   Bool more;
   P* p = &e->s.p;
@@ -425,7 +426,6 @@ void spr_step(Emulator* e) {
         case 20: spr->tile = spr->t; break;
         case 21: spr->at = spr->t; break;
         case 22: {
-          u8 cur = (spr->s >> 2) - 1;
           if (spr->s <= spr->d) {
             u8 y = (p->scany - 1) - spr->y;
             if (spr->at & 0x80) { y = ~y; }  // Flip Y.
@@ -435,20 +435,24 @@ void spr_step(Emulator* e) {
               // 8x8 sprites.
               ((p->ppuctrl & 8) << 9) + (spr->tile << 4) + (y & 7);
             u8 ptbl = ppu_read(e, chr), ptbh = ppu_read(e, chr + 8);
-            spr->shift[cur][0] = (spr->at & 0x40) ? reverse(ptbl) : ptbl;
-            spr->shift[cur][1] = (spr->at & 0x40) ? reverse(ptbh) : ptbh;
-            spr->pal[cur] = spr->at & 3;
-            spr->pri[cur] = !!(spr->at & 0x20);
-            spr->counter[cur] = spr->t;  // X coord.
-            spr->active[cur] = FALSE;
+            if (spr->at & 0x40) {
+              ptbl = reverse(ptbl);
+              ptbh = reverse(ptbh);
+            }
+            shift_in(&spr->shift[0], ptbl);
+            shift_in(&spr->shift[1], ptbh);
+            shift_in(&spr->pal, spr->at & 3);
+            shift_in(&spr->pri, (spr->at & 20) ? 0 : 0xff);
+            shift_in(&spr->counter, spr->t);
+            shift_in(&spr->active, (spr->t ? 0 : 0xff));
           } else {
             // empty sprite.
-            spr->counter[cur] = 0xff;
-            spr->shift[cur][0] = 0;
-            spr->shift[cur][1] = 0;
-            spr->pal[cur] = 0;
-            spr->pri[cur] = 0;
-            spr->active[cur] = FALSE;
+            spr->shift[0] >>= 8;
+            spr->shift[1] >>= 8;
+            spr->pal >>= 8;
+            spr->pri >>= 8;
+            shift_in(&spr->counter, 0xff);
+            spr->active >>= 8;
           }
           break;
         }
