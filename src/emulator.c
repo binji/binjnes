@@ -600,7 +600,7 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
     case 0:
       e->s.p.ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
-      e->s.p.t = (e->s.p.t & 0xf300) | ((val & 3) << 10);
+      e->s.p.t = (e->s.p.t & 0xf3ff) | ((val & 3) << 10);
       edge_check_nmi(e);
       DEBUG("     ppu:t=%04hx\n", e->s.p.t);
       break;
@@ -635,7 +635,7 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
         // w was 0.
         // t: .FEDCBA ........ = d: ..FEDCBA
         // t: X...... ........ = 0
-        e->s.p.t = (e->s.p.t & 0x80ff) | (val << 8);
+        e->s.p.t = (e->s.p.t & 0x40ff) | (val << 8);
         DEBUG("     ppu:t=%04hx w=0\n", e->s.p.t);
       } else {
         // w was 1.
