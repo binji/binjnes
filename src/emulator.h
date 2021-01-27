@@ -72,12 +72,19 @@ typedef struct {
 } C;
 
 typedef struct {
-  u8 ram[0x800], oam[0x100], oam2[0x20], chr_ram[0x2000];
+  u8 shift[8][2], counter[8], pal[8]; // TODO: bit parallel?
+  u8 state, cnt, s, d, y, t, at, tile;
+  Bool pri[8];
+} Spr;
+
+typedef struct {
+  u8 ram[0x800], chr_ram[0x2000], oam[0x100], oam2[0x20];
   u16 cnt1, cnt2, v, t, bgshift[2];
-  u8 state, x, ntb, atb, ptbl, ptbh, atlatch[2], atshift[2];
+  u8 state, x, scany, ntb, atb, ptbl, ptbh, atlatch[2], atshift[2];
   Bool w, oddframe;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   u32 fbidx, bits_mask;
+  Spr spr;
 } P;
 
 typedef struct {
