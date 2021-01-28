@@ -138,7 +138,7 @@ void ppu_write(Emulator *e, u16 addr, u8 val) {
       }
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
-    case 12: case 13: case 14:        // 0x3000..0x3bff
+    case 12: case 13: case 14:         // 0x3000..0x3bff
       e->nt_map[(top4 - 8) & 3][addr & 0x3ff] = val;
       break;
   }
@@ -212,10 +212,21 @@ static inline void shift(Emulator* e, Bool draw) {
       int s = __builtin_ctzll(non0);
       idx = (((spr->shift[1] >> s) << 1) & 2) | ((spr->shift[0] >> s) & 1);
       pal = ((spr->pal >> (s - 7)) & 3) + 4;
+
+      // Sprite 0 hit only occurs:
+      //  * When sprite and background are both enabled
+      //  * When sprite and background pixel are both opaque
+      //  * TODO When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
+      //  * TODO When x!=255
+      //  * When spr0 hit has not already occured this frame.
+      if (((spr->spr0mask & non0) >> s) && idx && !spr->spr0) {
+        p->ppustatus |= 0x40;
+        spr->spr0 = TRUE;
+      }
     }
   }
 
-  // Shift registers.
+  // Shift BG/attribute registers.
   p->bgshift <<= 2;
   p->atshift = (p->atshift << 2) | p->atlatch;
 
@@ -294,7 +305,7 @@ void ppu_step(Emulator* e) {
           edge_check_nmi(e);
           e->s.event |= EMULATOR_EVENT_NEW_FRAME;
           break;
-        case 22: p->ppustatus = 0; break;
+        case 22: p->ppustatus = 0; spr->spr0 = FALSE; break;
         case 23: next_state = cnst; break;
         default:
           FATAL("NYI: ppu step %d\n", bit);
@@ -445,6 +456,7 @@ void spr_step(Emulator* e) {
             shift_in(&spr->shift[1], ptbh);
             shift_in(&spr->pal, spr->at & 3);
             shift_in(&spr->pri, (spr->at & 20) ? 0 : 0xff);
+            shift_in(&spr->spr0mask, (spr->s == 4) ? 0xff : 0);
             shift_in(&spr->counter, spr->t);
             spr->active = 0;
           } else {
@@ -453,6 +465,7 @@ void spr_step(Emulator* e) {
             spr->shift[1] >>= 8;
             spr->pal >>= 8;
             spr->pri >>= 8;
+            spr->spr0mask >>= 8;
             shift_in(&spr->counter, 0xff);
             spr->active = 0;
           }
@@ -552,9 +565,9 @@ u8 cpu_read(Emulator *e, u16 addr) {
         // TODO: don't increment during vblank/forced blank
         return e->s.p.oam[e->s.p.oamaddr++];
       case 7: {
-        u8 val = ppu_read(e, e->s.p.v);
+        u8 result = ppu_read_from_cpu(e, e->s.p.v);
         inc_ppu_addr(e);
-        return val;
+        return result;
       }
     }
   }

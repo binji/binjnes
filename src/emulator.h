@@ -72,16 +72,16 @@ typedef struct {
 } C;
 
 typedef struct {
-  u64 shift[2], counter, active, pri, pal;
+  u64 shift[2], counter, active, pri, pal, spr0mask;
   u8 state, cnt, s, d, y, t, at, tile;
-  Bool sovf;
+  Bool sovf, spr0;
 } Spr;
 
 typedef struct {
   u8 ram[0x800], chr_ram[0x2000], oam[0x100], oam2[0x20];
   u32 bgshift;
   u16 cnt1, cnt2, v, t, atshift;
-  u8 state, x, scany, ntb, atb, ptbl, ptbh, atlatch;
+  u8 state, x, scany, ntb, atb, ptbl, ptbh, atlatch, readbuf;
   Bool w, oddframe;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   u32 fbidx, bits_mask;
