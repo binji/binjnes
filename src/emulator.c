@@ -99,7 +99,7 @@ static inline u16 interleave(u8 h, u8 l) {
 }
 
 static inline u8 get_pal_addr(u16 addr) {
-  return addr & (((addr & 0x13) == 0x10) ? 0x10 : 0x1f);
+  return addr & (((addr & 0x13) == 0x10) ? 0x0f : 0x1f);
 }
 
 u8 ppu_read(Emulator *e, u16 addr) {
@@ -215,8 +215,8 @@ static inline void shift(Emulator* e, Bool draw) {
   Spr* spr = &p->spr;
   u8 idx = 0, pal = 0;
   if (p->ppumask & 8) { // Show BG.
-    idx = p->bgshift << (p->x * 2) >> 30;
-    pal = p->atshift << (p->x * 2) >> 14;
+    idx = (p->bgshift >> (30 - p->x * 2)) & 3;
+    pal = (p->atshift >> (14 - p->x * 2)) & 3;
   }
 
   if (draw) {
@@ -484,7 +484,7 @@ void spr_step(Emulator* e) {
             shift_in(&spr->shift[0], ptbl);
             shift_in(&spr->shift[1], ptbh);
             shift_in(&spr->pal, spr->at & 3);
-            shift_in(&spr->pri, (spr->at & 20) ? 0 : 0xff);
+            shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
             shift_in(&spr->spr0mask, (spr->s == 4) ? 0xff : 0);
             shift_in(&spr->counter, spr->t);
             spr->active = 0;
