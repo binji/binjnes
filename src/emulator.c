@@ -69,7 +69,6 @@ const u32 kChrBankShift = 13;
 static u8 cpu_read(Emulator *e, u16 addr);
 static void cpu_write(Emulator *e, u16 addr, u8 val);
 static u8 ppu_read(Emulator *e, u16 addr);
-static u8 ppu_read_for_cpu(Emulator *e, u16 addr);
 static void ppu_write(Emulator *e, u16 addr, u8 val);
 static void disasm(Emulator* e, u16 addr);
 static void print_info(Emulator* e);
@@ -102,34 +101,21 @@ static inline u8 get_pal_addr(u16 addr) {
   return addr & (((addr & 0x13) == 0x10) ? 0x0f : 0x1f);
 }
 
-u8 ppu_read(Emulator *e, u16 addr) {
-  int top4 = addr >> 10;
-  switch (top4 & 15) {
-    case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
-    case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      return e->ci.chr_data[addr & 0x1fff];
-
-    case 15:
-      if (addr >= 0x3f00) {
-        // Palette ram.
-        return e->s.p.palram[get_pal_addr(addr)];
-      }
-      // Fallthrough.
-    case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
-    case 12: case 13: case 14:         // 0x3000..0x3bff
-      return e->nt_map[(top4 - 8) & 3][addr & 0x3ff];
-  }
-  return 0xff;
+static inline u8 chr_read(Emulator *e, u16 addr) {
+  return e->ci.chr_data[addr & 0x1fff];
 }
 
-// TODO: share with ppu_read above
-u8 ppu_read_for_cpu(Emulator *e, u16 addr) {
-  u8 result = e->s.p.readbuf;
+static inline u8 nt_read(Emulator *e, u16 addr) {
+  return e->nt_map[(addr >> 10) & 3][addr & 0x3ff];
+}
+
+u8 ppu_read(Emulator *e, u16 addr) {
+  u8 result = e->s.p.readbuf, buffer = 0xff;
   int top4 = addr >> 10;
   switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      e->s.p.readbuf = e->ci.chr_data[addr & 0x1fff];
+      buffer = chr_read(e, addr);
       break;
 
     case 15:
@@ -141,12 +127,10 @@ u8 ppu_read_for_cpu(Emulator *e, u16 addr) {
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
-      e->s.p.readbuf = e->nt_map[(top4 - 8) & 3][addr & 0x3ff];
+      buffer = nt_read(e, addr);
       break;
-
-    default:
-      e->s.p.readbuf = 0xff;
   }
+  e->s.p.readbuf = buffer;
   return result;
 }
 
@@ -172,21 +156,18 @@ void ppu_write(Emulator *e, u16 addr, u8 val) {
   }
 }
 
-static inline void read_ntb(Emulator *e) {
-  e->s.p.ntb = ppu_read(e, 0x2000 | (e->s.p.v & 0xfff));
-}
+static inline void read_ntb(Emulator *e) { e->s.p.ntb = nt_read(e, e->s.p.v); }
 
 static inline void read_atb(Emulator *e) {
   u16 v = e->s.p.v;
-  u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
+  u16 at = 0x3c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
   int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
-  e->s.p.atb = (ppu_read(e, at) >> shift) & 3;
+  e->s.p.atb = (nt_read(e, at) >> shift) & 3;
 }
 
 static inline u8 read_ptb(Emulator *e, u8 addend) {
-  u16 bg_base = (e->s.p.ppuctrl << 8) & 0x1000;
-  return ppu_read(e,
-                  (bg_base | ((e->s.p.ntb << 4) + (e->s.p.v >> 12))) + addend);
+  return chr_read(e, (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
+                      (e->s.p.v >> 12)) + addend);
 }
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
@@ -475,7 +456,7 @@ void spr_step(Emulator* e) {
               ((spr->tile & 1) << 12) + ((spr->tile & 0xfe) << 4) + (y & 15) :
               // 8x8 sprites.
               ((p->ppuctrl & 8) << 9) + (spr->tile << 4) + (y & 7);
-            u8 ptbl = ppu_read(e, chr), ptbh = ppu_read(e, chr + 8);
+            u8 ptbl = chr_read(e, chr), ptbh = chr_read(e, chr + 8);
             if (spr->at & 0x40) {
               ptbl = reverse(ptbl);
               ptbh = reverse(ptbh);
@@ -594,7 +575,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
         // TODO: don't increment during vblank/forced blank
         return e->s.p.oam[e->s.p.oamaddr++];
       case 7: {
-        u8 result = ppu_read_for_cpu(e, e->s.p.v);
+        u8 result = ppu_read(e, e->s.p.v);
         inc_ppu_addr(e);
         return result;
       }
