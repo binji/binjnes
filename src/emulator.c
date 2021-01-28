@@ -674,7 +674,7 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
         // w was 0.
         // t: .FEDCBA ........ = d: ..FEDCBA
         // t: X...... ........ = 0
-        e->s.p.t = (e->s.p.t & 0x40ff) | (val << 8);
+        e->s.p.t = (e->s.p.t & 0xff) | ((val & 0x3f) << 8);
         DEBUG("     ppu:t=%04hx w=0\n", e->s.p.t);
       } else {
         // w was 1.
