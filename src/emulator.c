@@ -247,10 +247,8 @@ static inline void shift(Emulator* e, Bool draw) {
       //  * When sprite and background pixel are both opaque
       //  * TODO When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
       //  * TODO When x!=255
-      //  * When spr0 hit has not already occured this frame.
-      if (((spr->spr0mask & non0) >> s) && idx && !spr->spr0) {
+      if (((spr->spr0mask & non0) >> s) && idx) {
         p->ppustatus |= 0x40;
-        spr->spr0 = TRUE;
       }
     }
   }
@@ -334,7 +332,7 @@ void ppu_step(Emulator* e) {
           edge_check_nmi(e);
           e->s.event |= EMULATOR_EVENT_NEW_FRAME;
           break;
-        case 22: p->ppustatus = 0; spr->spr0 = FALSE; break;
+        case 22: p->ppustatus = 0; break;
         case 23: next_state = cnst; break;
         default:
           FATAL("NYI: ppu step %d\n", bit);
@@ -440,34 +438,35 @@ void spr_step(Emulator* e) {
     u16 next_state = spr->state + 1;
     Bool z = FALSE;
     u32 bits = s_spr_bits[spr->state];
-    u16 cnst = s_spr_consts[bits & 0x1ff];
-    bits = (bits >> 9);
+    u16 cnst = s_spr_consts[bits & 0xff];
+    bits = (bits >> 8);
     while (bits) {
       int bit = __builtin_ctzl(bits);
       switch (bit) {
         case 0: more = TRUE; break;
         case 1: spr->t = p->oam[spr->s]; break;
-        case 2: spr->t = 0xff; break;
+        case 2: spr->t = 0xff; spr->spr0 = FALSE; break;
         case 3: p->oam2[spr->d] = spr->t; break;
         case 4: spr_inc(&spr->s, &spr->sovf, 1); break;
         case 5: spr->d++; break;
-        case 6: z = --spr->cnt == 0; break;
-        case 7: z = spr->d >= 32; break;
-        case 8: z = spr->sovf; break;
-        case 9: if (!z) { next_state = cnst; more = FALSE; bits = 0;} break;
-        case 10: if (z) { next_state = cnst; more = FALSE; bits = 0;} break;
-        case 11: spr->d = 0; break;
-        case 12: spr->cnt = cnst; break;
-        case 13: if (y_in_range(e, spr->t)) { more = TRUE; bits = 0; } break;
-        case 14: spr_inc(&spr->s, &spr->sovf, 3); break;
-        case 15: spr_inc(&spr->s, &spr->sovf, 4); break;
-        case 16: next_state = cnst; break;
-        case 17: p->ppustatus |= 0x20; break;
-        case 18: spr->t = p->oam2[spr->s++]; break;
-        case 19: spr->y = spr->t; break;
-        case 20: spr->tile = spr->t; break;
-        case 21: spr->at = spr->t; break;
-        case 22: {
+        case 6: if (spr->s == 1) { spr->spr0 = TRUE; } break;
+        case 7: z = --spr->cnt == 0; break;
+        case 8: z = spr->d >= 32; break;
+        case 9: z = spr->sovf; break;
+        case 10: if (!z) { next_state = cnst; more = FALSE; bits = 0;} break;
+        case 11: if (z) { next_state = cnst; more = FALSE; bits = 0;} break;
+        case 12: spr->d = 0; break;
+        case 13: spr->cnt = cnst; break;
+        case 14: if (y_in_range(e, spr->t)) { more = TRUE; bits = 0; } break;
+        case 15: spr_inc(&spr->s, &spr->sovf, 3); break;
+        case 16: spr_inc(&spr->s, &spr->sovf, 4); break;
+        case 17: next_state = cnst; break;
+        case 18: p->ppustatus |= 0x20; break;
+        case 19: spr->t = p->oam2[spr->s++]; break;
+        case 20: spr->y = spr->t; break;
+        case 21: spr->tile = spr->t; break;
+        case 22: spr->at = spr->t; break;
+        case 23: {
           if (spr->s <= spr->d) {
             u8 y = (p->scany - 1) - spr->y;
             if (spr->at & 0x80) { y = ~y; }  // Flip Y.
@@ -485,7 +484,7 @@ void spr_step(Emulator* e) {
             shift_in(&spr->shift[1], ptbh);
             shift_in(&spr->pal, spr->at & 3);
             shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
-            shift_in(&spr->spr0mask, (spr->s == 4) ? 0xff : 0);
+            shift_in(&spr->spr0mask, (spr->s == 4 && spr->spr0) ? 0xff : 0);
             shift_in(&spr->counter, spr->t);
             spr->active = 0;
           } else {
@@ -513,37 +512,37 @@ static const u16 s_spr_consts[] = {
     [0] = 0,  [1] = 2,  [2] = 11, [3] = 13,
     [4] = 14, [5] = 17, [6] = 18, [7] = 26,
 };
-#define X(b,n) ((b)<<9|(n))
+#define X(b,n) ((b)<<8|(n))
 static const u32 s_spr_bits[] = {
-    //22211111111110000000000
-    //21098765432109876543210
-  X(0b00000000000000000000100, 0),  // 0: t=0xff
-  X(0b00000000000101001101000, 0),  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
-  X(0b00000000000000000010010, 0),  // 2: t=oam[s],s++
-  X(0b00000010110000000000001, 2),  // 3: next if y in range,s+=3,goto 11
-  X(0b00000000000000000101000, 0),  // 4: oam2[d]=t,d++
-  X(0b00000000000000000010010, 0),  // 5: t=oam[s],s++
-  X(0b00000000000000000101000, 0),  // 6: oam2[d]=t,d++
-  X(0b00000000000000000010010, 0),  // 7: t=oam[s],s++
-  X(0b00000000000000000101000, 0),  // 8: oam2[d]=t,d++
-  X(0b00000000000000000010010, 0),  // 9: t=oam[s],s++
-  X(0b00000000000000000101000, 0),  // 10: oam2[d]=t,d++
-  X(0b00000000000010100000001, 3),  // 11: more=T,z=sovf,jz 13
-  X(0b00000000000001010000000, 1),  // 12: z=dovf,jnz 2
-  X(0b00000000000000000010010, 0),  // 13: t=oam[s],s++
-  X(0b00000011010000000000000, 4),  // 14: next if y in range,s+=4,goto 14
-  X(0b00000100000000000000000, 0),  // 15: set overflow bit
-  X(0b00000000000000000010010, 0),  // 16: t=oam[s],s++
-  X(0b00000010000000000000000, 5),  // 17: goto 17
-  X(0b00011000000000000000000, 0),  // 18: t=oam2[s],s++,do y
-  X(0b00101000000000000000000, 0),  // 19: t=oam2[s],s++,do tile
-  X(0b01001000000000000000000, 0),  // 20: t=oam2[s],s++,do attr
-  X(0b10001000000000000000000, 0),  // 21: t=oam2[s],s++,do x
-  X(0b00000000000000000000000, 0),  // 22:
-  X(0b00000000000000000000000, 0),  // 23:
-  X(0b00000000000000000000000, 0),  // 24:
-  X(0b00000000000001001000000, 6),  // 25: --cnt,jnz 18
-  X(0b00000010000000000000000, 7),  // 26: goto 26
+    //222111111111100000000000
+    //321098765432109876543210
+  X(0b000000000000000000000100, 0),  // 0: t=0xff
+  X(0b000000000001010010101000, 0),  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
+  X(0b000000000000000000010010, 0),  // 2: t=oam[s],s++
+  X(0b000000101100000000000001, 2),  // 3: next if y in range,s+=3,goto 11
+  X(0b000000000000000001101000, 0),  // 4: oam2[d]=t,d++,check spr0
+  X(0b000000000000000000010010, 0),  // 5: t=oam[s],s++
+  X(0b000000000000000000101000, 0),  // 6: oam2[d]=t,d++
+  X(0b000000000000000000010010, 0),  // 7: t=oam[s],s++
+  X(0b000000000000000000101000, 0),  // 8: oam2[d]=t,d++
+  X(0b000000000000000000010010, 0),  // 9: t=oam[s],s++
+  X(0b000000000000000000101000, 0),  // 10: oam2[d]=t,d++
+  X(0b000000000000101000000001, 3),  // 11: more=T,z=sovf,jz 13
+  X(0b000000000000010100000000, 1),  // 12: z=dovf,jnz 2
+  X(0b000000000000000000010010, 0),  // 13: t=oam[s],s++
+  X(0b000000110100000000000000, 4),  // 14: next if y in range,s+=4,goto 14
+  X(0b000001000000000000000000, 0),  // 15: set overflow bit
+  X(0b000000000000000000010010, 0),  // 16: t=oam[s],s++
+  X(0b000000100000000000000000, 5),  // 17: goto 17
+  X(0b000110000000000000000000, 0),  // 18: t=oam2[s],s++,do y
+  X(0b001010000000000000000000, 0),  // 19: t=oam2[s],s++,do tile
+  X(0b010010000000000000000000, 0),  // 20: t=oam2[s],s++,do attr
+  X(0b100010000000000000000000, 0),  // 21: t=oam2[s],s++,do x
+  X(0b000000000000000000000000, 0),  // 22:
+  X(0b000000000000000000000000, 0),  // 23:
+  X(0b000000000000000000000000, 0),  // 24:
+  X(0b000000000000010010000000, 6),  // 25: --cnt,jnz 18
+  X(0b000000100000000000000000, 7),  // 26: goto 26
 };
 #undef X
 
