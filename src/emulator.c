@@ -103,7 +103,7 @@ static inline u8 get_pal_addr(u16 addr) {
 
 u8 ppu_read(Emulator *e, u16 addr) {
   int top4 = addr >> 10;
-  switch (top4) {
+  switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
       return e->ci.chr_data[addr & 0x1fff];
@@ -123,7 +123,7 @@ u8 ppu_read(Emulator *e, u16 addr) {
 
 void ppu_write(Emulator *e, u16 addr, u8 val) {
   int top4 = addr >> 10;
-  switch (top4) {
+  switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
       // TODO: For now, always allow writes as though it were CHR RAM.
