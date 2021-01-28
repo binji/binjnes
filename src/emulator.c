@@ -556,6 +556,7 @@ static inline void inc_ppu_addr(Emulator* e) {
 static inline void read_joyp(Emulator *e, Bool write) {
   if (e->joypad_info.callback && (write || e->s.j.S)) {
     JoypadButtons btns[2];
+    ZERO_MEMORY(btns);
     e->joypad_info.callback(btns, e->joypad_info.user_data);
     for (int i = 0; i < 2; ++i) {
       e->s.j.joyp[i] = (btns[i].right << 7) | (btns[i].left << 6) |
