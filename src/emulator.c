@@ -214,7 +214,7 @@ static inline void shift(Emulator* e, Bool draw) {
   Spr* spr = &p->spr;
   u8 idx = 0, pal = 0;
   if (p->ppumask & 8) { // Show BG.
-    idx = (p->bgshift >> (30 - p->x * 2)) & 3;
+    idx = (p->bgshift >> (30 - p->x * 2)) & p->bgleftmask & 3;
     pal = (p->atshift >> (14 - p->x * 2)) & 3;
   }
 
@@ -238,13 +238,14 @@ static inline void shift(Emulator* e, Bool draw) {
     u64 non0 = (spr->shift[0] | spr->shift[1]) & spr->active & his;
     if (non0 && (!idx || (non0 & (-non0) & spr->pri))) {
       int s = __builtin_ctzll(non0);
-      idx = (((spr->shift[1] >> s) << 1) & 2) | ((spr->shift[0] >> s) & 1);
+      idx = ((((spr->shift[1] >> s) & spr->leftmask) << 1) & 2) |
+            (((spr->shift[0] >> s) & spr->leftmask) & 1);
       pal = ((spr->pal >> (s - 7)) & 3) + 4;
 
       // Sprite 0 hit only occurs:
       //  * When sprite and background are both enabled
       //  * When sprite and background pixel are both opaque
-      //  * TODO When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
+      //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
       //  * TODO When x!=255
       if (((spr->spr0mask & non0) >> s) && idx) {
         p->ppustatus |= 0x40;
@@ -257,6 +258,10 @@ static inline void shift(Emulator* e, Bool draw) {
   p->atshift = (p->atshift << 2) | p->atlatch;
 
   if (draw) {
+    // Shift left side masks.
+    p->bgleftmask = (p->bgleftmask >> 2) | 0xc000;
+    spr->leftmask = (spr->leftmask >> 1) | 0x80;
+
     // Shift all active sprites.
     spr->shift[0] = ((spr->shift[0] << 1) & spr->active & ~ones) |
                     (spr->shift[0] & ~spr->active);
@@ -305,6 +310,8 @@ void ppu_step(Emulator* e) {
           spr->state = spr->s = spr->d = 0;
           spr->cnt = 32;
           spr->sovf = FALSE;
+          spr->leftmask = (p->ppumask & 4) ? 0xff : 0;
+          p->bgleftmask = (p->ppumask & 2) ? 0xffff : 0;
           break;
         case 10: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
         case 11: spr_step(e); break;
@@ -503,7 +510,7 @@ void spr_step(Emulator* e) {
 
 static const u16 s_spr_consts[] = {
     [0] = 0,  [1] = 2,  [2] = 11, [3] = 13,
-    [4] = 14, [5] = 17, [6] = 18, [7] = 26,
+    [4] = 14, [5] = 17, [6] = 18, [7] = 26
 };
 #define X(b,n) ((b)<<8|(n))
 static const u32 s_spr_bits[] = {
