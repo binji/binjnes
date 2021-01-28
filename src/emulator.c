@@ -269,12 +269,6 @@ static inline void shift(Emulator* e, Bool draw) {
   }
 }
 
-static inline void edge_check_nmi(Emulator* e) {
-  if (e->s.p.ppuctrl & e->s.p.ppustatus & 0x80) {
-    e->s.c.has_nmi = TRUE;
-  }
-}
-
 void ppu_step(Emulator* e) {
   Bool more;
   P* p = &e->s.p;
@@ -327,8 +321,8 @@ void ppu_step(Emulator* e) {
         case 19: if (!z) { next_state = cnst; } break;
         case 20: if (z) { next_state = cnst; } break;
         case 21:
+          if (p->ppuctrl & 0x80) { e->s.c.has_nmi = TRUE; }
           p->ppustatus |= 0x80;
-          edge_check_nmi(e);
           e->s.event |= EMULATOR_EVENT_NEW_FRAME;
           break;
         case 22: p->ppustatus = 0; break;
@@ -641,10 +635,12 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
     e->s.p.ppulast = val;
     switch (addr & 0x7) {
     case 0:
+      if (e->s.p.ppustatus && (val & (e->s.p.ppuctrl ^ val) & 80)) {
+        e->s.c.has_nmi = TRUE;
+      }
       e->s.p.ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       e->s.p.t = (e->s.p.t & 0xf3ff) | ((val & 3) << 10);
-      edge_check_nmi(e);
       DEBUG("     ppu:t=%04hx\n", e->s.p.t);
       break;
     case 1:
