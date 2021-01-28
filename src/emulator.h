@@ -49,7 +49,7 @@ typedef enum { MIRROR_HORIZONTAL = 0, MIRROR_VERTICAL = 1 } Mirror;
 
 typedef struct {
   u8 *prg_data;
-  u8 *chr_data;
+  u8 *chr_data, *chr_data_write;
   Mirror mirror;
   Bool has_bat_ram;
   Bool has_trainer;

@@ -155,8 +155,7 @@ void ppu_write(Emulator *e, u16 addr, u8 val) {
   switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      // TODO: For now, always allow writes as though it were CHR RAM.
-      e->ci.chr_data[addr & 0x1fff] = val;
+      e->ci.chr_data_write[addr & 0x1fff] = val;
       break;
 
     case 15:
@@ -1313,6 +1312,7 @@ Result init_mapper(Emulator *e) {
       e->nt_map[0] = e->nt_map[2] = e->s.p.ram;
       e->nt_map[1] = e->nt_map[3] = e->s.p.ram + 0x400;
     }
+    e->ci.chr_data_write = e->s.p.chr_ram;
     if (e->ci.chr_banks == 0) {
       e->ci.chr_data = e->s.p.chr_ram;
     }
