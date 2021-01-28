@@ -69,6 +69,7 @@ const u32 kChrBankShift = 13;
 static u8 cpu_read(Emulator *e, u16 addr);
 static void cpu_write(Emulator *e, u16 addr, u8 val);
 static u8 ppu_read(Emulator *e, u16 addr);
+static u8 ppu_read_for_cpu(Emulator *e, u16 addr);
 static void ppu_write(Emulator *e, u16 addr, u8 val);
 static void disasm(Emulator* e, u16 addr);
 static void print_info(Emulator* e);
@@ -119,6 +120,34 @@ u8 ppu_read(Emulator *e, u16 addr) {
       return e->nt_map[(top4 - 8) & 3][addr & 0x3ff];
   }
   return 0xff;
+}
+
+// TODO: share with ppu_read above
+u8 ppu_read_for_cpu(Emulator *e, u16 addr) {
+  u8 result = e->s.p.readbuf;
+  int top4 = addr >> 10;
+  switch (top4 & 15) {
+    case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
+    case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
+      e->s.p.readbuf = e->ci.chr_data[addr & 0x1fff];
+      break;
+
+    case 15:
+      if (addr >= 0x3f00) {
+        // Palette ram. Return palette entry directly, but buffer the nametable
+        // byte below.
+        result = e->s.p.palram[get_pal_addr(addr)];
+      }
+      // Fallthrough.
+    case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
+    case 12: case 13: case 14:         // 0x3000..0x3bff
+      e->s.p.readbuf = e->nt_map[(top4 - 8) & 3][addr & 0x3ff];
+      break;
+
+    default:
+      e->s.p.readbuf = 0xff;
+  }
+  return result;
 }
 
 void ppu_write(Emulator *e, u16 addr, u8 val) {
@@ -565,7 +594,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
         // TODO: don't increment during vblank/forced blank
         return e->s.p.oam[e->s.p.oamaddr++];
       case 7: {
-        u8 result = ppu_read_from_cpu(e, e->s.p.v);
+        u8 result = ppu_read_for_cpu(e, e->s.p.v);
         inc_ppu_addr(e);
         return result;
       }
