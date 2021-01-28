@@ -86,13 +86,13 @@ static const u32 s_ppu_enabled_mask, s_ppu_disabled_mask;
 
 // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
 static inline u8 reverse(u8 b) {
-  return ((b * 0x80200802ULL) & 0x0884422110ULL) * 0x0101010101ULL >> 32;
+  return ((b * 0x80200802ull) & 0x0884422110ull) * 0x0101010101ull >> 32;
 }
 
 // https://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps
 static inline u16 interleave(u8 h, u8 l) {
-  const u64 A = 0x0101010101010101ULL, B = 0x8040201008040201ULL,
-            C = 0x0102040810204081ULL;
+  const u64 A = 0x0101010101010101ull, B = 0x8040201008040201ull,
+            C = 0x0102040810204081ull;
   return (((l * A & B) * C >> 49) & 0x5555) |
          (((h * A & B) * C >> 48) & 0xAAAA);
 }
@@ -172,18 +172,17 @@ static inline u8 read_ptb(Emulator *e, u8 addend) {
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
   p->v = (p->v & ~mask) | (p->t & mask);
-  DEBUG("     ppu:v=%04hx t=%04hx\n", p->v, p->t);
 }
 
-static inline u16 inch(u16 v) {
-  return (v & 0x1f) == 31 ? (v & ~0x1f) ^ 0x0400 : v + 1;
+static inline void inch(P *p) {
+  p->v = (p->v & 0x1f) == 31 ? (p->v & ~0x1f) ^ 0x0400 : p->v + 1;
 }
 
-static inline u16 incv(u16 v) {
-  if ((v & 0x7000) != 0x7000) return v + 0x1000; // fine y++
-  if ((v & 0x3e0) == 0x3a0) return (v & ~0x73e0) ^ 0x800;
-  if ((v & 0x3e0) == 0x3e0) return (v & ~0x73e0);
-  return (v & ~0x73e0) | ((v + 0x20) & 0x3e0);
+static inline void incv(P* p) {
+  p->v = ((p->v & 0x7000) != 0x7000) ? p->v + 0x1000 // fine y++
+       : ((p->v & 0x3e0) == 0x3a0)   ? (p->v & ~0x73e0) ^ 0x800
+       : ((p->v & 0x3e0) == 0x3e0)   ? (p->v & ~0x73e0)
+       : (p->v & ~0x73e0) | ((p->v + 0x20) & 0x3e0);
 }
 
 static inline void shift(Emulator* e, Bool draw) {
@@ -279,8 +278,8 @@ void ppu_step(Emulator* e) {
         case 1: read_atb(e); break;
         case 2: p->ptbl = read_ptb(e, 0); break;
         case 3: p->ptbh = read_ptb(e, 8); break;
-        case 4: p->v = inch(p->v); break;
-        case 5: p->v = incv(p->v); p->scany++; break;
+        case 4: inch(p); break;
+        case 5: incv(p); p->scany++; break;
         case 6: shift(e, TRUE); break;
         case 7: shift(e, FALSE); break;
         case 8:
@@ -529,8 +528,8 @@ static const u32 s_spr_bits[] = {
 
 // CPU stuff ///////////////////////////////////////////////////////////////////
 
-static inline void inc_ppu_addr(Emulator* e) {
-  e->s.p.v = (e->s.p.v + ((e->s.p.ppuctrl & 4) ? 32 : 1)) & 0x3fff;
+static inline void inc_ppu_addr(P* p) {
+  p->v = (p->v + ((p->ppuctrl & 4) ? 32 : 1)) & 0x3fff;
 }
 
 static inline void read_joyp(Emulator *e, Bool write) {
@@ -557,11 +556,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
 
   case 2: case 3: { // PPU
     switch (addr & 7) {
-      case 0:
-      case 1:
-      case 3:
-      case 5:
-      case 6:
+      case 0: case 1: case 3: case 5: case 6:
         return e->s.p.ppulast;
 
       case 2: {
@@ -576,7 +571,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
         return e->s.p.oam[e->s.p.oamaddr++];
       case 7: {
         u8 result = ppu_read(e, e->s.p.v);
-        inc_ppu_addr(e);
+        inc_ppu_addr(&e->s.p);
         return result;
       }
     }
@@ -612,6 +607,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
 }
 
 void cpu_write(Emulator *e, u16 addr, u8 val) {
+  P* p = &e->s.p;
   e->s.c.bus_write = TRUE;
   LOG("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
@@ -620,63 +616,61 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
     break;
 
   case 2: case 3: { // PPU
-    e->s.p.ppulast = val;
+    p->ppulast = val;
     switch (addr & 0x7) {
     case 0:
-      if (e->s.p.ppustatus && (val & (e->s.p.ppuctrl ^ val) & 80)) {
+      if (p->ppustatus && (val & (p->ppuctrl ^ val) & 80)) {
         e->s.c.has_nmi = TRUE;
       }
-      e->s.p.ppuctrl = val;
+      p->ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
-      e->s.p.t = (e->s.p.t & 0xf3ff) | ((val & 3) << 10);
-      DEBUG("     ppu:t=%04hx\n", e->s.p.t);
+      p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
+      DEBUG("     ppu:t=%04hx\n", p->t);
       break;
     case 1:
-      e->s.p.ppumask = val;
-      e->s.p.bits_mask =
-          (val & 0x18) ? s_ppu_enabled_mask : s_ppu_disabled_mask;
+      p->ppumask = val;
+      p->bits_mask = (val & 0x18) ? s_ppu_enabled_mask : s_ppu_disabled_mask;
       break;
-    case 3: e->s.p.oamaddr = val; break;
+    case 3: p->oamaddr = val; break;
     case 4:
       // TODO: handle writes during rendering.
-      e->s.p.oam[e->s.p.oamaddr++] = val;
+      p->oam[p->oamaddr++] = val;
       break;
     case 5:
-      if ((e->s.p.w ^= 1)) {
+      if ((p->w ^= 1)) {
         // w was 0.
         // t: ....... ...HGFED = d: HGFED...
         // x:              CBA = d: .....CBA
-        e->s.p.x = val & 7;
-        e->s.p.t = (e->s.p.t & 0xffe0) | (val >> 3);
-        DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", e->s.p.t, e->s.p.x);
+        p->x = val & 7;
+        p->t = (p->t & 0xffe0) | (val >> 3);
+        DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", p->t, p->x);
       } else {
         // w was 1.
         // t: CBA..HG FED..... = d: HGFEDCBA
-        e->s.p.t =
-            (e->s.p.t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
-        DEBUG("     ppu:t=%04hx w=1\n", e->s.p.t);
+        p->t = (p->t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
+        DEBUG("     ppu:t=%04hx w=1\n", p->t);
       }
       break;
     case 6:
-      if ((e->s.p.w ^= 1)) {
+      if ((p->w ^= 1)) {
         // w was 0.
         // t: .FEDCBA ........ = d: ..FEDCBA
         // t: X...... ........ = 0
-        e->s.p.t = (e->s.p.t & 0xff) | ((val & 0x3f) << 8);
-        DEBUG("     ppu:t=%04hx w=0\n", e->s.p.t);
+        p->t = (p->t & 0xff) | ((val & 0x3f) << 8);
+        DEBUG("     ppu:t=%04hx w=0\n", p->t);
       } else {
         // w was 1.
         // t: ....... HGFEDCBA = d: HGFEDCBA
         // v                   = t
-        e->s.p.v = e->s.p.t = (e->s.p.t & 0xff00) | val;
-        DEBUG("     ppu:v=%04hx t=%04hx w=1\n", e->s.p.v, e->s.p.t);
+        p->v = p->t = (p->t & 0xff00) | val;
+        DEBUG("     ppu:v=%04hx t=%04hx w=1\n", p->v, p->t);
       }
       break;
     case 7: {
-      u16 oldv = e->s.p.v;
-      ppu_write(e, e->s.p.v, val);
-      inc_ppu_addr(e);
-      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, e->s.p.v);
+      u16 oldv = p->v;
+      ppu_write(e, p->v, val);
+      inc_ppu_addr(p);
+      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, p->v);
     }
     }
     break;
