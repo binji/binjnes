@@ -27,6 +27,11 @@
 #define DEBUG(...) (void)0
 #endif
 
+typedef Emulator E;
+typedef EmulatorConfig EConfig;
+typedef EmulatorEvent EEvent;
+typedef EmulatorInit EInit;
+
 // XXX
 static const RGBA s_nespal[] = {
     MAKE_RGBA(84, 84, 84, 255),    MAKE_RGBA(0, 30, 116, 255),
@@ -63,15 +68,9 @@ static const RGBA s_nespal[] = {
     MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
 };
 
-static u8 cpu_read(Emulator *e, u16 addr);
-static void cpu_write(Emulator *e, u16 addr, u8 val);
-static u8 ppu_read(Emulator *e, u16 addr);
-static void ppu_write(Emulator *e, u16 addr, u8 val);
-static void disasm(Emulator* e, u16 addr);
-static void print_info(Emulator* e);
-static void cpu_step(Emulator* e);
-static void ppu_step(Emulator* e);
-static void spr_step(Emulator* e);
+static void disasm(E *e, u16 addr);
+static void print_info(E *e);
+static void spr_step(E *e);
 
 static const u16 s_ppu_consts[], s_spr_consts[];
 static const u32 s_ppu_bits[], s_spr_bits[];
@@ -98,15 +97,15 @@ static inline u8 get_pal_addr(u16 addr) {
   return addr & (((addr & 0x13) == 0x10) ? 0x0f : 0x1f);
 }
 
-static inline u8 chr_read(Emulator *e, u16 addr) {
+static inline u8 chr_read(E *e, u16 addr) {
   return e->chr_map[(addr >> 12) & 1][addr & 0xfff];
 }
 
-static inline u8 nt_read(Emulator *e, u16 addr) {
+static inline u8 nt_read(E *e, u16 addr) {
   return e->nt_map[(addr >> 10) & 3][addr & 0x3ff];
 }
 
-u8 ppu_read(Emulator *e, u16 addr) {
+u8 ppu_read(E *e, u16 addr) {
   u8 result = e->s.p.readbuf, buffer = 0xff;
   int top4 = addr >> 10;
   switch (top4 & 15) {
@@ -131,7 +130,7 @@ u8 ppu_read(Emulator *e, u16 addr) {
   return result;
 }
 
-void ppu_write(Emulator *e, u16 addr, u8 val) {
+void ppu_write(E *e, u16 addr, u8 val) {
   int top4 = addr >> 10;
   switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
@@ -153,16 +152,16 @@ void ppu_write(Emulator *e, u16 addr, u8 val) {
   }
 }
 
-static inline void read_ntb(Emulator *e) { e->s.p.ntb = nt_read(e, e->s.p.v); }
+static inline void read_ntb(E *e) { e->s.p.ntb = nt_read(e, e->s.p.v); }
 
-static inline void read_atb(Emulator *e) {
+static inline void read_atb(E *e) {
   u16 v = e->s.p.v;
   u16 at = 0x3c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
   int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
   e->s.p.atb = (nt_read(e, at) >> shift) & 3;
 }
 
-static inline u8 read_ptb(Emulator *e, u8 addend) {
+static inline u8 read_ptb(E *e, u8 addend) {
   return chr_read(e, (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
                       (e->s.p.v >> 12)) + addend);
 }
@@ -182,7 +181,7 @@ static inline void incv(P* p) {
        : (p->v & ~0x73e0) | ((p->v + 0x20) & 0x3e0);
 }
 
-static inline void shift(Emulator* e, Bool draw) {
+static inline void shift(E *e, Bool draw) {
   const u64 ones = 0x0101010101010101ull;
   const u64 his = 0x8080808080808080ull;
   const u64 los = 0x7f7f7f7f7f7f7f7full;
@@ -255,7 +254,7 @@ static inline void shift(Emulator* e, Bool draw) {
   }
 }
 
-void ppu_step(Emulator* e) {
+void ppu_step(E *e) {
   Bool more;
   P* p = &e->s.p;
   Spr* spr = &p->spr;
@@ -397,7 +396,7 @@ static const u32 s_ppu_bits[] = {
 };
 #undef X
 
-static inline Bool y_in_range(Emulator *e, u8 y) {
+static inline Bool y_in_range(E *e, u8 y) {
   return y < 239 && (u8)(e->s.p.scany - y) < ((e->s.p.ppuctrl & 0x20) ? 16 : 8);
 }
 
@@ -410,7 +409,7 @@ static inline void shift_in(u64* word, u8 byte) {
   *word = (*word >> 8) | ((u64)byte << 56);
 }
 
-void spr_step(Emulator* e) {
+void spr_step(E *e) {
   Bool more;
   P* p = &e->s.p;
   Spr* spr = &p->spr;
@@ -533,7 +532,7 @@ static inline void inc_ppu_addr(P* p) {
   p->v = (p->v + ((p->ppuctrl & 4) ? 32 : 1)) & 0x3fff;
 }
 
-static inline void read_joyp(Emulator *e, Bool write) {
+static inline void read_joyp(E *e, Bool write) {
   if (e->joypad_info.callback && (write || e->s.j.S)) {
     JoypadButtons btns[2];
     ZERO_MEMORY(btns);
@@ -549,7 +548,7 @@ static inline void read_joyp(Emulator *e, Bool write) {
 
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
-u8 cpu_read(Emulator *e, u16 addr) {
+u8 cpu_read(E *e, u16 addr) {
   e->s.c.bus_write = FALSE;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
@@ -612,7 +611,7 @@ u8 cpu_read(Emulator *e, u16 addr) {
   return 0xff;
 }
 
-void cpu_write(Emulator *e, u16 addr, u8 val) {
+void cpu_write(E *e, u16 addr, u8 val) {
   P* p = &e->s.p;
   e->s.c.bus_write = TRUE;
   LOG("     write(%04hx, %02hhx)\n", addr, val);
@@ -718,7 +717,7 @@ static inline Bool is_power_of_two(u32 x) {
   return x == 0 || (x & (x - 1)) == 0;
 }
 
-static void set_mirror(Emulator* e, Mirror mirror) {
+static void set_mirror(E *e, Mirror mirror) {
   switch (mirror) {
     case MIRROR_HORIZONTAL:
       e->nt_map[0] = e->nt_map[1] = e->s.p.ram;
@@ -738,7 +737,7 @@ static void set_mirror(Emulator* e, Mirror mirror) {
   }
 }
 
-static void set_chr_map(Emulator* e, u8 bank0, u8 bank1) {
+static void set_chr_map(E *e, u8 bank0, u8 bank1) {
   bank0 &= (e->ci.chr_banks - 1);
   bank1 &= (e->ci.chr_banks - 1);
   e->chr_map[0] = e->ci.chr_data + (bank0 << 12);
@@ -747,16 +746,16 @@ static void set_chr_map(Emulator* e, u8 bank0, u8 bank1) {
   e->chr_map_write[1] = e->ci.chr_data_write + (bank1 << 12);
 }
 
-static void set_prg_map(Emulator* e, u8 bank0, u8 bank1) {
+static void set_prg_map(E *e, u8 bank0, u8 bank1) {
   bank0 &= (e->ci.prg_banks - 1);
   bank1 &= (e->ci.prg_banks - 1);
   e->prg_rom_map[0] = e->ci.prg_data + (bank0 << 14);
   e->prg_rom_map[1] = e->ci.prg_data + (bank1 << 14);
 }
 
-void mapper0_write(Emulator* e, u16 addr, u8 val) {}
+void mapper0_write(E *e, u16 addr, u8 val) {}
 
-void mapper1_write(Emulator* e, u16 addr, u8 val) {
+void mapper1_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
   if (val & 0x80) {
@@ -819,20 +818,19 @@ void mapper1_write(Emulator* e, u16 addr, u8 val) {
   }
 }
 
-void mapper2_write(Emulator* e, u16 addr, u8 val) {
+void mapper2_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
   m->prg_bank = val & (e->ci.prg_banks - 1);
   set_prg_map(e, m->prg_bank, e->ci.prg_banks - 1);
 }
 
-
-static inline u8 get_P(Emulator* e, Bool B) {
+static inline u8 get_P(E *e, Bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
          (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
 }
 
-static inline void set_P(Emulator* e, u8 val) {
+static inline void set_P(E *e, u8 val) {
   e->s.c.N = !!(val & 0x80);
   e->s.c.V = !!(val & 0x40);
   e->s.c.D = !!(val & 0x08);
@@ -864,7 +862,7 @@ static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
   *result = (val >> 1) | (C << 7);
 }
 
-void cpu_step(Emulator* e) {
+void cpu_step(E *e) {
   u8 busval;
 //  print_info(e);
   C* c = &e->s.c;
@@ -1342,7 +1340,7 @@ static const u64 s_opcode_bits[256][7] = {
     [0xFF] = {s_immlo, s_immhix2, s_fixhi, s_isb1, s_rmw2, s_isb3},                /*ISB nnnn,x*/
 };
 
-static Result get_cart_info(Emulator* e, const FileData *file_data) {
+static Result get_cart_info(E *e, const FileData *file_data) {
   const u32 kHeaderSize = 16;
   const u32 kTrainerSize = 512;
   CHECK_MSG(file_data->size >= kHeaderSize, "file must be >= %d.", kHeaderSize);
@@ -1411,11 +1409,11 @@ static Result get_cart_info(Emulator* e, const FileData *file_data) {
   ON_ERROR_RETURN;
 }
 
-Result set_rom_file_data(Emulator* e, const FileData* rom) {
+Result set_rom_file_data(E *e, const FileData *rom) {
   return get_cart_info(e, rom);
 }
 
-Result init_mapper(Emulator *e) {
+Result init_mapper(E *e) {
   switch (e->ci.mapper) {
   case 0:
     CHECK_MSG(e->ci.prg_banks <= 2, "Too many PRG banks.\n");
@@ -1450,7 +1448,7 @@ Result init_mapper(Emulator *e) {
   ON_ERROR_RETURN;
 }
 
-Result init_emulator(Emulator* e, const EmulatorInit* init) {
+Result init_emulator(E *e, const EInit *init) {
   S* s = &e->s;
   ZERO_MEMORY(*s);
   CHECK(SUCCESS(init_mapper(e)));
@@ -1470,8 +1468,8 @@ Result init_emulator(Emulator* e, const EmulatorInit* init) {
   ON_ERROR_RETURN;
 }
 
-Emulator* emulator_new(const EmulatorInit* init) {
-  Emulator* e = xcalloc(1, sizeof(Emulator));
+E *emulator_new(const EInit *init) {
+  E *e = xcalloc(1, sizeof(E));
   CHECK(SUCCESS(set_rom_file_data(e, &init->rom)));
   CHECK(SUCCESS(init_emulator(e, init)));
   return e;
@@ -1480,43 +1478,31 @@ error:
   return NULL;
 }
 
-void emulator_delete(Emulator* e) {
+void emulator_delete(E *e) {
   if (e) {
     xfree(e);
   }
 }
 
-void emulator_set_joypad_callback(Emulator* e, JoypadCallback callback,
-                                  void* user_data) {
+void emulator_set_joypad_callback(E *e, JoypadCallback callback,
+                                  void *user_data) {
   e->joypad_info.callback = callback;
   e->joypad_info.user_data = user_data;
 }
 
-JoypadCallbackInfo emulator_get_joypad_callback(Emulator* e) {
-  return e->joypad_info;
-}
+JoypadCallbackInfo emulator_get_joypad_callback(E *e) { return e->joypad_info; }
 
-void emulator_set_config(Emulator* e, const EmulatorConfig* config) {
-  e->config = *config;
-}
+void emulator_set_config(E *e, const EConfig *config) { e->config = *config; }
 
-EmulatorConfig emulator_get_config(Emulator* e) {
-  return e->config;
-}
+EConfig emulator_get_config(E *e) { return e->config; }
 
-FrameBuffer* emulator_get_frame_buffer(Emulator* e) {
-  return &e->frame_buffer;
-}
+FrameBuffer *emulator_get_frame_buffer(E *e) { return &e->frame_buffer; }
 
-Ticks emulator_get_ticks(Emulator* e) {
-  return e->s.cy;
-}
+Ticks emulator_get_ticks(E *e) { return e->s.cy; }
 
-EmulatorEvent emulator_step(Emulator* e) {
-  return emulator_run_until(e, e->s.cy + 1);
-}
+EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
-static void emulator_step_internal(Emulator* e) {
+static void emulator_step_internal(E *e) {
   cpu_step(e);
   ppu_step(e);
   ppu_step(e);
@@ -1524,7 +1510,7 @@ static void emulator_step_internal(Emulator* e) {
   e->s.cy += 3;  // Host counts PPU cycles, not CPU.
 }
 
-EmulatorEvent emulator_run_until(Emulator* e, Ticks until_ticks) {
+EEvent emulator_run_until(E *e, Ticks until_ticks) {
   e->s.event = 0;
   Ticks check_ticks = until_ticks;
   while (e->s.event == 0 && e->s.cy < check_ticks) {
@@ -1536,13 +1522,12 @@ EmulatorEvent emulator_run_until(Emulator* e, Ticks until_ticks) {
   return e->s.event;
 }
 
-
 // Debug stuff /////////////////////////////////////////////////////////////////
 
 static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
 
-void disasm(Emulator* e, u16 addr) {
+void disasm(E *e, u16 addr) {
   printf("%04x: ", addr);
   u8 opcode = cpu_read(e, addr);
   const char* fmt = s_opcode_mnemonic[opcode];
@@ -1576,7 +1561,7 @@ void disasm(Emulator* e, u16 addr) {
   printf("\n");
 }
 
-void print_info(Emulator* e) {
+void print_info(E *e) {
   C* c = &e->s.c;
   printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
          "bus:%c %02x%02x  (cy:%08" PRIu64 ")",
