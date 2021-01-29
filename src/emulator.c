@@ -213,18 +213,22 @@ static inline void shift(Emulator* e, Bool draw) {
   if (p->ppumask & 0x10) { // Show sprites.
     // Find first non-zero sprite, if any.
     u64 non0 = (spr->shift[0] | spr->shift[1]) & spr->active & his;
-    if (non0 && (!idx || (non0 & (-non0) & spr->pri))) {
+    if (non0) {
       int s = __builtin_ctzll(non0);
-      idx = ((((spr->shift[1] >> s) & spr->leftmask) << 1) & 2) |
-            (((spr->shift[0] >> s) & spr->leftmask) & 1);
-      pal = ((spr->pal >> (s - 7)) & 3) + 4;
+      // Check if sprite is on transparent BG pixel, or has priority.
+      if (!idx || (non0 & (-non0) & spr->pri)) {
+        idx = ((((spr->shift[1] >> s) & spr->leftmask) << 1) & 2) |
+              (((spr->shift[0] >> s) & spr->leftmask) & 1);
+        pal = ((spr->pal >> (s - 7)) & 3) + 4;
+      }
 
       // Sprite 0 hit only occurs:
       //  * When sprite and background are both enabled
       //  * When sprite and background pixel are both opaque
       //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
       //  * TODO When x!=255
-      if (((spr->spr0mask & non0) >> s) && idx) {
+      //  * (sprite priority doesn't matter)
+      if ((((spr->spr0mask & non0) >> s) & spr->leftmask) && idx) {
         p->ppustatus |= 0x40;
       }
     }
@@ -621,7 +625,7 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
     p->ppulast = val;
     switch (addr & 0x7) {
     case 0:
-      if (p->ppustatus && (val & (p->ppuctrl ^ val) & 80)) {
+      if (p->ppustatus & val & (p->ppuctrl ^ val) & 0x80) {
         e->s.c.has_nmi = TRUE;
       }
       p->ppuctrl = val;
@@ -649,7 +653,7 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
       } else {
         // w was 1.
         // t: CBA..HG FED..... = d: HGFEDCBA
-        p->t = (p->t & 0x181f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
+        p->t = (p->t & 0x1c1f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
         DEBUG("     ppu:t=%04hx w=1\n", p->t);
       }
       break;
