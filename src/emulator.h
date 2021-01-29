@@ -49,7 +49,7 @@ typedef enum { MIRROR_HORIZONTAL = 0, MIRROR_VERTICAL = 1 } Mirror;
 
 typedef struct {
   u8 *prg_data;
-  u8 *chr_data, *chr_data_write;
+  u8 *chr_data;
   Mirror mirror;
   Bool has_bat_ram;
   Bool has_trainer;
@@ -106,8 +106,9 @@ typedef struct Emulator {
   S s;
   CartInfo ci;
   // TODO: more remappable regions.
-  u8 *cpu_map[2];
+  u8 *prg_rom_map[2];
   u8 *nt_map[4];
+  u8 *chr_map[2], *chr_map_write[2];
   FrameBuffer frame_buffer;
   JoypadCallbackInfo joypad_info;
 } Emulator;

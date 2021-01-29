@@ -63,8 +63,7 @@ static const RGBA s_nespal[] = {
     MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
 };
 
-const u32 kPrgBankShift = 14;
-const u32 kChrBankShift = 13;
+const u32 kPrgShift = 14, kChrShift = 13;
 
 static u8 cpu_read(Emulator *e, u16 addr);
 static void cpu_write(Emulator *e, u16 addr, u8 val);
@@ -102,7 +101,7 @@ static inline u8 get_pal_addr(u16 addr) {
 }
 
 static inline u8 chr_read(Emulator *e, u16 addr) {
-  return e->ci.chr_data[addr & 0x1fff];
+  return e->chr_map[(addr >> 12) & 1][addr & 0xfff];
 }
 
 static inline u8 nt_read(Emulator *e, u16 addr) {
@@ -139,7 +138,7 @@ void ppu_write(Emulator *e, u16 addr, u8 val) {
   switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      e->ci.chr_data_write[addr & 0x1fff] = val;
+      e->chr_map_write[(addr >> 12) & 1][addr & 0xfff] = val;
       break;
 
     case 15:
@@ -598,10 +597,10 @@ u8 cpu_read(Emulator *e, u16 addr) {
     break;
 
   case 8: case 9: case 10: case 11: // ROM
-    return e->cpu_map[0][addr - 0x8000];
+    return e->prg_rom_map[0][addr - 0x8000];
 
   case 12: case 13: case 14: case 15: // ROM
-    return e->cpu_map[1][addr - 0xc000];
+    return e->prg_rom_map[1][addr - 0xc000];
   }
   return 0xff;
 }
@@ -1236,12 +1235,12 @@ Result get_cart_info(const FileData *file_data, CartInfo *cart_info) {
   u32 ines_prg_banks = file_data->data[4];
   u32 ines_chr_banks = file_data->data[5];
   u32 ines_data_size =
-      (ines_prg_banks << kPrgBankShift) + (ines_chr_banks << kChrBankShift);
+      (ines_prg_banks << kPrgShift) + (ines_chr_banks << kChrShift);
 
   u32 nes2_prg_banks = ((flag9 & 0xf) << 4) | file_data->data[4];
   u32 nes2_chr_banks = (flag9 & 0xf0) | file_data->data[5];
   u32 nes2_data_size =
-      (nes2_prg_banks << kPrgBankShift) + (nes2_chr_banks << kChrBankShift);
+      (nes2_prg_banks << kPrgShift) + (nes2_chr_banks << kChrShift);
 
   u32 data_size = kHeaderSize + trainer_size;
 
@@ -1270,7 +1269,7 @@ Result get_cart_info(const FileData *file_data, CartInfo *cart_info) {
 
   cart_info->prg_data = file_data->data + kHeaderSize + trainer_size;
   cart_info->chr_data =
-      cart_info->prg_data + (cart_info->prg_banks << kPrgBankShift);
+      cart_info->prg_data + (cart_info->prg_banks << kPrgShift);
 
   return OK;
   ON_ERROR_RETURN;
@@ -1284,10 +1283,9 @@ Result init_mapper(Emulator *e) {
   switch (e->ci.mapper) {
   case 0:
     CHECK_MSG(e->ci.prg_banks <= 2, "Too many PRG banks.\n");
-    e->cpu_map[0] = e->ci.prg_data;
-    e->cpu_map[1] = (e->ci.prg_banks == 2)
-                        ? e->ci.prg_data + (1 << kPrgBankShift)
-                        : e->cpu_map[0];
+    e->prg_rom_map[0] = e->ci.prg_data;
+    e->prg_rom_map[1] =
+        e->ci.prg_data + ((e->ci.prg_banks - 1) << kPrgShift);
     if (e->ci.mirror == MIRROR_HORIZONTAL) {
       e->nt_map[0] = e->nt_map[1] = e->s.p.ram;
       e->nt_map[2] = e->nt_map[3] = e->s.p.ram + 0x400;
@@ -1295,10 +1293,10 @@ Result init_mapper(Emulator *e) {
       e->nt_map[0] = e->nt_map[2] = e->s.p.ram;
       e->nt_map[1] = e->nt_map[3] = e->s.p.ram + 0x400;
     }
-    e->ci.chr_data_write = e->s.p.chr_ram;
-    if (e->ci.chr_banks == 0) {
-      e->ci.chr_data = e->s.p.chr_ram;
-    }
+    e->chr_map_write[0] = e->s.p.chr_ram;
+    e->chr_map_write[1] = e->chr_map_write[0] + 0x1000;
+    e->chr_map[0] = (e->ci.chr_banks == 0) ? e->s.p.chr_ram : e->ci.chr_data;
+    e->chr_map[1] = e->chr_map[0] + 0x1000;
     break;
   default:
     CHECK_MSG(FALSE, "Unsupported mapper: %d", e->ci.mapper);
