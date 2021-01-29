@@ -819,6 +819,13 @@ void mapper1_write(Emulator* e, u16 addr, u8 val) {
   }
 }
 
+void mapper2_write(Emulator* e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  assert(addr >= 0x8000);
+  m->prg_bank = val & (e->ci.prg_banks - 1);
+  set_prg_map(e, m->prg_bank, e->ci.prg_banks - 1);
+}
+
 
 static inline u8 get_P(Emulator* e, Bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
@@ -1413,7 +1420,7 @@ Result init_mapper(Emulator *e) {
   case 0:
     CHECK_MSG(e->ci.prg_banks <= 2, "Too many PRG banks.\n");
     e->cpu_write = mapper0_write;
-    goto mapper0or1;
+    goto shared;
   case 1:
     CHECK_MSG(is_power_of_two(e->ci.chr_banks), "Expected POT CHR banks.\n");
     CHECK_MSG(is_power_of_two(e->ci.prg_banks), "Expected POT PRG banks.\n");
@@ -1423,9 +1430,14 @@ Result init_mapper(Emulator *e) {
     e->s.m.chr_bank[1] = e->ci.chr_banks - 1;
     e->s.m.prg_bank = 0;
     e->cpu_write = mapper1_write;
-    goto mapper0or1;
+    goto shared;
+  case 2:
+    e->s.m.prg_bank = 0;
+    e->cpu_write = mapper2_write;
+    goto shared;
 
-  mapper0or1:
+
+  shared:
     set_mirror(e, e->ci.mirror);
     set_chr_map(e, 0, e->ci.chr_banks - 1);
     set_prg_map(e, 0, e->ci.prg_banks - 1);
