@@ -262,10 +262,10 @@ void ppu_step(Emulator* e) {
   do {
     more = FALSE;
     if (p->bits_mask == s_ppu_enabled_mask) {
-      DEBUG("cy:%" PRIu64
-            " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u)\n",
+      DEBUG("cy:%" PRIu64 " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u) "
+            "sprstate:%u (s:%u d:%u)\n",
             e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
-            (p->v >> 5) & 0x1f, (p->v >> 10) & 3);
+            (p->v >> 5) & 0x1f, (p->v >> 10) & 3, spr->state, spr->s, spr->d);
     }
     u16 next_state = p->state + 1;
     Bool z = FALSE;
@@ -325,7 +325,7 @@ void ppu_step(Emulator* e) {
 }
 
 static const u32 s_ppu_enabled_mask =  0b111111111111111111111111;
-static const u32 s_ppu_disabled_mask = 0b111111111100000000000000;
+static const u32 s_ppu_disabled_mask = 0b111111111100111000000000;
 static const u16 s_ppu_consts[] = {
     [0] = 0,   [1] = 1,    [2] = 2,    [3] = 10,    [4] = 12,  [5] = 14,
     [6] = 15,  [7] = 22,   [8] = 24,   [9] = 27,    [10] = 29, [11] = 31,
