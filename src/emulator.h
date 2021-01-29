@@ -45,11 +45,16 @@ enum {
   EMULATOR_EVENT_INVALID_OPCODE = 0x10,
 };
 
-typedef enum { MIRROR_HORIZONTAL = 0, MIRROR_VERTICAL = 1 } Mirror;
+typedef enum {
+  MIRROR_SINGLE_0 = 0,
+  MIRROR_SINGLE_1 = 1,
+  MIRROR_VERTICAL = 2,
+  MIRROR_HORIZONTAL = 3,
+} Mirror;
 
 typedef struct {
   u8 *prg_data;
-  u8 *chr_data;
+  u8 *chr_data, *chr_data_write;
   Mirror mirror;
   Bool has_bat_ram;
   Bool has_trainer;
@@ -59,6 +64,13 @@ typedef struct {
   u16 chr_banks;
   u16 mapper;
 } CartInfo;
+
+typedef struct {
+  // TODO: reorganize when there are more mappers
+  u8 chr_bank[2], prg_bank;
+  u8 mmc1_bits, mmc1_data, mmc1_ctrl;
+  Bool prg_ram_en;
+} M;
 
 typedef struct {
   u64 bits;
@@ -99,16 +111,15 @@ typedef struct {
   C c;
   P p;
   J j;
+  M m;
 } S;
 
 typedef struct Emulator {
   EmulatorConfig config;
   S s;
   CartInfo ci;
-  // TODO: more remappable regions.
-  u8 *prg_rom_map[2];
-  u8 *nt_map[4];
-  u8 *chr_map[2], *chr_map_write[2];
+  u8 *prg_rom_map[2], *nt_map[4], *chr_map[2], *chr_map_write[2];
+  void (*cpu_write)(struct Emulator*, u16, u8);
   FrameBuffer frame_buffer;
   JoypadCallbackInfo joypad_info;
 } Emulator;
