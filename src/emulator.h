@@ -77,7 +77,7 @@ typedef struct {
   const u64 *step, *next_step;
   u8 PCL, PCH, TL, TH, buslo, bushi, fixhi, veclo;
   u8 A, X, Y, S;
-  u8 ram[0x800]; // 2KiB internal ram.
+  u8 ram[0x800], prg_ram[0x2000];
   u8 opcode;
   Bool C, Z, I, D, V, N; // Flags.
   Bool bus_write, has_nmi;

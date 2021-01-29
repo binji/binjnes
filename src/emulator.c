@@ -449,9 +449,9 @@ void spr_step(Emulator* e) {
             if (spr->at & 0x80) { y = ~y; }  // Flip Y.
             u16 chr = (p->ppuctrl & 0x20) ?
               // 8x16 sprites.
-              ((spr->tile & 1) << 12) + ((spr->tile & 0xfe) << 4) + (y & 15) :
+              ((spr->tile & 1) << 12) | ((spr->tile & 0xfe) << 4) | ((y & 8) << 1) | (y & 7) :
               // 8x8 sprites.
-              ((p->ppuctrl & 8) << 9) + (spr->tile << 4) + (y & 7);
+              ((p->ppuctrl & 8) << 9) | (spr->tile << 4) | (y & 7);
             u8 ptbl = chr_read(e, chr), ptbh = chr_read(e, chr + 8);
             if (spr->at & 0x40) {
               ptbl = reverse(ptbl);
@@ -594,12 +594,17 @@ u8 cpu_read(Emulator *e, u16 addr) {
     }
     break;
 
+  case 6: case 7:
+    // TODO: open bus when ram is disabled.
+    return e->s.c.prg_ram[addr & 0x1fff];
+
   case 8: case 9: case 10: case 11: // ROM
     return e->prg_rom_map[0][addr - 0x8000];
 
   case 12: case 13: case 14: case 15: // ROM
     return e->prg_rom_map[1][addr - 0xc000];
   }
+  // TODO: open bus
   return 0xff;
 }
 
@@ -667,7 +672,7 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
       u16 oldv = p->v;
       ppu_write(e, p->v, val);
       inc_ppu_addr(p);
-      DEBUG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, p->v);
+      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, p->v);
     }
     }
     break;
@@ -690,6 +695,12 @@ void cpu_write(Emulator *e, u16 addr, u8 val) {
       default:
         LOG("*** NYI: write($%04x, $%02hhx)\n", addr, val);
         break;
+    }
+    break;
+
+  case 6: case 7:
+    if (e->s.m.prg_ram_en) {
+      e->s.c.prg_ram[addr & 0x1fff] = val;
     }
     break;
 
@@ -771,7 +782,7 @@ void mapper1_write(Emulator* e, u16 addr, u8 val) {
           LOG("prgbank=%02hhx\n", m->mmc1_data);
           assert(is_power_of_two(e->ci.prg_banks));
           m->prg_bank = m->mmc1_data & (e->ci.prg_banks - 1);
-          m->prg_ram_en = m->mmc1_data & 0x20;
+          m->prg_ram_en = !(m->mmc1_data & 0x10);
           break;
       }
       if (m->mmc1_ctrl & 0x10) { // CHR 4KiB banks
