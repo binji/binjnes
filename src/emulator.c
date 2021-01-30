@@ -185,6 +185,7 @@ static inline void shift(E *e, Bool draw) {
   const u64 ones = 0x0101010101010101ull;
   const u64 his = 0x8080808080808080ull;
   const u64 los = 0x7f7f7f7f7f7f7f7full;
+  u64 active = 0;
   int i;
   P* p = &e->s.p;
   Spr* spr = &p->spr;
@@ -198,12 +199,11 @@ static inline void shift(E *e, Bool draw) {
     // Mark any zero counter lanes as active (i.e. set the active mask to
     // 0xff). See
     // https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord.
-    u64 active = ~(((spr->counter & los) + los) | spr->counter | los);
+    active = ~(((spr->counter & los) + los) | spr->counter | los);
     // Only top bit of lane is set, fill the rest of the lane.
     active |= active >> 1;
     active |= active >> 2;
     active |= active >> 4;
-    spr->active = active;
 
     // Decrement inactive counters. Active counters are always 0.
     spr->counter -= ones & ~active;
@@ -211,7 +211,7 @@ static inline void shift(E *e, Bool draw) {
 
   if (p->ppumask & 0x10) { // Show sprites.
     // Find first non-zero sprite, if any.
-    u64 non0 = (spr->shift[0] | spr->shift[1]) & spr->active & his;
+    u64 non0 = (spr->shift[0] | spr->shift[1]) & active & his;
     if (non0) {
       int s = __builtin_ctzll(non0);
       // Check if sprite is on transparent BG pixel, or has priority.
@@ -243,10 +243,10 @@ static inline void shift(E *e, Bool draw) {
     spr->leftmask = (spr->leftmask >> 1) | 0x80;
 
     // Shift all active sprites.
-    spr->shift[0] = ((spr->shift[0] << 1) & spr->active & ~ones) |
-                    (spr->shift[0] & ~spr->active);
-    spr->shift[1] = ((spr->shift[1] << 1) & spr->active & ~ones) |
-                    (spr->shift[1] & ~spr->active);
+    spr->shift[0] =
+        ((spr->shift[0] << 1) & active & ~ones) | (spr->shift[0] & ~active);
+    spr->shift[1] =
+        ((spr->shift[1] << 1) & active & ~ones) | (spr->shift[1] & ~active);
 
     u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
     assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
@@ -466,7 +466,6 @@ void spr_step(E *e) {
             shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
             shift_in(&spr->spr0mask, (spr->s == 4 && spr->spr0) ? 0xff : 0);
             shift_in(&spr->counter, spr->t);
-            spr->active = 0;
           } else {
             // empty sprite.
             spr->shift[0] >>= 8;
@@ -475,7 +474,6 @@ void spr_step(E *e) {
             spr->pri >>= 8;
             spr->spr0mask >>= 8;
             shift_in(&spr->counter, 0xff);
-            spr->active = 0;
           }
           break;
         }

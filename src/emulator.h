@@ -84,7 +84,7 @@ typedef struct {
 } C;
 
 typedef struct {
-  u64 shift[2], counter, active, pri, pal, spr0mask;
+  u64 shift[2], counter, pri, pal, spr0mask;
   u8 state, cnt, s, d, y, t, at, tile, leftmask;
   Bool sovf, spr0;
 } Spr;
