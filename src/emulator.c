@@ -317,7 +317,7 @@ void ppu_step(E *e) {
         default:
           FATAL("NYI: ppu step %d\n", bit);
       }
-      bits &= ~(1ul << bit);
+      bits &= bits - 1;
     }
     p->state = next_state;
   } while (more);
@@ -480,7 +480,7 @@ void spr_step(E *e) {
         default:
           FATAL("NYI: spr step %d\n", bit);
       }
-      bits &= ~(1ul << bit);
+      bits &= bits - 1;
     }
     spr->state = next_state;
   } while (more);
@@ -976,7 +976,7 @@ void cpu_step(E *e) {
       default:
         FATAL("NYI: cpu step %d\n", bit);
     }
-    bits &= ~(1ull << bit);
+    bits &= bits - 1;
   }
   c->bits = *(c->step++);
   if (c->bits == 0) {
