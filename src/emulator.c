@@ -859,7 +859,7 @@ static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
 }
 
 void cpu_step(E *e) {
-  u8 busval;
+  u8 busval = 0;
 #if 0
   print_info(e); printf("\n");
 #endif

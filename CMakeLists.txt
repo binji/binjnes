@@ -47,3 +47,13 @@ if (SDL2_FOUND AND OPENGL_FOUND)
     install(FILES ${SDL2_RUNTIME_LIBRARY} DESTINATION bin)
   endif ()
 endif ()
+
+add_executable(binjnes-tester
+  src/common.c
+  src/options.c
+  src/emulator.c
+  src/joypad.c
+  src/tester.c
+)
+install(TARGETS binjnes-tester DESTINATION bin)
+target_copy_to_bin(binjnes-tester)
