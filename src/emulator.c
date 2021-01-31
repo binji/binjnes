@@ -73,7 +73,7 @@ static void print_info(E *e);
 static void spr_step(E *e);
 
 static const u8 s_spr_consts[];
-static const u16 s_ppu_consts[];
+static const u16 s_ppu_consts[], s_apu_consts[], s_apu_bits[];
 static const u32 s_ppu_bits[], s_spr_bits[];
 static const u64 s_cpu_decode, s_opcode_bits[256][7];
 static const u64 s_nmi[], s_irq[], s_oamdma[];
@@ -526,6 +526,78 @@ static const u32 s_spr_bits[] = {
   0b000000010000000000000000,  // 26: goto 26
 };
 
+// APU stuff ///////////////////////////////////////////////////////////////////
+
+static void apu_tick(E *e) {}
+
+static void apu_quarter(E *e) {}
+
+static void apu_half(E *e) {}
+
+void apu_step(E *e) {
+  Bool more;
+  A* a = &e->s.a;
+  do {
+    more = FALSE;
+    u16 next_state = a->state + 1;
+    Bool z = FALSE;
+    u16 bits = s_apu_bits[a->state];
+    u16 cnst = s_apu_consts[bits & 3];
+    bits = (bits >> 3);
+    while (bits) {
+      int bit = __builtin_ctzl(bits);
+      switch (bit) {
+        case 0: more = TRUE; break;
+        case 1: apu_tick(e); break; // tick
+        case 2: apu_quarter(e); break; // quarter
+        case 3: apu_half(e); break; // half
+        case 4: if (--a->cnt ==0) { next_state = cnst; bits = 0; } break;
+        case 5: break; // irq
+        case 6: a->cnt = cnst; break;
+        case 7: a->cnt = (a->reg[0x17] & 0x80) ? 7455 : 3729; break;
+        case 8: next_state = cnst; break;
+        default:
+          FATAL("NYI: apu step %d\n", bit);
+      }
+      bits &= bits - 1;
+    }
+    a->state = next_state;
+  } while (more);
+}
+
+// 0: more=T
+// 1: tick
+// 2: quarter
+// 3: half
+// 4: --cnt,jnz #N
+// 5: irq
+// 6: cnt=#N
+// 7: cnt=3729 or 7455
+// 8: goto #N
+
+static const u16 s_apu_consts[] = {
+    [0] = 0, [1] = 1, [2] = 4, [3] = 7, [4] = 10, [5] = 3728, [6] = 3729,
+};
+#define X(b,n) ((b)<<3|(n))
+static const u16 s_apu_bits[] = {
+   // 876543210
+  X(0b001000001, 0),  //  0: more=T,cnt=3728               0.5
+  X(0b000000000, 0),  //  1:                               0.5
+  X(0b000010010, 0),  //  2: tick,--cnt,jnz 1              3728
+  X(0b001000101, 0),  //  3: more=T,quarter,cnt=3728       3728.5
+  X(0b000000000, 0),  //  4:                               0.5
+  X(0b000010010, 0),  //  5: tick,--cnt,jnz 4              7456
+  X(0b001001101, 0),  //  6: more=T,quarter,half,cnt=3729  7456.5
+  X(0b000000000, 0),  //  7:                               0.5
+  X(0b000010010, 0),  //  8: tick,--cnt,jnz 7              11185
+  X(0b010000101, 0),  //  9: more=T,quarter,cnt=3729/7455  11185.5
+  X(0b000000000, 0),  // 10:                               0.5
+  X(0b000110010, 0),  // 11: tick,--cnt,jnz 10,irq         14914
+  X(0b000101101, 0),  // 12: more=T,quarter,half,irq       14914.5
+  X(0b100100000, 0),  // 13: irq,goto 0                    14915
+};
+#undef X
+
 // CPU stuff ///////////////////////////////////////////////////////////////////
 
 static inline void inc_ppu_addr(P* p) {
@@ -680,6 +752,15 @@ void cpu_write(E *e, u16 addr, u8 val) {
 
   case 4: // APU & I/O
     switch (addr - 0x4000) {
+      case 0x00: case 0x01: case 0x02: case 0x03:             // Pulse 1
+      case 0x04: case 0x05: case 0x06: case 0x07:             // Pulse 2
+      case 0x08: case 0x0a: case 0x0b:                        // Triangle
+      case 0x0c: case 0x0e: case 0x0f:                        // Noise
+      case 0x10: case 0x11: case 0x12: case 0x13: case 0x15:  // DMC
+      case 0x17:                                              // Frame counter
+        e->s.a.reg[addr - 0x4000] = val;
+        break;
+
       case 0x14: {   // OAMDMA
         e->s.c.oamhi = val;
         e->s.c.next_step = s_oamdma + (e->s.cy & 1); // 513/514 cycles

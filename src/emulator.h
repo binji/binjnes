@@ -101,6 +101,11 @@ typedef struct {
 } P;
 
 typedef struct {
+  u16 cnt;
+  u8 state, reg[0x18];
+} A;
+
+typedef struct {
   u8 joyp[2];
   Bool S;
 } J;
@@ -110,6 +115,7 @@ typedef struct {
   EmulatorEvent event;
   C c;
   P p;
+  A a;
   J j;
   M m;
 } S;
