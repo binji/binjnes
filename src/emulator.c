@@ -142,7 +142,7 @@ void ppu_write(E *e, u16 addr, u8 val) {
     case 15:
       if (addr >= 0x3f00) {
         // Palette ram.
-        e->s.p.palram[get_pal_addr(addr)] = val;
+        e->s.p.palram[get_pal_addr(addr)] = val & 0x3f;
         break;
       }
       // Fallthrough.
