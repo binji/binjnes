@@ -181,7 +181,13 @@ static inline void incv(P* p) {
        : (p->v & ~0x73e0) | ((p->v + 0x20) & 0x3e0);
 }
 
-static inline void shift(E *e, Bool draw) {
+static inline void shift_bg(E *e) {
+  P *p = &e->s.p;
+  p->bgshift <<= 2;
+  p->atshift = (p->atshift << 2) | p->atlatch;
+}
+
+static inline void shift(E *e) {
   const u64 ones = 0x0101010101010101ull;
   const u64 his = 0x8080808080808080ull;
   const u64 los = 0x7f7f7f7f7f7f7f7full;
@@ -195,19 +201,17 @@ static inline void shift(E *e, Bool draw) {
     pal = (p->atshift >> (14 - p->x * 2)) & 3;
   }
 
-  if (draw) {
-    // Mark any zero counter lanes as active (i.e. set the active mask to
-    // 0xff). See
-    // https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord.
-    active = ~(((spr->counter & los) + los) | spr->counter | los);
-    // Only top bit of lane is set, fill the rest of the lane.
-    active |= active >> 1;
-    active |= active >> 2;
-    active |= active >> 4;
+  // Mark any zero counter lanes as active (i.e. set the active mask to
+  // 0xff). See
+  // https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord.
+  active = ~(((spr->counter & los) + los) | spr->counter | los);
+  // Only top bit of lane is set, fill the rest of the lane.
+  active |= active >> 1;
+  active |= active >> 2;
+  active |= active >> 4;
 
-    // Decrement inactive counters. Active counters are always 0.
-    spr->counter -= ones & ~active;
-  }
+  // Decrement inactive counters. Active counters are always 0.
+  spr->counter -= ones & ~active;
 
   if (p->ppumask & 0x10) { // Show sprites.
     // Find first non-zero sprite, if any.
@@ -237,90 +241,84 @@ static inline void shift(E *e, Bool draw) {
   p->bgshift <<= 2;
   p->atshift = (p->atshift << 2) | p->atlatch;
 
-  if (draw) {
-    // Shift left side masks.
-    p->bgleftmask = (p->bgleftmask >> 2) | 0xc000;
-    spr->leftmask = (spr->leftmask >> 1) | 0x80;
+  // Shift left side masks.
+  p->bgleftmask = (p->bgleftmask >> 2) | 0xc000;
+  spr->leftmask = (spr->leftmask >> 1) | 0x80;
 
-    // Shift all active sprites.
-    spr->shift[0] =
-        ((spr->shift[0] << 1) & active & ~ones) | (spr->shift[0] & ~active);
-    spr->shift[1] =
-        ((spr->shift[1] << 1) & active & ~ones) | (spr->shift[1] & ~active);
+  // Shift all active sprites.
+  spr->shift[0] =
+      ((spr->shift[0] << 1) & active & ~ones) | (spr->shift[0] & ~active);
+  spr->shift[1] =
+      ((spr->shift[1] << 1) & active & ~ones) | (spr->shift[1] & ~active);
 
-    u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
-    assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
-    e->frame_buffer[p->fbidx++] = s_nespal[col];
-  }
+  // Draw final pixel.
+  u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
+  assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
+  e->frame_buffer[p->fbidx++] = s_nespal[col];
 }
 
 void ppu_step(E *e) {
-  Bool more;
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-  do {
-    more = FALSE;
-    if (p->bits_mask == s_ppu_enabled_mask) {
-      DEBUG("cy:%" PRIu64 " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u) "
-            "sprstate:%u (s:%u d:%u)\n",
-            e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
-            (p->v >> 5) & 0x1f, (p->v >> 10) & 3, spr->state, spr->s, spr->d);
+repeat:
+  if (p->bits_mask == s_ppu_enabled_mask) {
+    DEBUG("cy:%" PRIu64 " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u) "
+          "sprstate:%u (s:%u d:%u)\n",
+          e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
+          (p->v >> 5) & 0x1f, (p->v >> 10) & 3, spr->state, spr->s, spr->d);
+  }
+  Bool z = FALSE;
+  u32 bits = s_ppu_bits[p->state++];
+  u16 cnst = s_ppu_consts[bits & 0xff];
+  bits = (bits >> 8) & p->bits_mask;
+  while (bits) {
+    int bit = __builtin_ctzll(bits);
+    bits &= bits - 1;
+    switch (bit) {
+      case 0: read_ntb(e); break;
+      case 1: read_atb(e); break;
+      case 2: p->ptbl = read_ptb(e, 0); break;
+      case 3: p->ptbh = read_ptb(e, 8); break;
+      case 4: inch(p); break;
+      case 5: incv(p); p->scany++; break;
+      case 6: shift(e); break;
+      case 7: shift_bg(e); break;
+      case 8:
+        p->bgshift = (p->bgshift & 0xffff0000) | interleave(p->ptbh, p->ptbl);
+        p->atlatch = p->atb;
+        break;
+      case 9:
+        spr->state = spr->s = spr->d = 0;
+        spr->cnt = 32;
+        spr->sovf = FALSE;
+        spr->leftmask = (p->ppumask & 4) ? 0xff : 0;
+        p->bgleftmask = (p->ppumask & 2) ? 0xffff : 0;
+        break;
+      case 10: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
+      case 11: spr_step(e); break;
+      case 12: ppu_t_to_v(p, 0x041f); break;
+      case 13: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
+      case 14: p->cnt1 = cnst; break;
+      case 15: p->cnt2 = cnst; break;
+      case 16:
+        p->fbidx = 0;
+        if ((p->oddframe ^= 1) && (p->ppumask & 8)) { goto repeat; }
+        break;
+      case 17: z = --p->cnt1 == 0; break;
+      case 18: z = --p->cnt2 == 0; break;
+      case 19: if (!z) { p->state = cnst; } break;
+      case 20: if (z) { p->state = cnst; } break;
+      case 21:
+        if (p->ppuctrl & 0x80) { e->s.c.has_nmi = TRUE; }
+        p->ppustatus |= 0x80;
+        e->s.event |= EMULATOR_EVENT_NEW_FRAME;
+        break;
+      case 22: p->ppustatus = 0; break;
+      case 23: p->state = cnst; break;
+      default:
+        FATAL("NYI: ppu step %d\n", bit);
     }
-    u16 next_state = p->state + 1;
-    Bool z = FALSE;
-    u32 bits = s_ppu_bits[p->state];
-    u16 cnst = s_ppu_consts[bits & 0xff];
-    bits = (bits >> 8) & p->bits_mask;
-    while (bits) {
-      int bit = __builtin_ctzll(bits);
-      switch (bit) {
-        case 0: read_ntb(e); break;
-        case 1: read_atb(e); break;
-        case 2: p->ptbl = read_ptb(e, 0); break;
-        case 3: p->ptbh = read_ptb(e, 8); break;
-        case 4: inch(p); break;
-        case 5: incv(p); p->scany++; break;
-        case 6: shift(e, TRUE); break;
-        case 7: shift(e, FALSE); break;
-        case 8:
-          p->bgshift = (p->bgshift & 0xffff0000) | interleave(p->ptbh, p->ptbl);
-          p->atlatch = p->atb;
-          break;
-        case 9:
-          spr->state = spr->s = spr->d = 0;
-          spr->cnt = 32;
-          spr->sovf = FALSE;
-          spr->leftmask = (p->ppumask & 4) ? 0xff : 0;
-          p->bgleftmask = (p->ppumask & 2) ? 0xffff : 0;
-          break;
-        case 10: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
-        case 11: spr_step(e); break;
-        case 12: ppu_t_to_v(p, 0x041f); break;
-        case 13: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
-        case 14: p->cnt1 = cnst; break;
-        case 15: p->cnt2 = cnst; break;
-        case 16:
-          p->fbidx = 0;
-          more = (p->oddframe ^= 1) && (p->ppumask & 8);
-          break;
-        case 17: z = --p->cnt1 == 0; break;
-        case 18: z = --p->cnt2 == 0; break;
-        case 19: if (!z) { next_state = cnst; } break;
-        case 20: if (z) { next_state = cnst; } break;
-        case 21:
-          if (p->ppuctrl & 0x80) { e->s.c.has_nmi = TRUE; }
-          p->ppustatus |= 0x80;
-          e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-          break;
-        case 22: p->ppustatus = 0; break;
-        case 23: next_state = cnst; break;
-        default:
-          FATAL("NYI: ppu step %d\n", bit);
-      }
-      bits &= bits - 1;
-    }
-    p->state = next_state;
-  } while (more);
+  }
 }
 
 static const u32 s_ppu_enabled_mask =  0b111111111111111111111111;
@@ -410,80 +408,75 @@ static inline void shift_in(u64* word, u8 byte) {
 }
 
 void spr_step(E *e) {
-  Bool more;
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-  do {
-    more = FALSE;
-    u16 next_state = spr->state + 1;
-    Bool z = FALSE;
-    u32 bits = s_spr_bits[spr->state];
-    u16 cnst = s_spr_consts[bits & 0xff];
-    bits = (bits >> 8);
-    while (bits) {
-      int bit = __builtin_ctzl(bits);
-      switch (bit) {
-        case 0: more = TRUE; break;
-        case 1: spr->t = p->oam[spr->s]; break;
-        case 2: spr->t = 0xff; spr->spr0 = FALSE; break;
-        case 3: p->oam2[spr->d] = spr->t; break;
-        case 4: spr_inc(&spr->s, &spr->sovf, 1); break;
-        case 5: spr->d++; break;
-        case 6: if (spr->s == 1) { spr->spr0 = TRUE; } break;
-        case 7: z = --spr->cnt == 0; break;
-        case 8: z = spr->d >= 32; break;
-        case 9: z = spr->sovf; break;
-        case 10: if (!z) { next_state = cnst; more = FALSE; bits = 0;} break;
-        case 11: if (z) { next_state = cnst; more = FALSE; bits = 0;} break;
-        case 12: spr->d = 0; break;
-        case 13: spr->cnt = cnst; break;
-        case 14: if (y_in_range(e, spr->t)) { more = TRUE; bits = 0; } break;
-        case 15: spr_inc(&spr->s, &spr->sovf, 3); break;
-        case 16: spr_inc(&spr->s, &spr->sovf, 4); break;
-        case 17: next_state = cnst; break;
-        case 18: p->ppustatus |= 0x20; break;
-        case 19: spr->t = p->oam2[spr->s++]; break;
-        case 20: spr->y = spr->t; break;
-        case 21: spr->tile = spr->t; break;
-        case 22: spr->at = spr->t; break;
-        case 23: {
-          if (spr->s <= spr->d) {
-            u8 y = (p->scany - 1) - spr->y;
-            if (spr->at & 0x80) { y = ~y; }  // Flip Y.
-            u16 chr = (p->ppuctrl & 0x20) ?
-              // 8x16 sprites.
-              ((spr->tile & 1) << 12) | ((spr->tile & 0xfe) << 4) | ((y & 8) << 1) | (y & 7) :
-              // 8x8 sprites.
-              ((p->ppuctrl & 8) << 9) | (spr->tile << 4) | (y & 7);
-            u8 ptbl = chr_read(e, chr), ptbh = chr_read(e, chr + 8);
-            if (spr->at & 0x40) {
-              ptbl = reverse(ptbl);
-              ptbh = reverse(ptbh);
-            }
-            shift_in(&spr->shift[0], ptbl);
-            shift_in(&spr->shift[1], ptbh);
-            shift_in(&spr->pal, spr->at & 3);
-            shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
-            shift_in(&spr->spr0mask, (spr->s == 4 && spr->spr0) ? 0xff : 0);
-            shift_in(&spr->counter, spr->t);
-          } else {
-            // empty sprite.
-            spr->shift[0] >>= 8;
-            spr->shift[1] >>= 8;
-            spr->pal >>= 8;
-            spr->pri >>= 8;
-            spr->spr0mask >>= 8;
-            shift_in(&spr->counter, 0xff);
+repeat:;
+  Bool z = FALSE;
+  u32 bits = s_spr_bits[spr->state++];
+  u16 cnst = s_spr_consts[bits & 0xff];
+  bits = (bits >> 8);
+  while (bits) {
+    int bit = __builtin_ctzl(bits);
+    bits &= bits - 1;
+    switch (bit) {
+      case 0: spr->t = p->oam[spr->s]; break;
+      case 1: spr->t = 0xff; spr->spr0 = FALSE; break;
+      case 2: p->oam2[spr->d] = spr->t; break;
+      case 3: spr_inc(&spr->s, &spr->sovf, 1); break;
+      case 4: spr->d++; break;
+      case 5: if (spr->s == 1) { spr->spr0 = TRUE; } break;
+      case 6: z = --spr->cnt == 0; break;
+      case 7: z = spr->d >= 32; break;
+      case 8: z = spr->sovf; break;
+      case 9: if (!z) { spr->state = cnst; return; } break;
+      case 10: if (z) { spr->state = cnst; return; } break;
+      case 11: spr->d = 0; break;
+      case 12: spr->cnt = cnst; break;
+      case 13: if (y_in_range(e, spr->t)) { goto repeat; } break;
+      case 14: spr_inc(&spr->s, &spr->sovf, 3); break;
+      case 15: spr_inc(&spr->s, &spr->sovf, 4); break;
+      case 16: spr->state = cnst; break;
+      case 17: p->ppustatus |= 0x20; break;
+      case 18: spr->t = p->oam2[spr->s++]; break;
+      case 19: spr->y = spr->t; break;
+      case 20: spr->tile = spr->t; break;
+      case 21: spr->at = spr->t; break;
+      case 22: {
+        if (spr->s <= spr->d) {
+          u8 y = (p->scany - 1) - spr->y;
+          if (spr->at & 0x80) { y = ~y; }  // Flip Y.
+          u16 chr = (p->ppuctrl & 0x20) ?
+            // 8x16 sprites.
+            ((spr->tile & 1) << 12) | ((spr->tile & 0xfe) << 4) | ((y & 8) << 1) | (y & 7) :
+            // 8x8 sprites.
+            ((p->ppuctrl & 8) << 9) | (spr->tile << 4) | (y & 7);
+          u8 ptbl = chr_read(e, chr), ptbh = chr_read(e, chr + 8);
+          if (spr->at & 0x40) {
+            ptbl = reverse(ptbl);
+            ptbh = reverse(ptbh);
           }
-          break;
+          shift_in(&spr->shift[0], ptbl);
+          shift_in(&spr->shift[1], ptbh);
+          shift_in(&spr->pal, spr->at & 3);
+          shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
+          shift_in(&spr->spr0mask, (spr->s == 4 && spr->spr0) ? 0xff : 0);
+          shift_in(&spr->counter, spr->t);
+        } else {
+          // empty sprite.
+          spr->shift[0] >>= 8;
+          spr->shift[1] >>= 8;
+          spr->pal >>= 8;
+          spr->pri >>= 8;
+          spr->spr0mask >>= 8;
+          shift_in(&spr->counter, 0xff);
         }
-        default:
-          FATAL("NYI: spr step %d\n", bit);
+        break;
       }
-      bits &= bits - 1;
+      case 23: goto repeat;
+      default:
+        FATAL("NYI: spr step %d\n", bit);
     }
-    spr->state = next_state;
-  } while (more);
+  }
 }
 
 static const u16 s_spr_consts[] = {
@@ -492,35 +485,35 @@ static const u16 s_spr_consts[] = {
 };
 #define X(b,n) ((b)<<8|(n))
 static const u32 s_spr_bits[] = {
-    //222111111111100000000000
+    //222211111111110000000000
     //321098765432109876543210
-  X(0b000000000000000000000100, 0),  // 0: t=0xff
-  X(0b000000000001010010101000, 0),  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
-  X(0b000000000000000000010010, 0),  // 2: t=oam[s],s++
-  X(0b000000101100000000000001, 2),  // 3: next if y in range,s+=3,goto 11
-  X(0b000000000000000001101000, 0),  // 4: oam2[d]=t,d++,check spr0
-  X(0b000000000000000000010010, 0),  // 5: t=oam[s],s++
-  X(0b000000000000000000101000, 0),  // 6: oam2[d]=t,d++
-  X(0b000000000000000000010010, 0),  // 7: t=oam[s],s++
-  X(0b000000000000000000101000, 0),  // 8: oam2[d]=t,d++
-  X(0b000000000000000000010010, 0),  // 9: t=oam[s],s++
-  X(0b000000000000000000101000, 0),  // 10: oam2[d]=t,d++
-  X(0b000000000000101000000001, 3),  // 11: more=T,z=sovf,jz 13
-  X(0b000000000000010100000000, 1),  // 12: z=dovf,jnz 2
-  X(0b000000000000000000010010, 0),  // 13: t=oam[s],s++
-  X(0b000000110100000000000000, 4),  // 14: next if y in range,s+=4,goto 14
-  X(0b000001000000000000000000, 0),  // 15: set overflow bit
-  X(0b000000000000000000010010, 0),  // 16: t=oam[s],s++
-  X(0b000000100000000000000000, 5),  // 17: goto 17
-  X(0b000110000000000000000000, 0),  // 18: t=oam2[s],s++,do y
-  X(0b001010000000000000000000, 0),  // 19: t=oam2[s],s++,do tile
-  X(0b010010000000000000000000, 0),  // 20: t=oam2[s],s++,do attr
-  X(0b100010000000000000000000, 0),  // 21: t=oam2[s],s++,do x
+  X(0b000000000000000000000010, 0),  // 0: t=0xff
+  X(0b000000000000101001010100, 0),  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
+  X(0b000000000000000000001001, 0),  // 2: t=oam[s],s++
+  X(0b100000010110000000000000, 2),  // 3: next if y in range,s+=3,more=T,goto 11
+  X(0b000000000000000000110100, 0),  // 4: oam2[d]=t,d++,check spr0
+  X(0b000000000000000000001001, 0),  // 5: t=oam[s],s++
+  X(0b000000000000000000010100, 0),  // 6: oam2[d]=t,d++
+  X(0b000000000000000000001001, 0),  // 7: t=oam[s],s++
+  X(0b000000000000000000010100, 0),  // 8: oam2[d]=t,d++
+  X(0b000000000000000000001001, 0),  // 9: t=oam[s],s++
+  X(0b000000000000000000010100, 0),  // 10: oam2[d]=t,d++
+  X(0b100000000000010100000000, 3),  // 11: more=T,z=sovf,jz 13
+  X(0b000000000000001010000000, 1),  // 12: z=dovf,jnz 2
+  X(0b000000000000000000001001, 0),  // 13: t=oam[s],s++
+  X(0b000000011010000000000000, 4),  // 14: next if y in range,s+=4,goto 14
+  X(0b000000100000000000000000, 0),  // 15: set overflow bit
+  X(0b000000000000000000001001, 0),  // 16: t=oam[s],s++
+  X(0b000000010000000000000000, 5),  // 17: goto 17
+  X(0b000011000000000000000000, 0),  // 18: t=oam2[s],s++,do y
+  X(0b000101000000000000000000, 0),  // 19: t=oam2[s],s++,do tile
+  X(0b001001000000000000000000, 0),  // 20: t=oam2[s],s++,do attr
+  X(0b010001000000000000000000, 0),  // 21: t=oam2[s],s++,do x
   X(0b000000000000000000000000, 0),  // 22:
   X(0b000000000000000000000000, 0),  // 23:
   X(0b000000000000000000000000, 0),  // 24:
-  X(0b000000000000010010000000, 6),  // 25: --cnt,jnz 18
-  X(0b000000100000000000000000, 7),  // 26: goto 26
+  X(0b000000000000001001000000, 6),  // 25: --cnt,jnz 18
+  X(0b000000010000000000000000, 7),  // 26: goto 26
 };
 #undef X
 
@@ -867,6 +860,7 @@ void cpu_step(E *e) {
   u64 bits = c->bits;
   while (bits) {
     int bit = __builtin_ctzll(bits);
+    bits &= bits - 1;
     switch (bit) {
       case 0: c->bushi = c->PCH; c->buslo = c->PCL; break;
       case 1: c->bushi = 1; c->buslo = c->S; break;
@@ -976,7 +970,6 @@ void cpu_step(E *e) {
       default:
         FATAL("NYI: cpu step %d\n", bit);
     }
-    bits &= bits - 1;
   }
   c->bits = *(c->step++);
   if (c->bits == 0) {
