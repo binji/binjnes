@@ -101,8 +101,9 @@ typedef struct {
 } P;
 
 typedef struct {
-  u16 cnt;
-  u8 state, reg[0x18];
+  u32 accum[5], divisor;
+  u16 cnt, timer[3];
+  u8 state, sample[3], seq[2], len[4], vol[5], reg[0x18];
 } A;
 
 typedef struct {

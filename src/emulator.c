@@ -528,7 +528,33 @@ static const u32 s_spr_bits[] = {
 
 // APU stuff ///////////////////////////////////////////////////////////////////
 
-static void apu_tick(E *e) {}
+static void apu_tick(E *e) {
+  static const u8 duty[] = {0b01000000, 0b01100000, 0b00001111, 0b10011111};
+  static const u8 tri[] = {15, 14, 13, 12, 11, 10, 9,  8,  7,  6, 5,
+                           4,  3,  2,  1,  0,  0,  1,  2,  3,  4, 5,
+                           6,  7,  8,  9,  10, 11, 12, 13, 14, 15};
+  A* a = &e->s.a;
+  // Update pulse1, pulse2.
+  for (int i = 0; i < 2; ++i) {
+    if (a->timer[i]-- == 0) {
+      a->timer[i] = ((a->reg[3 + i * 4] & 7) << 8) | a->reg[2 + i * 4];
+      a->seq[i] = (a->seq[i] >> 1) | (a->seq[i] << 7);
+      a->sample[i] = (duty[a->reg[2 + i] >> 6] & a->seq[i]) ? 0xff : 0;
+    }
+    a->accum[i] += a->sample[i] & a->vol[i];
+  }
+
+  // Update triangle.
+  if (a->timer[2]-- == 0) {
+    a->timer[2] = ((a->reg[0xb] & 7) << 8) | a->reg[0xa];
+    if (++a->seq[2] == 31) { a->seq[2] = 0; }
+    a->sample[2] = tri[a->seq[2]];
+  }
+  a->accum[2] += a->sample[2];
+  a->divisor++;
+
+  // TODO: update noise, DMC
+}
 
 static void apu_quarter(E *e) {}
 
@@ -564,16 +590,6 @@ void apu_step(E *e) {
     a->state = next_state;
   } while (more);
 }
-
-// 0: more=T
-// 1: tick
-// 2: quarter
-// 3: half
-// 4: --cnt,jnz #N
-// 5: irq
-// 6: cnt=#N
-// 7: cnt=3729 or 7455
-// 8: goto #N
 
 static const u16 s_apu_consts[] = {
     [0] = 0, [1] = 1, [2] = 4, [3] = 7, [4] = 10, [5] = 3728, [6] = 3729,
