@@ -760,48 +760,36 @@ void mapper1_write(E *e, u16 addr, u8 val) {
       m->mmc1_data >>= 3;
       switch (addr >> 12) {
         case 0x8: case 0x9:  // Control.
-          LOG("mmc1_ctrl=%02hhx\n", m->mmc1_data);
           m->mmc1_ctrl = m->mmc1_data;
           set_mirror(e, m->mmc1_data & 3);
           break;
         case 0xa: case 0xb:  // CHR bank 0.
-          LOG("chrbank[0]=%02hhx\n", m->mmc1_data);
           m->chr_bank[0] = m->mmc1_data;
           break;
         case 0xc: case 0xd:  // CHR bank 1.
-          LOG("chrbank[1]=%02hhx\n", m->mmc1_data);
           m->chr_bank[1] = m->mmc1_data;
           break;
         case 0xe: case 0xf:  // PRG bank.
-          LOG("prgbank=%02hhx\n", m->mmc1_data);
           assert(is_power_of_two(e->ci.prg_banks));
           m->prg_bank = m->mmc1_data & (e->ci.prg_banks - 1);
           m->prg_ram_en = !(m->mmc1_data & 0x10);
           break;
       }
       if (m->mmc1_ctrl & 0x10) { // CHR 4KiB banks
-        LOG("chr4 bank0=%02hhx bank1=%02hhx\n", m->chr_bank[0], m->chr_bank[0]);
         set_chr_map(e, m->chr_bank[0], m->chr_bank[1]);
       } else { // CHR 8KiB banks
-        LOG("chr8 bank0=%02hhx bank1=%02hhx\n", m->chr_bank[0] * 2,
-            m->chr_bank[0] * 2 + 1);
         set_chr_map(e, m->chr_bank[0] * 2, m->chr_bank[0] * 2 + 1);
       }
 
       switch (m->mmc1_ctrl & 0xc) {
       case 0:
       case 4: // PRG 32KiB banks
-        LOG("prg bank0=%02hhx bank1=%02hhx\n", m->prg_bank * 2,
-            m->prg_bank * 2 + 1);
         set_prg_map(e, m->prg_bank * 2, m->prg_bank * 2 + 1);
         break;
       case 8: // bank0 is first, bank1 switches
-        LOG("prg bank0=%02hhx bank1=%02hhx\n", 0, m->prg_bank);
         set_prg_map(e, 0, m->prg_bank);
         break;
       case 12: // bank0 switches, bank1 is last
-        LOG("prg bank0=%02hhx bank1=%02hhx\n", m->prg_bank,
-            e->ci.prg_banks - 1);
         set_prg_map(e, m->prg_bank, e->ci.prg_banks - 1);
         break;
       }
