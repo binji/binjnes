@@ -214,26 +214,28 @@ static void shift_en(E *e) {
   // Decrement inactive counters. Active counters are always 0.
   spr->counter -= ones & ~active;
 
-  if (p->ppumask & 0x10) { // Show sprites.
+  // TODO: smarter way to avoid sprites on line 0?
+  if ((p->ppumask & 0x10) && p->scany != 0) { // Show sprites.
     // Find first non-zero sprite, if any.
     u64 non0 = (spr->shift[0] | spr->shift[1]) & active & his;
     if (non0) {
       int s = __builtin_ctzll(non0);
+      // Sprite 0 hit only occurs:
+      //  * When sprite and background are both enabled
+      //  * When sprite and background pixel are both opaque
+      //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
+      //  * When x!=255
+      //  * (sprite priority doesn't matter)
+      if ((((spr->spr0mask & non0) >> s) & spr->leftmask) && idx &&
+          p->scanx != 255) {
+        p->ppustatus |= 0x40;
+      }
+
       // Check if sprite is on transparent BG pixel, or has priority.
       if (!idx || (non0 & (-non0) & spr->pri)) {
         idx = ((((spr->shift[1] >> s) & spr->leftmask) << 1) & 2) |
               (((spr->shift[0] >> s) & spr->leftmask) & 1);
         pal = ((spr->pal >> (s - 7)) & 3) + 4;
-      }
-
-      // Sprite 0 hit only occurs:
-      //  * When sprite and background are both enabled
-      //  * When sprite and background pixel are both opaque
-      //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
-      //  * TODO When x!=255
-      //  * (sprite priority doesn't matter)
-      if ((((spr->spr0mask & non0) >> s) & spr->leftmask) && idx) {
-        p->ppustatus |= 0x40;
       }
     }
   }
@@ -256,6 +258,7 @@ static void shift_en(E *e) {
   u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   e->frame_buffer[p->fbidx++] = s_nespal[col];
+  p->scanx++;
 }
 
 static void shift_dis(E *e) {
@@ -263,6 +266,7 @@ static void shift_dis(E *e) {
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   // TODO: use p->v color if it is in the range [0x3f00,0x3f1f]
   e->frame_buffer[p->fbidx++] = s_nespal[p->palram[0]];
+  p->scanx++;
 }
 
 void ppu_step(E *e) {
@@ -306,7 +310,7 @@ repeat:
       case 11: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
       case 12: spr_step(e); break;
       case 13: ppu_t_to_v(p, 0x041f); break;
-      case 14: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
+      case 14: ppu_t_to_v(p, 0x7be0); p->scany = p->scanx = 0; break;
       case 15: p->cnt1 = cnst; break;
       case 16: p->cnt2 = cnst; break;
       case 17:
