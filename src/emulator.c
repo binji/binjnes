@@ -182,13 +182,13 @@ static inline void incv(P* p) {
        : (p->v & ~0x73e0) | ((p->v + 0x20) & 0x3e0);
 }
 
-static inline void shift_bg(E *e) {
+static void shift_bg(E *e) {
   P *p = &e->s.p;
   p->bgshift <<= 2;
   p->atshift = (p->atshift << 2) | p->atlatch;
 }
 
-static inline void shift(E *e) {
+static void shift_en(E *e) {
   const u64 ones = 0x0101010101010101ull;
   const u64 his = 0x8080808080808080ull;
   const u64 los = 0x7f7f7f7f7f7f7f7full;
@@ -258,6 +258,13 @@ static inline void shift(E *e) {
   e->frame_buffer[p->fbidx++] = s_nespal[col];
 }
 
+static void shift_dis(E *e) {
+  P* p = &e->s.p;
+  assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
+  // TODO: use p->v color if it is in the range [0x3f00,0x3f1f]
+  e->frame_buffer[p->fbidx++] = s_nespal[p->palram[0]];
+}
+
 void ppu_step(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
@@ -282,48 +289,49 @@ repeat:
       case 3: p->ptbh = read_ptb(e, 8); break;
       case 4: inch(p); break;
       case 5: incv(p); p->scany++; break;
-      case 6: shift(e); break;
-      case 7: shift_bg(e); break;
-      case 8:
+      case 6: shift_en(e); break;
+      case 7: shift_dis(e); break;
+      case 8: shift_bg(e); break;
+      case 9:
         p->bgshift = (p->bgshift & 0xffff0000) | interleave(p->ptbh, p->ptbl);
         p->atlatch = p->atb;
         break;
-      case 9:
+      case 10:
         spr->state = spr->s = spr->d = 0;
         spr->cnt = 32;
         spr->sovf = FALSE;
         spr->leftmask = (p->ppumask & 4) ? 0xff : 0;
         p->bgleftmask = (p->ppumask & 2) ? 0xffff : 0;
         break;
-      case 10: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
-      case 11: spr_step(e); break;
-      case 12: ppu_t_to_v(p, 0x041f); break;
-      case 13: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
-      case 14: p->cnt1 = cnst; break;
-      case 15: p->cnt2 = cnst; break;
-      case 16:
+      case 11: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
+      case 12: spr_step(e); break;
+      case 13: ppu_t_to_v(p, 0x041f); break;
+      case 14: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
+      case 15: p->cnt1 = cnst; break;
+      case 16: p->cnt2 = cnst; break;
+      case 17:
         p->fbidx = 0;
         if ((p->oddframe ^= 1) && (p->ppumask & 8)) { goto repeat; }
         break;
-      case 17: z = --p->cnt1 == 0; break;
-      case 18: z = --p->cnt2 == 0; break;
-      case 19: if (!z) { p->state = cnst; } break;
-      case 20: if (z) { p->state = cnst; } break;
-      case 21:
+      case 18: z = --p->cnt1 == 0; break;
+      case 19: z = --p->cnt2 == 0; break;
+      case 20: if (!z) { p->state = cnst; } break;
+      case 21: if (z) { p->state = cnst; } break;
+      case 22:
         if (p->ppuctrl & 0x80) { e->s.c.has_nmi = TRUE; }
         p->ppustatus |= 0x80;
         e->s.event |= EMULATOR_EVENT_NEW_FRAME;
         break;
-      case 22: p->ppustatus = 0; break;
-      case 23: p->state = cnst; break;
+      case 23: p->ppustatus = 0; break;
+      case 24: p->state = cnst; break;
       default:
         FATAL("NYI: ppu step %d\n", bit);
     }
   }
 }
 
-static const u32 s_ppu_enabled_mask =  0b111111111111111111111111;
-static const u32 s_ppu_disabled_mask = 0b111111111100111000000000;
+static const u32 s_ppu_enabled_mask =  0b1111111111111111101111111;
+static const u32 s_ppu_disabled_mask = 0b1111111111001110010000000;
 static const u16 s_ppu_consts[] = {
     [0] = 240, [1] = 32,    [7] = 10,  [9] = 2,   [11] = 63,
     [12] = 12, [13] = 2,    [21] = 14, [25] = 1,  [26] = 340,
@@ -332,66 +340,66 @@ static const u16 s_ppu_consts[] = {
     [44] = 15, [45] = 45,   [46] = 2,  [54] = 47, [57] = 0,
 };
 static const u32 s_ppu_bits[] = {
-//  222211111111110000000000
-//  321098765432109876543210
-  0b000000010100001000000000,  //  0: cnt1=240,+spreval,(skip if odd frame + BG)
-  0b000000001000100000000001,  //  1: ntb=read(nt(v)),cnt2=32,spr
-  0b000000000000100001000000,  //  2: shift,spr
-  0b000000000000100001000010,  //  3: atb=read(at(v)),shift,spr
-  0b000000000000100001000000,  //  4: shift,spr
-  0b000000000000100001000100,  //  5: ptbl=read(pt(ntb)),shift,spr
-  0b000000000000100001000000,  //  6: shift,spr
-  0b000101000000100001001000,  //  7: ptbh=read(pt(ntb)+8),shift,spr,--cnt2,jz #10
-  0b000000000000100001010000,  //  8: inch(v),shift,spr
-  0b100000000000100101000001,  //  9: ntb=read(nt(v)),shift,reload,spr,goto #2
-  0b000000000000100001100000,  // 10: incv(v),shift,spr
-  0b000000001001110101000000,  // 11: hori(v)=hori(t),shift,reload,+sprfetch,spr,cnt2=63
-  0b000011000000100000000000,  // 12: spr,--cnt2,jnz #12
-  0b000000001000000000000001,  // 13: ntb=read(nt(v)),cnt2=2
-  0b000000000000000010000000,  // 14: shiftN
-  0b000000000000000010000010,  // 15: atb=read(at(v)),shiftN
-  0b000000000000000010000000,  // 16: shiftN
-  0b000000000000000010000100,  // 17: ptbl=read(pt(ntb)),shiftN
-  0b000000000000000010000000,  // 18: shiftN
-  0b000000000000000010001000,  // 19: ptbh=read(pt(ntb)+8),shiftN
-  0b000000000000000010010000,  // 20: inch(v),shiftN
-  0b000011000000000110000001,  // 21: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #14
-  0b000000000000000000000000,  // 22:
-  0b000000000000000000000001,  // 23: ntb=read(nt(v))
-  0b000000000000000000000000,  // 24:
-  0b000010100000001000000000,  // 25: --cnt1,+spreval,jnz #1
-  0b000000001000000000000000,  // 26: cnt2=340
-  0b000011000000000000000000,  // 27: --cnt2,jnz #27
-  0b001000001000000000000000,  // 28: set vblank,cnt2=6819
-  0b000011000000000000000000,  // 29: --cnt2,jnz #29
-  0b010000001000000000000001,  // 30: ntb=read(nt(v)),clear flags,cnt2=32
-  0b000000000000000000000000,  // 31:
-  0b000000000000000000000010,  // 32: atb=read(at(v))
-  0b000000000000000000000000,  // 33:
-  0b000000000000000000000100,  // 34: ptbl=read(pt(ntb))
-  0b000000000000000000000000,  // 35:
-  0b000101000000000000001000,  // 36: ptbh=read(pt(ntb)+8),--cnt2,jz #39
-  0b000000000000000000010000,  // 37: inch(v)
-  0b100000000000000000000001,  // 38: ntb=read(nt(v)),goto #31
-  0b000000000000000000100000,  // 39: incv(v)
-  0b000000001001000000000000,  // 40: hori(v)=hori(t),cnt2=22
-  0b000011000000000000000000,  // 41: --cnt2,jnz #41
-  0b000000001000000000000000,  // 42: cnt2=24
-  0b000011000010000000000000,  // 43: vert(v)=vert(t),--cnt2,jnz #43
-  0b000000001000000000000000,  // 44: cnt2=15
-  0b000011000000000000000000,  // 45: --cnt2,jnz #45
-  0b000000001000000000000001,  // 46: ntb=read(nt(v)),cnt2=2
-  0b000000000000000010000000,  // 47: shiftN
-  0b000000000000000010000010,  // 48: atb=read(at(v)),shiftN
-  0b000000000000000010000000,  // 49: shiftN
-  0b000000000000000010000100,  // 50: ptbl=read(pt(ntb)),shiftN
-  0b000000000000000010000000,  // 51: shiftN
-  0b000000000000000010001000,  // 52: ptbh=read(pt(ntb)+8),shiftN
-  0b000000000000000010010000,  // 53: inch(v),shiftN
-  0b000011000000000110000001,  // 54: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #47
-  0b000000000000000000000000,  // 55:
-  0b000000000000000000000001,  // 56: read(nt(v))
-  0b100000000000000000000000,  // 57: goto #0
+//  2222211111111110000000000
+//  4321098765432109876543210
+  0b0000000101000010000000000,  //  0: cnt1=240,+spreval,(skip if odd frame + BG)
+  0b0000000010001000000000001,  //  1: ntb=read(nt(v)),cnt2=32,spr
+  0b0000000000001000011000000,  //  2: shift,spr
+  0b0000000000001000011000010,  //  3: atb=read(at(v)),shift,spr
+  0b0000000000001000011000000,  //  4: shift,spr
+  0b0000000000001000011000100,  //  5: ptbl=read(pt(ntb)),shift,spr
+  0b0000000000001000011000000,  //  6: shift,spr
+  0b0001010000001000011001000,  //  7: ptbh=read(pt(ntb)+8),shift,spr,--cnt2,jz #10
+  0b0000000000001000011010000,  //  8: inch(v),shift,spr
+  0b1000000000001001011000001,  //  9: ntb=read(nt(v)),shift,reload,spr,goto #2
+  0b0000000000001000011100000,  // 10: incv(v),shift,spr
+  0b0000000010011101011000000,  // 11: hori(v)=hori(t),shift,reload,+sprfetch,spr,cnt2=63
+  0b0000110000001000000000000,  // 12: spr,--cnt2,jnz #12
+  0b0000000010000000000000001,  // 13: ntb=read(nt(v)),cnt2=2
+  0b0000000000000000100000000,  // 14: shiftN
+  0b0000000000000000100000010,  // 15: atb=read(at(v)),shiftN
+  0b0000000000000000100000000,  // 16: shiftN
+  0b0000000000000000100000100,  // 17: ptbl=read(pt(ntb)),shiftN
+  0b0000000000000000100000000,  // 18: shiftN
+  0b0000000000000000100001000,  // 19: ptbh=read(pt(ntb)+8),shiftN
+  0b0000000000000000100010000,  // 20: inch(v),shiftN
+  0b0000110000000001100000001,  // 21: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #14
+  0b0000000000000000000000000,  // 22:
+  0b0000000000000000000000001,  // 23: ntb=read(nt(v))
+  0b0000000000000000000000000,  // 24:
+  0b0000101000000010000000000,  // 25: --cnt1,+spreval,jnz #1
+  0b0000000010000000000000000,  // 26: cnt2=340
+  0b0000110000000000000000000,  // 27: --cnt2,jnz #27
+  0b0010000010000000000000000,  // 28: set vblank,cnt2=6819
+  0b0000110000000000000000000,  // 29: --cnt2,jnz #29
+  0b0100000010000000000000001,  // 30: ntb=read(nt(v)),clear flags,cnt2=32
+  0b0000000000000000000000000,  // 31:
+  0b0000000000000000000000010,  // 32: atb=read(at(v))
+  0b0000000000000000000000000,  // 33:
+  0b0000000000000000000000100,  // 34: ptbl=read(pt(ntb))
+  0b0000000000000000000000000,  // 35:
+  0b0001010000000000000001000,  // 36: ptbh=read(pt(ntb)+8),--cnt2,jz #39
+  0b0000000000000000000010000,  // 37: inch(v)
+  0b1000000000000000000000001,  // 38: ntb=read(nt(v)),goto #31
+  0b0000000000000000000100000,  // 39: incv(v)
+  0b0000000010010000000000000,  // 40: hori(v)=hori(t),cnt2=22
+  0b0000110000000000000000000,  // 41: --cnt2,jnz #41
+  0b0000000010000000000000000,  // 42: cnt2=24
+  0b0000110000100000000000000,  // 43: vert(v)=vert(t),--cnt2,jnz #43
+  0b0000000010000000000000000,  // 44: cnt2=15
+  0b0000110000000000000000000,  // 45: --cnt2,jnz #45
+  0b0000000010000000000000001,  // 46: ntb=read(nt(v)),cnt2=2
+  0b0000000000000000100000000,  // 47: shiftN
+  0b0000000000000000100000010,  // 48: atb=read(at(v)),shiftN
+  0b0000000000000000100000000,  // 49: shiftN
+  0b0000000000000000100000100,  // 50: ptbl=read(pt(ntb)),shiftN
+  0b0000000000000000100000000,  // 51: shiftN
+  0b0000000000000000100001000,  // 52: ptbh=read(pt(ntb)+8),shiftN
+  0b0000000000000000100010000,  // 53: inch(v),shiftN
+  0b0000110000000001100000001,  // 54: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #47
+  0b0000000000000000000000000,  // 55:
+  0b0000000000000000000000001,  // 56: read(nt(v))
+  0b1000000000000000000000000,  // 57: goto #0
 };
 
 static inline Bool y_in_range(E *e, u8 y) {
