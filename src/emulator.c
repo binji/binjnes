@@ -563,8 +563,7 @@ u8 cpu_read(E *e, u16 addr) {
         return result;
       }
       case 4:
-        // TODO: don't increment during vblank/forced blank
-        return e->s.p.oam[e->s.p.oamaddr++];
+        return e->s.p.oam[e->s.p.oamaddr];
       case 7: {
         u8 result = ppu_read(e, e->s.p.v);
         inc_ppu_addr(&e->s.p);
@@ -869,7 +868,7 @@ void cpu_step(E *e) {
       case 1: c->bushi = 1; c->buslo = c->S; break;
       case 2: c->bushi = c->TH; c->buslo = c->TL; break;
       case 3: c->bushi = 0xff; c->buslo = c->veclo; break;
-      case 4: c->bushi = c->oamhi; c->buslo = 0; break;
+      case 4: c->bushi = c->oamhi; c->buslo = e->s.p.oamaddr; break;
       case 5: e->s.p.oam[c->buslo] = c->TL; break;
       case 6: ++c->buslo; break;
       case 7: c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo)); break;
