@@ -816,6 +816,13 @@ void mapper2_write(E *e, u16 addr, u8 val) {
   set_prg_map(e, m->prg_bank, e->ci.prg_banks - 1);
 }
 
+void mapper3_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  assert(addr >= 0x8000);
+  m->chr_bank[0] = val & (e->ci.chr_banks - 1);
+  set_chr_map(e, m->chr_bank[0] * 2, m->chr_bank[0] * 2 + 1);
+}
+
 static inline u8 get_P(E *e, Bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
          (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
@@ -1447,6 +1454,10 @@ Result init_mapper(E *e) {
   case 2:
     e->s.m.prg_bank = 0;
     e->cpu_write = mapper2_write;
+    goto shared;
+  case 3:
+    e->s.m.prg_bank = 0;
+    e->cpu_write = mapper3_write;
     goto shared;
 
 
