@@ -560,12 +560,14 @@ static void apu_tick(E *e) {
   // Update triangle.
   // The sequencer is clocked by the timer as long as both the linear counter
   // and the length counter are nonzero.
-  if (a->tricnt && a->len[2] && a->timer[2]-- == 0) {
-    a->timer[2] = ((a->reg[0xb] & 7) << 8) | a->reg[0xa];
-    if (++a->seq[2] == 31) { a->seq[2] = 0; }
-    a->sample[2] = tri[a->seq[2]];
+  if (a->tricnt && a->len[2]) {
+    if (a->timer[2]-- == 0) {
+      a->timer[2] = ((a->reg[0xb] & 7) << 8) | a->reg[0xa];
+      a->seq[2] = (a->seq[2] + 1) & 31;
+      a->sample[2] = tri[a->seq[2]];
+    }
+    a->accum[2] += a->sample[2];
   }
-  a->accum[2] += a->sample[2];
 
   // TODO: update noise, DMC
 
