@@ -23,7 +23,6 @@
 #define MAX_PRINT_OPS_LIMIT 512
 #define MAX_PROFILE_LIMIT 1000
 #define PPU_FRAME_TICKS 89342
-#define CPU_TICKS_PER_SECOND 1789772
 
 static const char* s_joypad_filename;
 static int s_frames = DEFAULT_FRAMES;

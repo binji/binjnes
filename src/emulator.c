@@ -27,6 +27,16 @@
 #define DEBUG(...) (void)0
 #endif
 
+/* Additional samples so the AudioBuffer doesn't overflow. This could happen
+ * because the audio buffer is updated at the granularity of an instruction, so
+ * the most extra frames that could be added is equal to the Apu tick count
+ * of the slowest instruction. */
+#define AUDIO_BUFFER_EXTRA_FRAMES 256
+
+#define DIV_CEIL(numer, denom) (((numer) + (denom) - 1) / (denom))
+#define VALUE_WRAPPED(X, MAX) \
+  (UNLIKELY((X) >= (MAX) ? ((X) -= (MAX), TRUE) : FALSE))
+
 typedef Emulator E;
 typedef EmulatorConfig EConfig;
 typedef EmulatorEvent EEvent;
@@ -537,84 +547,225 @@ static void apu_tick(E *e) {
   // Update pulse1, pulse2.
   for (int i = 0; i < 2; ++i) {
     if (a->timer[i]-- == 0) {
-      a->timer[i] = ((a->reg[3 + i * 4] & 7) << 8) | a->reg[2 + i * 4];
+      u16 timer = ((a->reg[3 + i * 4] & 7) << 8) | a->reg[2 + i * 4];
+      a->timer[i] = timer;
       a->seq[i] = (a->seq[i] >> 1) | (a->seq[i] << 7);
       a->sample[i] = (duty[a->reg[2 + i] >> 6] & a->seq[i]) ? 0xff : 0;
     }
-    a->accum[i] += a->sample[i] & a->vol[i];
+    if (a->len[i]) { // TODO: Also mute if sweep is out of range
+      a->accum[i] += a->sample[i] & a->vol[i];
+    }
   }
 
   // Update triangle.
-  if (a->timer[2]-- == 0) {
+  // The sequencer is clocked by the timer as long as both the linear counter
+  // and the length counter are nonzero.
+  if (a->tricnt && a->len[2] && a->timer[2]-- == 0) {
     a->timer[2] = ((a->reg[0xb] & 7) << 8) | a->reg[0xa];
     if (++a->seq[2] == 31) { a->seq[2] = 0; }
     a->sample[2] = tri[a->seq[2]];
   }
   a->accum[2] += a->sample[2];
-  a->divisor++;
 
   // TODO: update noise, DMC
+
+  AudioBuffer* ab = &e->audio_buffer;
+  ++ab->divisor;
+  ab->freq_counter += ab->frequency;
+  if (VALUE_WRAPPED(ab->freq_counter, APU_TICKS_PER_SECOND)) {
+    int channels = 0;
+    u32 accum = 0;
+    accum += a->accum[0]; channels++; a->accum[0] = 0;
+    accum += a->accum[1]; channels++; a->accum[1] = 0;
+    accum += a->accum[2]; channels++; a->accum[2] = 0;
+    accum <<= 4; /* 4bit -> 8bit samples. */
+    accum /= channels;
+    *ab->position++ = accum / ab->divisor;
+    ab->divisor = 0;
+  }
+  assert(ab->position <= ab->end);
 }
 
-static void apu_quarter(E *e) {}
+static void apu_quarter(E *e) {
+  DEBUG("    1/4 (cy: %"PRIu64"\n", e->s.cy);
+  A* a = &e->s.a;
+  // pulse 1, pulse 2, noise envelope
+  for (int i = 0; i < 3; ++i) {
+    static const int regs[] = {0, 4, 12};
+    u8 reg = a->reg[regs[i]];
+    // (if the start flag is set)...
+    if (a->start[i]) {
+      // ... the start flag is cleared...
+      a->start[i] = FALSE;
+      // ... the decay level counter is loaded with 15...
+      a->decay[i] = 15;
+      // ... and the divider's period is immediately reloaded.
+      a->envdiv[i] = reg & 0xf;
+    // If the start flag is clear, the divider is clocked...
+    } else if (a->envdiv[i]) {
+      --a->envdiv[i];
+    } else {
+      // ... if the divider is clocked while at 0, it is loaded with V, and
+      // clocks the decay level counter.
+      a->envdiv[i] = reg & 0xf;
+      if (a->decay[i]) {
+        // if the counter is non-zero, it is decremented.
+        --a->decay[i];
+        // otherwise if the loop flag is set...
+      } else if (reg & 0x20) {
+        // the decay level counter is loaded with 15.
+        a->decay[i] = 15;
+      }
+      // The envelope unit's volume output depends on the constant volume flag.
+      if (!(reg & 0x10)) {
+        a->vol[i] = a->decay[i];
+      }
+    }
+  }
 
-static void apu_half(E *e) {}
+  // triangle linear counter
+  // If the linear counter reload flag is set,
+  if (a->reload[2]) {
+    // ... the linear counter is reloaded with the counter reload value.
+    a->tricnt = a->reg[8] & 0x7f;
+  } else if (a->tricnt) {
+    // ... otherwise if the linear counter is non-zero, it is decremented.
+    --a->tricnt;
+  }
+  // If the control flag is clear, the linear counter reload flag is cleared.
+  if (!(a->reg[8] & 0x80)) {
+    a->reload[2] = FALSE;
+  }
+}
+
+static void apu_half(E *e) {
+  DEBUG("    1/2 (cy: %"PRIu64"\n", e->s.cy);
+  A* a = &e->s.a;
+  // length counter
+  for (int i = 0; i < 4; ++i) {
+    if (a->reg[0x15] & (1 << i)) {
+      static const int haltregs[] = {0, 0, 8, 0xc}; // No pulse halt.
+      static const int haltbit[] = {0, 0, 0x80, 0x20};
+      // When clocked by the frame counter, the length counter is decremented
+      // except when:
+      // * The length counter is 0, or
+      // * The halt flag is set
+      if (a->len[i] && (a->reg[haltregs[i]] & haltbit[i])) {
+        --a->len[i];
+      }
+    } else {
+      // When the enabled bit is cleared (via $4015), the length counter is
+      // forced to 0 and cannot be changed until enabled is set again (the
+      // length counter's previous value is lost). There is no immediate effect
+      // when enabled is set.
+      a->len[i] = 0;
+    }
+  }
+
+  // sweep unit
+  u16 period[] = {((a->reg[3] & 7) << 8) | a->reg[2],
+                  ((a->reg[7] & 7) << 8) | a->reg[6]};
+  u16 diff[] = {period[0] >> (a->reg[1] & 7), period[1] >> (a->reg[5] & 7)};
+  if (a->reg[1] & 8) { diff[0] ^= 0xffff; }
+  if (a->reg[5] & 8) { diff[1] = -diff[1]; }
+  u16 target[] = {period[0] + diff[0], period[1] + diff[1]};
+  Bool mute[] = {target[0] >= 0x7ff || period[0] < 8,
+                 target[1] >= 0x7ff || period[1] < 8};
+  for (int i = 0; i < 2; ++i) {
+    // If the divider's counter is zero, the sweep is enabled, and the sweep
+    // unit is not muting the channel: The pulse's period is adjusted.
+    if (a->sweepdiv[i] == 0 && (a->reg[1 + i * 4] & 0x80) && !mute[i]) {
+      a->reg[2 + i * 4] = target[i] & 0xff;
+      a->reg[3 + i * 4] = (a->reg[3 + i * 4] & 0xf8) | ((target[i] >> 8) & 7);
+      LOG("      sweep %u = %u\n", i, target[i]);
+    }
+
+    // If the divider's counter is zero or the reload flag is true: The counter
+    // is set to P and the reload flag is cleared. Otherwise, the counter is
+    // decremented.
+    if (a->sweepdiv[i] == 0 || a->reload[i]) {
+      a->sweepdiv[i] = (a->reg[1 + i * 4] >> 4) & 7;
+      a->reload[i] = FALSE;
+    } else {
+      --a->sweepdiv[i];
+    }
+  }
+}
 
 void apu_step(E *e) {
   Bool more;
   A* a = &e->s.a;
   do {
     more = FALSE;
-    u16 next_state = a->state + 1;
-    Bool z = FALSE;
-    u16 bits = s_apu_bits[a->state];
-    u16 cnst = s_apu_consts[bits & 3];
-    bits = (bits >> 3);
+    u16 cnst = s_apu_consts[a->state];
+    u16 bits = s_apu_bits[a->state++];
     while (bits) {
       int bit = __builtin_ctzl(bits);
+      bits &= bits - 1;
       switch (bit) {
         case 0: more = TRUE; break;
         case 1: apu_tick(e); break; // tick
         case 2: apu_quarter(e); break; // quarter
         case 3: apu_half(e); break; // half
-        case 4: if (--a->cnt ==0) { next_state = cnst; bits = 0; } break;
+        case 4: if (--a->cnt != 0) { a->state = cnst; bits = 0; } break;
         case 5: break; // irq
         case 6: a->cnt = cnst; break;
         case 7: a->cnt = (a->reg[0x17] & 0x80) ? 7455 : 3729; break;
-        case 8: next_state = cnst; break;
+        case 8: a->state = cnst; break;
         default:
           FATAL("NYI: apu step %d\n", bit);
       }
-      bits &= bits - 1;
     }
-    a->state = next_state;
   } while (more);
 }
 
 static const u16 s_apu_consts[] = {
-    [0] = 0, [1] = 1, [2] = 4, [3] = 7, [4] = 10, [5] = 3728, [6] = 3729,
+    [0] = 3728, [2] = 1, [3] = 3728, [5] = 4,
+    [6] = 3729, [8] = 7, [11] = 10,  [13] = 0,
 };
-#define X(b,n) ((b)<<3|(n))
 static const u16 s_apu_bits[] = {
-   // 876543210
-  X(0b001000001, 0),  //  0: more=T,cnt=3728               0.5
-  X(0b000000000, 0),  //  1:                               0.5
-  X(0b000010010, 0),  //  2: tick,--cnt,jnz 1              3728
-  X(0b001000101, 0),  //  3: more=T,quarter,cnt=3728       3728.5
-  X(0b000000000, 0),  //  4:                               0.5
-  X(0b000010010, 0),  //  5: tick,--cnt,jnz 4              7456
-  X(0b001001101, 0),  //  6: more=T,quarter,half,cnt=3729  7456.5
-  X(0b000000000, 0),  //  7:                               0.5
-  X(0b000010010, 0),  //  8: tick,--cnt,jnz 7              11185
-  X(0b010000101, 0),  //  9: more=T,quarter,cnt=3729/7455  11185.5
-  X(0b000000000, 0),  // 10:                               0.5
-  X(0b000110010, 0),  // 11: tick,--cnt,jnz 10,irq         14914
-  X(0b000101101, 0),  // 12: more=T,quarter,half,irq       14914.5
-  X(0b100100000, 0),  // 13: irq,goto 0                    14915
+ // 876543210
+  0b001000001,  //  0: more=T,cnt=3728               0.5
+  0b000000000,  //  1:                               0.5
+  0b000010010,  //  2: tick,--cnt,jnz 1              3728
+  0b001000101,  //  3: more=T,quarter,cnt=3728       3728.5
+  0b000000000,  //  4:                               0.5
+  0b000010010,  //  5: tick,--cnt,jnz 4              7456
+  0b001001101,  //  6: more=T,quarter,half,cnt=3729  7456.5
+  0b000000000,  //  7:                               0.5
+  0b000010010,  //  8: tick,--cnt,jnz 7              11185
+  0b010000101,  //  9: more=T,quarter,cnt=3729/7455  11185.5
+  0b000000000,  // 10:                               0.5
+  0b000110010,  // 11: tick,--cnt,jnz 10,irq         14914
+  0b000101101,  // 12: more=T,quarter,half,irq       14914.5
+  0b100100000,  // 13: irq,goto 0                    14915
 };
-#undef X
 
 // CPU stuff ///////////////////////////////////////////////////////////////////
+
+static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
+#if LOGLEVEL > 1
+  u8 cval[256] = {0};
+  char new_chrs[9] = {0};
+  for (int i = 0; i < 8; ++i) {
+    Bool set = !!(val & (0x80 >> i));
+    new_chrs[i] = set ? chrs[i] : (chrs[i] | 32);
+    cval[(int)chrs[i]] = (cval[(int)chrs[i]] << 1) | set;
+  }
+  LOG("     write(%04hx, %02hhx) %c%c%c%c%c (%s)", addr, val,
+      channel == 0 ? '1' : ' ', channel == 1 ? '2' : ' ',
+      channel == 2 ? 'T' : ' ', channel == 3 ? 'N' : ' ',
+      channel == 4 ? 'D' : ' ', new_chrs);
+  int seen[256] = {0};
+  for (int i = 0; i < 8; ++i) {
+    if (!seen[(int)chrs[i]]) {
+      LOG(" %c=%d", chrs[i], cval[(int)chrs[i]]);
+      seen[(int)chrs[i]] = 1;
+    }
+  }
+  LOG("\n");
+#endif
+}
 
 static inline void inc_ppu_addr(P* p) {
   p->v = (p->v + ((p->ppuctrl & 4) ? 32 : 1)) & 0x3fff;
@@ -630,6 +781,9 @@ static inline void read_joyp(E *e, Bool write) {
                        (btns[i].down << 5) | (btns[i].up << 4) |
                        (btns[i].start << 3) | (btns[i].select << 2) |
                        (btns[i].B << 1) | (btns[i].A << 0);
+      if (e->s.j.joyp[i]) {
+        print_byte(0x4016+i, e->s.j.joyp[i], 5, "RLDUTEBA");
+      }
     }
   }
 }
@@ -666,6 +820,10 @@ u8 cpu_read(E *e, u16 addr) {
 
   case 4: // APU & I/O
     switch (addr - 0x4000) {
+      case 0x15: {
+        LOG("*** NYI: read($%04x)\n", addr);
+        return e->s.c.open_bus;
+      }
       case 0x16: { // JOY1
         read_joyp(e, FALSE);
         u8 result = (e->s.c.open_bus & ~0x1f) | (e->s.j.joyp[0] & 1);
@@ -679,7 +837,7 @@ u8 cpu_read(E *e, u16 addr) {
         return result;
       }
       default:
-        LOG("*** NYI: read($%04x)\n", addr);
+        DEBUG("*** NYI: read($%04x)\n", addr);
         break;
     }
     break;
@@ -699,7 +857,7 @@ u8 cpu_read(E *e, u16 addr) {
 void cpu_write(E *e, u16 addr, u8 val) {
   P* p = &e->s.p;
   e->s.c.bus_write = TRUE;
-  LOG("     write(%04hx, %02hhx)\n", addr, val);
+  DEBUG("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
     e->s.c.ram[addr & 0x7ff] = val;
@@ -760,22 +918,64 @@ void cpu_write(E *e, u16 addr, u8 val) {
       u16 oldv = p->v;
       ppu_write(e, p->v, val);
       inc_ppu_addr(p);
-      LOG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, p->v);
+      DEBUG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, p->v);
     }
     }
     break;
   }
 
-  case 4: // APU & I/O
+  case 4: { // APU & I/O
+    static const u8 lens[] = {
+        10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,
+        12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30,
+    };
+    static const char* bitnames[] = {
+      "DDLCNNNN", "EPPPNSSS", "LLLLLLLL", "LLLLLHHH",
+      "DDLCNNNN", "EPPPNSSS", "LLLLLLLL", "LLLLLHHH",
+      "CRRRRRRR", "XXXXXXXX", "LLLLLLLL", "LLLLLHHH",
+      "XXLCNNNN", "XXXXXXXX", "LXXXPPPP", "LLLLLXXX",
+      "ILXXFFFF", "XDDDDDDD", "AAAAAAAA", "LLLLLLLL",
+      "XXXXXXXX",
+      "XXXDNTPP", "XXXXXXXX", "SDXXXXXX",
+    };
+    static int channels[] = {
+      0, 0, 0, 0,
+      1, 1, 1, 1,
+      2, 2, 2, 2,
+      3, 3, 3, 3,
+      4, 4, 4, 4,
+      5,
+      5, 5, 5,
+    };
+    A* a = &e->s.a;
+    u8 len = lens[val >> 3];
+
     switch (addr - 0x4000) {
-      case 0x00: case 0x01: case 0x02: case 0x03:             // Pulse 1
-      case 0x04: case 0x05: case 0x06: case 0x07:             // Pulse 2
-      case 0x08: case 0x0a: case 0x0b:                        // Triangle
-      case 0x0c: case 0x0e: case 0x0f:                        // Noise
+#if 1
+      case 0x03: a->len[0] = len; a->seq[0] = 0x80; a->start[0] = TRUE;
+        LOG("      timer 0 = %u\n", ((val & 7) << 8) | a->reg[2]);
+        goto apu;
+      case 0x07: a->len[1] = len; a->seq[1] = 0x80; a->start[1] = TRUE;
+        LOG("      timer 1 = %u\n", ((val & 7) << 8) | a->reg[6]);
+        goto apu;
+      case 0x0b: a->len[2] = len; a->reload[2] = TRUE; goto apu;
+      case 0x0f: a->len[3] = len; goto apu; // TODO
+
+      case 0x00: if (val & 0x10) { a->vol[0] = val & 0xf; } goto apu;
+      case 0x04: if (val & 0x10) { a->vol[1] = val & 0xf; } goto apu;
+      case 0x0c: if (val & 0x10) { a->vol[3] = val & 0xf; } goto apu;
+
+      case 0x01: case 0x02:             // Pulse 1
+      case 0x05: case 0x06:             // Pulse 2
+      case 0x08: case 0x0a:             // Triangle
+      case 0x0e:                        // Noise
       case 0x10: case 0x11: case 0x12: case 0x13: case 0x15:  // DMC
       case 0x17:                                              // Frame counter
-        e->s.a.reg[addr - 0x4000] = val;
+      apu:
+        print_byte(addr, val, channels[addr-0x4000], bitnames[addr-0x4000]);
+        a->reg[addr - 0x4000] = val;
         break;
+#endif
 
       case 0x14: {   // OAMDMA
         e->s.c.oamhi = val;
@@ -792,6 +992,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
         break;
     }
     break;
+  }
 
   case 6: case 7:
     if (e->s.m.prg_ram_en) {
@@ -1583,10 +1784,25 @@ Result init_emulator(E *e, const EInit *init) {
   ON_ERROR_RETURN;
 }
 
+Result init_audio_buffer(Emulator* e, u32 frequency, u32 frames) {
+  AudioBuffer* audio_buffer = &e->audio_buffer;
+  audio_buffer->frames = frames;
+  size_t buffer_size = (frames + AUDIO_BUFFER_EXTRA_FRAMES);
+  audio_buffer->data = xmalloc(buffer_size);
+  CHECK_MSG(audio_buffer->data != NULL, "Audio buffer allocation failed.\n");
+  audio_buffer->end = audio_buffer->data + buffer_size;
+  audio_buffer->position = audio_buffer->data;
+  audio_buffer->frequency = frequency;
+  return OK;
+  ON_ERROR_RETURN;
+}
+
 E *emulator_new(const EInit *init) {
   E *e = xcalloc(1, sizeof(E));
   CHECK(SUCCESS(set_rom_file_data(e, &init->rom)));
   CHECK(SUCCESS(init_emulator(e, init)));
+  CHECK(
+      SUCCESS(init_audio_buffer(e, init->audio_frequency, init->audio_frames)));
   return e;
 error:
   emulator_delete(e);
@@ -1613,7 +1829,13 @@ EConfig emulator_get_config(E *e) { return e->config; }
 
 FrameBuffer *emulator_get_frame_buffer(E *e) { return &e->frame_buffer; }
 
+AudioBuffer *emulator_get_audio_buffer(E *e) { return &e->audio_buffer; }
+
 Ticks emulator_get_ticks(E *e) { return e->s.cy; }
+
+u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
+  return audio_buffer->position - audio_buffer->data;
+}
 
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
@@ -1622,14 +1844,35 @@ static void emulator_step_internal(E *e) {
   ppu_step(e);
   ppu_step(e);
   ppu_step(e);
+  apu_step(e);
   e->s.cy += 3;  // Host counts PPU cycles, not CPU.
 }
 
 EEvent emulator_run_until(E *e, Ticks until_ticks) {
+  AudioBuffer* ab = &e->audio_buffer;
+  if (e->s.event & EMULATOR_EVENT_AUDIO_BUFFER_FULL) {
+    ab->position = ab->data;
+  }
   e->s.event = 0;
-  Ticks check_ticks = until_ticks;
+
+  u64 frames_left = ab->frames - audio_buffer_get_frames(ab);
+  Ticks max_audio_ticks =
+      e->s.cy +
+      (u32)DIV_CEIL(frames_left * PPU_TICKS_PER_SECOND, ab->frequency);
+  Ticks check_ticks = MIN(until_ticks, max_audio_ticks);
   while (e->s.event == 0 && e->s.cy < check_ticks) {
     emulator_step_internal(e);
+  }
+  if (e->s.cy >= max_audio_ticks) {
+    e->s.event |= EMULATOR_EVENT_AUDIO_BUFFER_FULL;
+#if 0
+    int frames = audio_buffer_get_frames(ab);
+    for (int i = 0; i < frames; ++i) {
+      if (i && (i & 31) == 0) { printf("\n"); }
+      printf("%02x ", ab->data[i]);
+    }
+    printf("\n");
+#endif
   }
   if (e->s.cy >= until_ticks) {
     e->s.event |= EMULATOR_EVENT_UNTIL_TICKS;

@@ -9,6 +9,10 @@
 #include "emulator.h"
 #include "host.h"
 
+// TODO: make these configurable?
+#define AUDIO_FREQUENCY 44100
+#define AUDIO_FRAMES 2048 /* ~46ms of latency at 44.1kHz */
+
 static struct Emulator* e;
 static struct Host* host;
 
@@ -17,6 +21,7 @@ static const char* s_read_joypad_filename;
 static Bool s_running = TRUE;
 static Bool s_step_frame;
 static Bool s_paused;
+static f32 s_audio_volume = 0.5f;
 static u32 s_render_scale = 4;
 
 static void key_down(HostHookContext *ctx, HostKeycode code) {
@@ -41,6 +46,8 @@ int main(int argc, char **argv) {
   EmulatorInit emulator_init;
   ZERO_MEMORY(emulator_init);
   emulator_init.rom = rom;
+  emulator_init.audio_frequency = AUDIO_FREQUENCY;
+  emulator_init.audio_frames = AUDIO_FRAMES;
   emulator_init.random_seed = 0;
   e = emulator_new(&emulator_init);
   CHECK(e != NULL);
@@ -50,6 +57,9 @@ int main(int argc, char **argv) {
   host_init.hooks.key_down = key_down;
   host_init.hooks.key_up = key_up;
   host_init.render_scale = s_render_scale;
+  host_init.audio_frequency = AUDIO_FREQUENCY;
+  host_init.audio_frames = AUDIO_FRAMES;
+  host_init.audio_volume = s_audio_volume;
   host = host_new(&host_init, e);
   CHECK(host != NULL);
 

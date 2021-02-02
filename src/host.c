@@ -27,7 +27,7 @@
 
 typedef f32 HostAudioSample;
 #define AUDIO_SPEC_FORMAT AUDIO_F32
-#define AUDIO_SPEC_CHANNELS 2
+#define AUDIO_SPEC_CHANNELS 1
 #define AUDIO_SPEC_SAMPLE_SIZE sizeof(HostAudioSample)
 #define AUDIO_FRAME_SIZE (AUDIO_SPEC_SAMPLE_SIZE * AUDIO_SPEC_CHANNELS)
 #define AUDIO_CONVERT_SAMPLE_FROM_U8(X, fvol) ((fvol) * (X) * (1 / 255.0f))
@@ -198,7 +198,35 @@ void host_set_audio_volume(Host* host, f32 volume) {
 }
 
 void host_render_audio(Host* host) {
-  // TODO
+  Emulator* e = host_get_emulator(host);
+  Audio* audio = &host->audio;
+  AudioBuffer* audio_buffer = emulator_get_audio_buffer(e);
+
+  size_t src_frames = audio_buffer_get_frames(audio_buffer);
+  size_t max_dst_frames = audio->spec.size / AUDIO_FRAME_SIZE;
+  size_t frames = MIN(src_frames, max_dst_frames);
+  u8* src = audio_buffer->data;
+  HostAudioSample* dst = (HostAudioSample*)audio->buffer;
+  HostAudioSample* dst_end = dst + frames * AUDIO_SPEC_CHANNELS;
+  assert((u8*)dst_end <= audio->buffer + audio->spec.size);
+  f32 volume = audio->volume;
+  size_t i;
+  for (i = 0; i < frames; i++) {
+    assert(dst + 1 <= dst_end);
+    *dst++ = AUDIO_CONVERT_SAMPLE_FROM_U8(*src++, volume);
+  }
+  u32 queued_size = SDL_GetQueuedAudioSize(audio->dev);
+  if (queued_size < AUDIO_MAX_QUEUED_SIZE) {
+    u32 buffer_size = (u8*)dst_end - (u8*)audio->buffer;
+    SDL_QueueAudio(audio->dev, audio->buffer, buffer_size);
+    HOOK(audio_add_buffer, queued_size, queued_size + buffer_size);
+    queued_size += buffer_size;
+  }
+  if (!audio->ready && queued_size >= AUDIO_TARGET_QUEUED_SIZE) {
+    HOOK(audio_buffer_ready, queued_size);
+    audio->ready = TRUE;
+    SDL_PauseAudioDevice(audio->dev, 0);
+  }
 }
 
 static void joypad_callback(JoypadButtons* joyp, void* user_data) {
@@ -300,8 +328,6 @@ Result host_init(Host* host, Emulator* e) {
   return OK;
   ON_ERROR_RETURN;
 }
-
-#define PPU_TICKS_PER_SECOND 5369318
 
 EmulatorEvent host_run_ms(struct Host* host, f64 delta_ms) {
   Emulator* e = host_get_emulator(host);

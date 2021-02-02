@@ -15,6 +15,9 @@ extern "C" {
 
 #define SCREEN_WIDTH 256
 #define SCREEN_HEIGHT 240
+#define PPU_TICKS_PER_SECOND 5369318
+#define CPU_TICKS_PER_SECOND 1789772
+#define APU_TICKS_PER_SECOND 894886
 
 typedef void (*JoypadCallback)(struct JoypadButtons joyp[2], void* user_data);
 
@@ -24,6 +27,16 @@ typedef struct JoypadCallbackInfo {
 } JoypadCallbackInfo;
 
 typedef RGBA FrameBuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+
+typedef struct AudioBuffer {
+  u32 frequency;    /* Sample frequency, as N samples per second */
+  u32 freq_counter; /* Used for resampling; [0..APU_TICKS_PER_SECOND). */
+  u32 divisor;
+  u32 frames; /* Number of frames to generate per call to emulator_run. */
+  u8* data;   /* Unsigned 8-bit 1-channel samples @ |frequency| */
+  u8* end;
+  u8* position;
+} AudioBuffer;
 
 typedef struct EmulatorInit {
   FileData rom;
@@ -101,9 +114,18 @@ typedef struct {
 } P;
 
 typedef struct {
+  //                                           |-   envelope   -| |-   sweep   -|
+  //            accum len sample vol seq timer start envdiv decay sweepdiv reload
+  // Pulse 1    0     0   0      0   0   0     0     0      0     0        0
+  // Pulse 2    1     1   1      1   1   1     1     1      1     1        1
+  // Triangle   2     2   2          2   2                                 2*
+  // Noise      3     3   3      2             2     2      2
+  // DMC        4         4      3
   u32 accum[5], divisor;
   u16 cnt, timer[3];
-  u8 state, sample[3], seq[2], len[4], vol[5], reg[0x18];
+  u8 state, sample[5], seq[3], len[4], vol[4], envdiv[3], sweepdiv[2],
+      reg[0x18], decay[3], tricnt;
+  Bool reload[3], start[3];
 } A;
 
 typedef struct {
@@ -128,6 +150,7 @@ typedef struct Emulator {
   u8 *prg_rom_map[2], *nt_map[4], *chr_map[2], *chr_map_write[2];
   void (*cpu_write)(struct Emulator*, u16, u8);
   FrameBuffer frame_buffer;
+  AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
 } Emulator;
 
@@ -140,6 +163,8 @@ JoypadCallbackInfo emulator_get_joypad_callback(Emulator*);
 void emulator_set_config(Emulator*, const EmulatorConfig*);
 EmulatorConfig emulator_get_config(Emulator*);
 FrameBuffer* emulator_get_frame_buffer(Emulator*);
+AudioBuffer* emulator_get_audio_buffer(Emulator*);
+u32 audio_buffer_get_frames(AudioBuffer*);
 Ticks emulator_get_ticks(Emulator*);
 
 EmulatorEvent emulator_step(Emulator*);
