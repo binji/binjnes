@@ -33,9 +33,12 @@ typedef struct AudioBuffer {
   u32 freq_counter; /* Used for resampling; [0..APU_TICKS_PER_SECOND). */
   u32 divisor;
   u32 frames; /* Number of frames to generate per call to emulator_run. */
-  u8* data;   /* Unsigned 8-bit 1-channel samples @ |frequency| */
-  u8* end;
-  u8* position;
+  f32* data;   /* f32 1-channel samples @ |frequency| */
+  f32* end;
+  f32* position;
+
+  f32 buffer[128];  // circular buffer for filter
+  int bufferi;      // buffer index
 } AudioBuffer;
 
 typedef struct EmulatorInit {
@@ -114,14 +117,13 @@ typedef struct {
 } P;
 
 typedef struct {
-  //                                           |-   envelope   -| |-   sweep   -|
-  //            accum len sample vol seq timer start envdiv decay sweepdiv reload
-  // Pulse 1    0     0   0      0   0   0     0     0      0     0        0
-  // Pulse 2    1     1   1      1   1   1     1     1      1     1        1
-  // Triangle   2     2   2          2   2                                 2*
-  // Noise      3     3   3      2             2     2      2
-  // DMC        4         4      3
-  u32 accum[5], divisor;
+  //                                     |-   envelope   -| |-   sweep   -|
+  //            len sample vol seq timer start envdiv decay sweepdiv reload
+  // Pulse 1    0   0      0   0   0     0     0      0     0        0
+  // Pulse 2    1   1      1   1   1     1     1      1     1        1
+  // Triangle   2   2          2   2                                 2*
+  // Noise      3   3      2             2     2      2
+  // DMC            4      3
   u16 cnt, timer[3];
   u8 state, sample[5], seq[3], len[4], vol[4], envdiv[3], sweepdiv[2],
       reg[0x18], decay[3], tricnt;

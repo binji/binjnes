@@ -30,7 +30,6 @@ typedef f32 HostAudioSample;
 #define AUDIO_SPEC_CHANNELS 1
 #define AUDIO_SPEC_SAMPLE_SIZE sizeof(HostAudioSample)
 #define AUDIO_FRAME_SIZE (AUDIO_SPEC_SAMPLE_SIZE * AUDIO_SPEC_CHANNELS)
-#define AUDIO_CONVERT_SAMPLE_FROM_U8(X, fvol) ((fvol) * (X) * (1 / 255.0f))
 #define AUDIO_TARGET_QUEUED_SIZE (2 * host->audio.spec.size)
 #define AUDIO_MAX_QUEUED_SIZE (5 * host->audio.spec.size)
 
@@ -205,7 +204,7 @@ void host_render_audio(Host* host) {
   size_t src_frames = audio_buffer_get_frames(audio_buffer);
   size_t max_dst_frames = audio->spec.size / AUDIO_FRAME_SIZE;
   size_t frames = MIN(src_frames, max_dst_frames);
-  u8* src = audio_buffer->data;
+  f32* src = audio_buffer->data;
   HostAudioSample* dst = (HostAudioSample*)audio->buffer;
   HostAudioSample* dst_end = dst + frames * AUDIO_SPEC_CHANNELS;
   assert((u8*)dst_end <= audio->buffer + audio->spec.size);
@@ -213,7 +212,7 @@ void host_render_audio(Host* host) {
   size_t i;
   for (i = 0; i < frames; i++) {
     assert(dst + 1 <= dst_end);
-    *dst++ = AUDIO_CONVERT_SAMPLE_FROM_U8(*src++, volume);
+    *dst++ = *src++ * volume;
   }
   u32 queued_size = SDL_GetQueuedAudioSize(audio->dev);
   if (queued_size < AUDIO_MAX_QUEUED_SIZE) {

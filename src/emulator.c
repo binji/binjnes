@@ -32,7 +32,6 @@
  * the most extra frames that could be added is equal to the Apu tick count
  * of the slowest instruction. */
 #define AUDIO_BUFFER_EXTRA_FRAMES 256
-
 #define DIV_CEIL(numer, denom) (((numer) + (denom) - 1) / (denom))
 #define VALUE_WRAPPED(X, MAX) \
   (UNLIKELY((X) >= (MAX) ? ((X) -= (MAX), TRUE) : FALSE))
@@ -536,24 +535,64 @@ static const u32 s_spr_bits[] = {
   0b000000010000000000000000,  // 26: goto 26
 };
 
+// See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
+static const f32 s_pulse_out[] = {
+    0.00000, 0.01161, 0.02294, 0.03400, 0.04480, 0.05535, 0.06566, 0.07574,
+    0.08559, 0.09522, 0.10465, 0.11386, 0.12288, 0.13171, 0.14035, 0.14882,
+    0.15711, 0.16523, 0.17318, 0.18098, 0.18863, 0.19612, 0.20347, 0.21068,
+    0.21775, 0.22469, 0.23150, 0.23818, 0.24474, 0.25119, 0.25751,
+};
+static const f32 s_tnd_out[] = {
+    0.00000, 0.00670, 0.01335, 0.01994, 0.02647, 0.03296, 0.03939, 0.04577,
+    0.05211, 0.05839, 0.06462, 0.07080, 0.07693, 0.08302, 0.08906, 0.09505,
+    0.10100, 0.10690, 0.11275, 0.11856, 0.12433, 0.13005, 0.13573, 0.14137,
+    0.14696, 0.15251, 0.15802, 0.16349, 0.16892, 0.17432, 0.17967, 0.18498,
+    0.19025, 0.19549, 0.20068, 0.20584, 0.21097, 0.21605, 0.22110, 0.22612,
+    0.23110, 0.23604, 0.24095, 0.24583, 0.25067, 0.25548, 0.26025, 0.26499,
+    0.26970, 0.27438, 0.27902, 0.28364, 0.28822, 0.29277, 0.29729, 0.30178,
+    0.30624, 0.31067, 0.31507, 0.31945, 0.32379, 0.32810, 0.33239, 0.33665,
+    0.34088, 0.34508, 0.34926, 0.35341, 0.35753, 0.36163, 0.36570, 0.36974,
+    0.37376, 0.37775, 0.38172, 0.38566, 0.38958, 0.39347, 0.39734, 0.40119,
+    0.40501, 0.40881, 0.41258, 0.41634, 0.42006, 0.42377, 0.42745, 0.43111,
+    0.43475, 0.43837, 0.44197, 0.44554, 0.44909, 0.45262, 0.45614, 0.45962,
+    0.46309, 0.46654, 0.46997, 0.47338, 0.47677, 0.48014, 0.48349, 0.48682,
+    0.49013, 0.49342, 0.49669, 0.49995, 0.50318, 0.50640, 0.50960, 0.51278,
+    0.51595, 0.51909, 0.52222, 0.52533, 0.52842, 0.53150, 0.53456, 0.53760,
+    0.54063, 0.54363, 0.54663, 0.54960, 0.55256, 0.55551, 0.55843, 0.56135,
+    0.56424, 0.56712, 0.56999, 0.57284, 0.57567, 0.57849, 0.58130, 0.58409,
+    0.58686, 0.58962, 0.59237, 0.59510, 0.59782, 0.60052, 0.60321, 0.60589,
+    0.60855, 0.61120, 0.61383, 0.61645, 0.61906, 0.62165, 0.62423, 0.62680,
+    0.62936, 0.63190, 0.63443, 0.63694, 0.63945, 0.64194, 0.64442, 0.64688,
+    0.64934, 0.65178, 0.65421, 0.65663, 0.65904, 0.66143, 0.66381, 0.66618,
+    0.66854, 0.67089, 0.67323, 0.67556, 0.67787, 0.68017, 0.68246, 0.68475,
+    0.68702, 0.68928, 0.69153, 0.69376, 0.69599, 0.69821, 0.70041, 0.70261,
+    0.70480, 0.70697, 0.70914, 0.71129, 0.71344, 0.71558, 0.71770, 0.71982,
+    0.72192, 0.72402, 0.72611, 0.72819, 0.73025, 0.73231, 0.73436, 0.73640,
+    0.73843, 0.74045, 0.74247,
+};
+
 // APU stuff ///////////////////////////////////////////////////////////////////
 
+static inline Bool is_power_of_two(u32 x) {
+  return x == 0 || (x & (x - 1)) == 0;
+}
+
 static void apu_tick(E *e) {
-  static const u8 duty[] = {0b01000000, 0b01100000, 0b00001111, 0b10011111};
-  static const u8 tri[] = {15, 14, 13, 12, 11, 10, 9,  8,  7,  6, 5,
-                           4,  3,  2,  1,  0,  0,  1,  2,  3,  4, 5,
-                           6,  7,  8,  9,  10, 11, 12, 13, 14, 15};
+  u8 pulse[2] = {0}, tri = 0;
   A* a = &e->s.a;
   // Update pulse1, pulse2.
   for (int i = 0; i < 2; ++i) {
     if (a->timer[i]-- == 0) {
+      static const u8 duty[] = {0b01000000, 0b01100000, 0b00001111,
+                                   0b10011111};
+
       u16 timer = ((a->reg[3 + i * 4] & 7) << 8) | a->reg[2 + i * 4];
       a->timer[i] = timer;
       a->seq[i] = (a->seq[i] >> 1) | (a->seq[i] << 7);
       a->sample[i] = (duty[a->reg[2 + i] >> 6] & a->seq[i]) ? 0xff : 0;
     }
     if (a->len[i]) { // TODO: Also mute if sweep is out of range
-      a->accum[i] += a->sample[i] & a->vol[i];
+      pulse[i] = a->sample[i] & a->vol[i];
     }
   }
 
@@ -561,29 +600,74 @@ static void apu_tick(E *e) {
   // The sequencer is clocked by the timer as long as both the linear counter
   // and the length counter are nonzero.
   if (a->tricnt && a->len[2]) {
-    if (a->timer[2]-- == 0) {
-      a->timer[2] = ((a->reg[0xb] & 7) << 8) | a->reg[0xa];
+    // Timer counts every CPU tick (i.e. every half APU tick)
+    a->timer[2] -= 2;
+    if (a->timer[2] == 0 || a->timer[2] == 0xffff) {
+      static const u8 samples[] = {15, 14, 13, 12, 11, 10, 9,  8,  7,  6, 5,
+                                   4,  3,  2,  1,  0,  0,  1,  2,  3,  4, 5,
+                                   6,  7,  8,  9,  10, 11, 12, 13, 14, 15};
+
+      a->timer[2] += ((a->reg[0xb] & 7) << 8) | a->reg[0xa];
       a->seq[2] = (a->seq[2] + 1) & 31;
-      a->sample[2] = tri[a->seq[2]];
+      a->sample[2] = samples[a->seq[2]];
     }
-    a->accum[2] += a->sample[2];
+    tri = a->sample[2];
   }
 
   // TODO: update noise, DMC
 
+  // Mix samples
   AudioBuffer* ab = &e->audio_buffer;
-  ++ab->divisor;
+  const size_t absize = ARRAY_SIZE(ab->buffer);
+#if 1
+  ab->buffer[ab->bufferi] =
+      s_pulse_out[pulse[0] + pulse[1]] + s_tnd_out[3 * tri];
+#else
+  ab->buffer[ab->bufferi] =
+      s_pulse_out[pulse[0] + pulse[1]];
+  (void)tri;
+#endif
+  assert(is_power_of_two(ARRAY_SIZE(ab->buffer)));
+  ab->bufferi = (ab->bufferi + 1) & (absize - 1);
+
   ab->freq_counter += ab->frequency;
   if (VALUE_WRAPPED(ab->freq_counter, APU_TICKS_PER_SECOND)) {
-    int channels = 0;
-    u32 accum = 0;
-    accum += a->accum[0]; channels++; a->accum[0] = 0;
-    accum += a->accum[1]; channels++; a->accum[1] = 0;
-    accum += a->accum[2]; channels++; a->accum[2] = 0;
-    accum <<= 4; /* 4bit -> 8bit samples. */
-    accum /= channels;
-    *ab->position++ = accum / ab->divisor;
-    ab->divisor = 0;
+#if 1
+    // 128-tap low-pass filter @ 894.8kHz: pass=12kHz, stop=20kHz
+    static const f32 h[] = {
+        0.00913,  -0.00143, -0.00141, -0.00144, -0.00151, -0.00162, -0.00177,
+        -0.00194, -0.00213, -0.00234, -0.00256, -0.00277, -0.00300, -0.00321,
+        -0.00342, -0.00360, -0.00377, -0.00390, -0.00400, -0.00408, -0.00410,
+        -0.00407, -0.00399, -0.00387, -0.00368, -0.00343, -0.00310, -0.00271,
+        -0.00225, -0.00171, -0.00110, -0.00042, 0.00033,  0.00116,  0.00205,
+        0.00302,  0.00405,  0.00514,  0.00629,  0.00748,  0.00872,  0.01000,
+        0.01131,  0.01264,  0.01398,  0.01534,  0.01669,  0.01803,  0.01935,
+        0.02064,  0.02189,  0.02310,  0.02426,  0.02535,  0.02637,  0.02731,
+        0.02816,  0.02892,  0.02959,  0.03015,  0.03061,  0.03095,  0.03118,
+        0.03130,  0.03130,  0.03118,  0.03095,  0.03061,  0.03015,  0.02959,
+        0.02892,  0.02816,  0.02731,  0.02637,  0.02535,  0.02426,  0.02310,
+        0.02189,  0.02064,  0.01935,  0.01803,  0.01669,  0.01534,  0.01398,
+        0.01264,  0.01131,  0.01000,  0.00872,  0.00748,  0.00629,  0.00514,
+        0.00405,  0.00302,  0.00205,  0.00116,  0.00033,  -0.00042, -0.00110,
+        -0.00171, -0.00225, -0.00271, -0.00310, -0.00343, -0.00368, -0.00387,
+        -0.00399, -0.00407, -0.00410, -0.00408, -0.00400, -0.00390, -0.00377,
+        -0.00360, -0.00342, -0.00321, -0.00300, -0.00277, -0.00256, -0.00234,
+        -0.00213, -0.00194, -0.00177, -0.00162, -0.00151, -0.00144, -0.00141,
+        -0.00143, 0.00913,
+    };
+
+    assert(ARRAY_SIZE(ab->buffer) == ARRAY_SIZE(h));
+
+    // Resample to destination frequency, with low-pass filter.
+    f32 accum = 0;
+    for (size_t i = 0; i < ARRAY_SIZE(h); ++i) {
+      // filter is symmetric, so can be indexed in same direction.
+      accum += h[i] * ab->buffer[(ab->bufferi + i) & (absize-1)];
+    }
+    *ab->position++ = accum;
+#else
+    *ab->position++ = ab->buffer[(ab->bufferi + absize - 1) & (absize - 1)];
+#endif
   }
   assert(ab->position <= ab->end);
 }
@@ -746,7 +830,7 @@ static const u16 s_apu_bits[] = {
 // CPU stuff ///////////////////////////////////////////////////////////////////
 
 static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
-#if LOGLEVEL > 1
+#if LOGLEVEL >= 1
   u8 cval[256] = {0};
   char new_chrs[9] = {0};
   for (int i = 0; i < 8; ++i) {
@@ -1006,10 +1090,6 @@ void cpu_write(E *e, u16 addr, u8 val) {
     e->cpu_write(e, addr, val);
     break;
   }
-}
-
-static inline Bool is_power_of_two(u32 x) {
-  return x == 0 || (x & (x - 1)) == 0;
 }
 
 static void set_mirror(E *e, Mirror mirror) {
@@ -1790,11 +1870,12 @@ Result init_audio_buffer(Emulator* e, u32 frequency, u32 frames) {
   AudioBuffer* audio_buffer = &e->audio_buffer;
   audio_buffer->frames = frames;
   size_t buffer_size = (frames + AUDIO_BUFFER_EXTRA_FRAMES);
-  audio_buffer->data = xmalloc(buffer_size);
+  audio_buffer->data = xmalloc(buffer_size * sizeof(f32));
   CHECK_MSG(audio_buffer->data != NULL, "Audio buffer allocation failed.\n");
   audio_buffer->end = audio_buffer->data + buffer_size;
   audio_buffer->position = audio_buffer->data;
   audio_buffer->frequency = frequency;
+  audio_buffer->bufferi = 0;
   return OK;
   ON_ERROR_RETURN;
 }
