@@ -117,14 +117,15 @@ typedef struct {
 } P;
 
 typedef struct {
-  //                                     |-   envelope   -| |-   sweep   -|
-  //            len sample vol seq timer start envdiv decay sweepdiv reload
-  // Pulse 1    0   0      0   0   0     0     0      0     0        0
-  // Pulse 2    1   1      1   1   1     1     1      1     1        1
-  // Triangle   2   2          2   2                                 2*
-  // Noise      3   3      2             2     2      2
-  // DMC            4      3
-  u16 cnt, timer[3];
+  //                                          |-   envelope   -| |-   sweep   -|
+  //            ramp len sample vol seq timer start envdiv decay sweepdiv reload
+  // Pulse 1    0    0   0      0   0   0     0     0      0     0        0
+  // Pulse 2    1    1   1      1   1   1     1     1      1     1        1
+  // Triangle   2    2   2          2   2                                 2*
+  // Noise      3    3   3      2       3     2     2      2
+  // DMC        4        4      3
+  f32 ramp[5];
+  u16 cnt, timer[4], noise;
   u8 state, sample[5], seq[3], len[4], vol[4], envdiv[3], sweepdiv[2],
       reg[0x18], decay[3], tricnt;
   Bool reload[3], start[3];

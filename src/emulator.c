@@ -535,42 +535,6 @@ static const u32 s_spr_bits[] = {
   0b000000010000000000000000,  // 26: goto 26
 };
 
-// See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
-static const f32 s_pulse_out[] = {
-    0.00000, 0.01161, 0.02294, 0.03400, 0.04480, 0.05535, 0.06566, 0.07574,
-    0.08559, 0.09522, 0.10465, 0.11386, 0.12288, 0.13171, 0.14035, 0.14882,
-    0.15711, 0.16523, 0.17318, 0.18098, 0.18863, 0.19612, 0.20347, 0.21068,
-    0.21775, 0.22469, 0.23150, 0.23818, 0.24474, 0.25119, 0.25751,
-};
-static const f32 s_tnd_out[] = {
-    0.00000, 0.00670, 0.01335, 0.01994, 0.02647, 0.03296, 0.03939, 0.04577,
-    0.05211, 0.05839, 0.06462, 0.07080, 0.07693, 0.08302, 0.08906, 0.09505,
-    0.10100, 0.10690, 0.11275, 0.11856, 0.12433, 0.13005, 0.13573, 0.14137,
-    0.14696, 0.15251, 0.15802, 0.16349, 0.16892, 0.17432, 0.17967, 0.18498,
-    0.19025, 0.19549, 0.20068, 0.20584, 0.21097, 0.21605, 0.22110, 0.22612,
-    0.23110, 0.23604, 0.24095, 0.24583, 0.25067, 0.25548, 0.26025, 0.26499,
-    0.26970, 0.27438, 0.27902, 0.28364, 0.28822, 0.29277, 0.29729, 0.30178,
-    0.30624, 0.31067, 0.31507, 0.31945, 0.32379, 0.32810, 0.33239, 0.33665,
-    0.34088, 0.34508, 0.34926, 0.35341, 0.35753, 0.36163, 0.36570, 0.36974,
-    0.37376, 0.37775, 0.38172, 0.38566, 0.38958, 0.39347, 0.39734, 0.40119,
-    0.40501, 0.40881, 0.41258, 0.41634, 0.42006, 0.42377, 0.42745, 0.43111,
-    0.43475, 0.43837, 0.44197, 0.44554, 0.44909, 0.45262, 0.45614, 0.45962,
-    0.46309, 0.46654, 0.46997, 0.47338, 0.47677, 0.48014, 0.48349, 0.48682,
-    0.49013, 0.49342, 0.49669, 0.49995, 0.50318, 0.50640, 0.50960, 0.51278,
-    0.51595, 0.51909, 0.52222, 0.52533, 0.52842, 0.53150, 0.53456, 0.53760,
-    0.54063, 0.54363, 0.54663, 0.54960, 0.55256, 0.55551, 0.55843, 0.56135,
-    0.56424, 0.56712, 0.56999, 0.57284, 0.57567, 0.57849, 0.58130, 0.58409,
-    0.58686, 0.58962, 0.59237, 0.59510, 0.59782, 0.60052, 0.60321, 0.60589,
-    0.60855, 0.61120, 0.61383, 0.61645, 0.61906, 0.62165, 0.62423, 0.62680,
-    0.62936, 0.63190, 0.63443, 0.63694, 0.63945, 0.64194, 0.64442, 0.64688,
-    0.64934, 0.65178, 0.65421, 0.65663, 0.65904, 0.66143, 0.66381, 0.66618,
-    0.66854, 0.67089, 0.67323, 0.67556, 0.67787, 0.68017, 0.68246, 0.68475,
-    0.68702, 0.68928, 0.69153, 0.69376, 0.69599, 0.69821, 0.70041, 0.70261,
-    0.70480, 0.70697, 0.70914, 0.71129, 0.71344, 0.71558, 0.71770, 0.71982,
-    0.72192, 0.72402, 0.72611, 0.72819, 0.73025, 0.73231, 0.73436, 0.73640,
-    0.73843, 0.74045, 0.74247,
-};
-
 // APU stuff ///////////////////////////////////////////////////////////////////
 
 static inline Bool is_power_of_two(u32 x) {
@@ -578,7 +542,9 @@ static inline Bool is_power_of_two(u32 x) {
 }
 
 static void apu_tick(E *e) {
-  u8 pulse[2] = {0}, tri = 0;
+  static const f32 ramp_alpha = 0.001;
+
+  f32 vol, pulse[2] = {0}, tri = 0, noise;
   A* a = &e->s.a;
   // Update pulse1, pulse2.
   for (int i = 0; i < 2; ++i) {
@@ -589,11 +555,13 @@ static void apu_tick(E *e) {
       u16 timer = ((a->reg[3 + i * 4] & 7) << 8) | a->reg[2 + i * 4];
       a->timer[i] = timer;
       a->seq[i] = (a->seq[i] >> 1) | (a->seq[i] << 7);
-      a->sample[i] = (duty[a->reg[2 + i] >> 6] & a->seq[i]) ? 0xff : 0;
+      a->sample[i] = !!(duty[a->reg[2 + i] >> 6] & a->seq[i]);
     }
-    if (a->len[i]) { // TODO: Also mute if sweep is out of range
-      pulse[i] = a->sample[i] & a->vol[i];
-    }
+
+    // TODO: Also mute if sweep is out of range
+    vol = a->len[i] ? a->vol[i] : 0;
+    a->ramp[i] = (a->ramp[i] * (1 - ramp_alpha)) + (vol * ramp_alpha);
+    pulse[i] = a->sample[i] * a->ramp[i];
   }
 
   // Update triangle.
@@ -611,28 +579,52 @@ static void apu_tick(E *e) {
       a->seq[2] = (a->seq[2] + 1) & 31;
       a->sample[2] = samples[a->seq[2]];
     }
-    tri = a->sample[2];
+    vol = 1;
+  } else {
+    vol = 0;
   }
+  a->ramp[2] = (a->ramp[2] * (1 - ramp_alpha)) + (vol * ramp_alpha);
+  tri = a->sample[2] * a->ramp[2];
 
-  // TODO: update noise, DMC
+  // Update noise
+  if (a->timer[3]-- == 0) {
+    static const u16 lens[] = {4,   8,   16,  32,  64,  96,   128,  160,
+                               202, 254, 380, 508, 762, 1016, 2034, 4068};
+    a->timer[3] = lens[a->reg[0xe] & 15];
+    a->noise =
+        (a->noise >> 1) |
+        (((a->noise << 14) ^ (a->noise << ((a->reg[0xe] & 0x80) ? 8 : 13))) &
+         0x4000);
+    a->sample[3] = !!(a->noise & 1);
+  }
+  vol = a->len[3] ? a->vol[2] : 0;
+  a->ramp[3] = (a->ramp[3] * (1 - ramp_alpha)) + (vol * ramp_alpha);
+  noise = a->sample[3] * a->ramp[3];
+
+  // TODO: DMC
 
   // Mix samples
   AudioBuffer* ab = &e->audio_buffer;
   const size_t absize = ARRAY_SIZE(ab->buffer);
-#if 1
-  ab->buffer[ab->bufferi] =
-      s_pulse_out[pulse[0] + pulse[1]] + s_tnd_out[3 * tri];
-#else
-  ab->buffer[ab->bufferi] =
-      s_pulse_out[pulse[0] + pulse[1]];
-  (void)tri;
-#endif
+  {
+    // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
+    // Started from a 31-entry table and calculated a quadratic regression.
+    static const f32 PB = 0.01133789176986089272, PC = -0.00009336679655005083;
+    // Started from a 203-entry table and calculated a cubic regression.
+    static const f32 TB = 0.00653531668798749448, TC = -0.00002097005655295220,
+                     TD = 0.00000003402641447451;
+
+    f32 p = pulse[0] + pulse[1];
+    f32 t = 3 * tri + 2 * noise /*+ dmc*/;
+    ab->buffer[ab->bufferi] =
+        (PB * p + PC * p * p) + (TB * t + PC * t * t + TD * t * t * t);
+  }
+
   assert(is_power_of_two(ARRAY_SIZE(ab->buffer)));
   ab->bufferi = (ab->bufferi + 1) & (absize - 1);
 
   ab->freq_counter += ab->frequency;
   if (VALUE_WRAPPED(ab->freq_counter, APU_TICKS_PER_SECOND)) {
-#if 1
     // 128-tap low-pass filter @ 894.8kHz: pass=12kHz, stop=20kHz
     static const f32 h[] = {
         0.00913,  -0.00143, -0.00141, -0.00144, -0.00151, -0.00162, -0.00177,
@@ -665,15 +657,12 @@ static void apu_tick(E *e) {
       accum += h[i] * ab->buffer[(ab->bufferi + i) & (absize-1)];
     }
     *ab->position++ = accum;
-#else
-    *ab->position++ = ab->buffer[(ab->bufferi + absize - 1) & (absize - 1)];
-#endif
+    assert(ab->position <= ab->end);
   }
-  assert(ab->position <= ab->end);
 }
 
 static void apu_quarter(E *e) {
-  DEBUG("    1/4 (cy: %"PRIu64"\n", e->s.cy);
+  DEBUG("    1/4 (cy: %"PRIu64")\n", e->s.cy);
   A* a = &e->s.a;
   // pulse 1, pulse 2, noise envelope
   for (int i = 0; i < 3; ++i) {
@@ -725,19 +714,22 @@ static void apu_quarter(E *e) {
 }
 
 static void apu_half(E *e) {
-  DEBUG("    1/2 (cy: %"PRIu64"\n", e->s.cy);
+  LOG("    1/2 (cy: %"PRIu64")\n", e->s.cy);
   A* a = &e->s.a;
   // length counter
   for (int i = 0; i < 4; ++i) {
     if (a->reg[0x15] & (1 << i)) {
-      static const int haltregs[] = {0, 0, 8, 0xc}; // No pulse halt.
-      static const int haltbit[] = {0, 0, 0x80, 0x20};
+      static const int haltregs[] = {0, 4, 8, 0xc};
+      static const u8 haltbit[] = {0x20, 0x20, 0x80, 0x20};
       // When clocked by the frame counter, the length counter is decremented
       // except when:
       // * The length counter is 0, or
       // * The halt flag is set
-      if (a->len[i] && (a->reg[haltregs[i]] & haltbit[i])) {
+      if (a->len[i] && !(a->reg[haltregs[i]] & haltbit[i])) {
         --a->len[i];
+        if (a->len[i] == 0) {
+          LOG(" >> chan[%d] off\n", a->len[i]);
+        }
       }
     } else {
       // When the enabled bit is cleared (via $4015), the length counter is
@@ -745,6 +737,7 @@ static void apu_half(E *e) {
       // length counter's previous value is lost). There is no immediate effect
       // when enabled is set.
       a->len[i] = 0;
+      LOG(" >> chan[%d] forced off\n", a->len[i]);
     }
   }
 
@@ -1015,6 +1008,8 @@ void cpu_write(E *e, u16 addr, u8 val) {
         10, 254, 20, 2,  40, 4,  80, 6,  160, 8,  60, 10, 14, 12, 26, 14,
         12, 16,  24, 18, 48, 20, 96, 22, 192, 24, 72, 26, 16, 28, 32, 30,
     };
+    static const u16 noise_lens[] = {4,   8,   16,  32,  64,  96,   128,  160,
+                                     202, 254, 380, 508, 762, 1016, 2034, 4068};
     static const char* bitnames[] = {
       "DDLCNNNN", "EPPPNSSS", "LLLLLLLL", "LLLLLHHH",
       "DDLCNNNN", "EPPPNSSS", "LLLLLLLL", "LLLLLHHH",
@@ -1039,22 +1034,29 @@ void cpu_write(E *e, u16 addr, u8 val) {
     switch (addr - 0x4000) {
 #if 1
       case 0x03: a->len[0] = len; a->seq[0] = 0x80; a->start[0] = TRUE;
-        LOG("      timer 0 = %u\n", ((val & 7) << 8) | a->reg[2]);
+        LOG("      chan0: timer=%u len=%u\n", ((val & 7) << 8) | a->reg[2], len);
         goto apu;
       case 0x07: a->len[1] = len; a->seq[1] = 0x80; a->start[1] = TRUE;
-        LOG("      timer 1 = %u\n", ((val & 7) << 8) | a->reg[6]);
+        LOG("      chan1: timer=%u len=%u\n", ((val & 7) << 8) | a->reg[6], len);
         goto apu;
-      case 0x0b: a->len[2] = len; a->reload[2] = TRUE; goto apu;
-      case 0x0f: a->len[3] = len; goto apu; // TODO
+      case 0x0b: a->len[2] = len; a->reload[2] = TRUE;
+        LOG("      chan2: len=%u\n", len);
+        goto apu;
+      case 0x0f: a->len[3] = len; a->start[2] = TRUE;
+        LOG("      chan3: timer=%u len=%u\n", a->timer[3], len);
+        goto apu;
+
+      case 0x0e:                        // Noise
+        a->timer[3] = noise_lens[val & 15];
+        goto apu;
 
       case 0x00: if (val & 0x10) { a->vol[0] = val & 0xf; } goto apu;
       case 0x04: if (val & 0x10) { a->vol[1] = val & 0xf; } goto apu;
-      case 0x0c: if (val & 0x10) { a->vol[3] = val & 0xf; } goto apu;
+      case 0x0c: if (val & 0x10) { a->vol[2] = val & 0xf; } goto apu;
 
       case 0x01: case 0x02:             // Pulse 1
       case 0x05: case 0x06:             // Pulse 2
       case 0x08: case 0x0a:             // Triangle
-      case 0x0e:                        // Noise
       case 0x10: case 0x11: case 0x12: case 0x13: case 0x15:  // DMC
       case 0x17:                                              // Frame counter
       apu:
@@ -1861,6 +1863,7 @@ Result init_emulator(E *e, const EInit *init) {
   s->c.bits = s_cpu_decode;
   s->c.step = s->c.next_step = &s_cpu_decode;
   s->p.bits_mask = s_ppu_disabled_mask;
+  s->a.noise = 1;
 
   return OK;
   ON_ERROR_RETURN;
