@@ -96,6 +96,12 @@ typedef u64 Ticks;
 typedef enum Bool { FALSE = 0, TRUE = 1 } Bool;
 typedef enum Result { OK = 0, ERROR = 1 } Result;
 
+typedef u8 u8x16 __attribute__((vector_size(16)));
+typedef u16 u16x8 __attribute__((vector_size(16)));
+typedef u32 u32x4 __attribute__((vector_size(16)));
+typedef u64 u64x2 __attribute__((vector_size(16)));
+typedef f32 f32x4 __attribute__((vector_size(16)));
+
 typedef struct FileData {
   u8* data;
   size_t size;

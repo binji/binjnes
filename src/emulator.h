@@ -37,7 +37,7 @@ typedef struct AudioBuffer {
   f32* end;
   f32* position;
 
-  f32 buffer[128];  // circular buffer for filter
+  f32 buffer[256];  // circular buffer for filter
   int bufferi;      // buffer index
 } AudioBuffer;
 
@@ -117,18 +117,15 @@ typedef struct {
 } P;
 
 typedef struct {
-  //                                          |-   envelope   -| |-   sweep   -|
-  //            ramp len sample vol seq timer start envdiv decay sweepdiv reload
-  // Pulse 1    0    0   0      0   0   0     0     0      0     0        0
-  // Pulse 2    1    1   1      1   1   1     1     1      1     1        1
-  // Triangle   2    2   2          2   2                                 2*
-  // Noise      3    3   3      2       3     2     2      2
-  // DMC        4        4      3
-  f32 ramp[5];
-  u16 cnt, timer[4], noise;
-  u8 state, sample[5], seq[3], len[4], vol[4], envdiv[3], sweepdiv[2],
-      reg[0x18], decay[3], tricnt;
-  Bool reload[3], start[3];
+  u32x4 timer, period, seq, start, cvol, halt, len, en_mask;
+  u32x4 envdiv, envloop, envreload;                      // envelope
+  u32x4 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
+  f32x4 sample, vol, decay;
+  f32 mixed;
+
+  u16 cnt, noise;
+  u8 state, reg[0x18], tricnt;
+  Bool update;
 } A;
 
 typedef struct {
