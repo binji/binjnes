@@ -979,7 +979,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
       } else {
         // w was 1.
         // t: CBA..HG FED..... = d: HGFEDCBA
-        p->t = (p->t & 0x1c1f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
+        p->t = (p->t & 0x8c1f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
         DEBUG("     ppu:t=%04hx w=1\n", p->t);
       }
       break;
