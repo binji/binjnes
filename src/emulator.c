@@ -1172,13 +1172,15 @@ void mapper1_write(E *e, u16 addr, u8 val) {
       if (m->mmc1_ctrl & 0x10) { // CHR 4KiB banks
         set_chr_map(e, m->chr_bank[0], m->chr_bank[1]);
       } else { // CHR 8KiB banks
-        set_chr_map(e, m->chr_bank[0] * 2, m->chr_bank[0] * 2 + 1);
+        m->chr_bank[0] &= ~1;
+        set_chr_map(e, m->chr_bank[0], m->chr_bank[0] + 1);
       }
 
       switch (m->mmc1_ctrl & 0xc) {
       case 0:
       case 4: // PRG 32KiB banks
-        set_prg_map(e, m->prg_bank * 2, m->prg_bank * 2 + 1);
+        m->prg_bank &= ~1;
+        set_prg_map(e, m->prg_bank, m->prg_bank + 1);
         break;
       case 8: // bank0 is first, bank1 switches
         set_prg_map(e, 0, m->prg_bank);
