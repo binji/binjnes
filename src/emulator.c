@@ -746,7 +746,8 @@ static void apu_quarter(E *e) {
   } else if (a->tricnt) {
     // ... otherwise if the linear counter is non-zero, it is decremented.
     --a->tricnt;
-  } else {
+  }
+  if (a->en_mask[2] && a->tricnt == 0) {
     a->en_mask[2] = 0;
     a->update = TRUE;
   }
