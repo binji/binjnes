@@ -125,7 +125,7 @@ typedef struct {
 
   u16 cnt, noise;
   u8 state, reg[0x18], tricnt;
-  Bool update;
+  Bool update, trireload;
 } A;
 
 typedef struct {

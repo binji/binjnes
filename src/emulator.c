@@ -584,10 +584,16 @@ static void set_len(A* a, int chan, u8 val) {
 
 static void start_chan(A* a, int chan, u8 val) {
   if (is_len_enabled(a, chan)) {
+    Bool should_start = is_valid_period(chan, a->period[chan]);
     set_len(a, chan, val);
     a->timer[chan] = a->period[chan];
-    a->start[chan] = ~0;
-    a->en_mask[chan] = is_valid_period(chan, a->period[chan]) ? ~0 : 0;
+    if (chan == 2) {
+      a->trireload = TRUE;
+      should_start = should_start && (a->reg[8] & 0x7f);
+    } else {
+      a->start[chan] = ~0;
+    }
+    a->en_mask[chan] = should_start ? ~0 : 0;
     a->update = TRUE;
   }
 }
@@ -730,26 +736,25 @@ static void apu_quarter(E *e) {
   a->vol = (f32x4)(((u32x4)a->decay & ~a->cvol) | ((u32x4)a->vol & a->cvol));
   u32x4 update4 = a->vol != oldvol;
   a->update = update4[0] | update4[1] | update4[2] | update4[3];
+  a->start = (u32x4){0, 0, 0, 0};
 
   // triangle linear counter
   // If the linear counter reload flag is set,
-  if (a->start[2]) {
+  if (a->trireload) {
     // ... the linear counter is reloaded with the counter reload value.
     a->tricnt = a->reg[8] & 0x7f;
   } else if (a->tricnt) {
     // ... otherwise if the linear counter is non-zero, it is decremented.
     --a->tricnt;
-    if (a->tricnt == 0) {
-      LOG(" >> chan[2] off\n");
-      a->en_mask[2] = 0;
-      a->update = TRUE;
-    }
+  } else {
+    a->en_mask[2] = 0;
+    a->update = TRUE;
   }
   // If the control flag is clear, the linear counter reload flag is cleared.
   if (!(a->reg[8] & 0x80)) {
+    a->trireload = 0;
     a->start[2] = 0;
   }
-  a->start &= (u32x4){0, 0, 0xffffffff, 0};
 }
 
 static void apu_half(E *e) {
@@ -824,6 +829,8 @@ static const u16 s_apu_bits[] = {
 
 static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
 #if LOGLEVEL >= 1
+  static const char chan_str[][6] = {"1    ", " 2   ", "  T  ",
+                                     "   N ", "    D", "xxxxx"};
   u8 cval[256] = {0};
   char new_chrs[9] = {0};
   for (int i = 0; i < 8; ++i) {
@@ -831,10 +838,7 @@ static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
     new_chrs[i] = set ? chrs[i] : (chrs[i] | 32);
     cval[(int)chrs[i]] = (cval[(int)chrs[i]] << 1) | set;
   }
-  LOG("     write(%04hx, %02hhx) %c%c%c%c%c (%s)", addr, val,
-      channel == 0 ? '1' : ' ', channel == 1 ? '2' : ' ',
-      channel == 2 ? 'T' : ' ', channel == 3 ? 'N' : ' ',
-      channel == 4 ? 'D' : ' ', new_chrs);
+  LOG("  write(%04hx, %02hhx) %s (%s)", addr, val, chan_str[channel], new_chrs);
   int seen[256] = {0};
   for (int i = 0; i < 8; ++i) {
     if (!seen[(int)chrs[i]]) {
