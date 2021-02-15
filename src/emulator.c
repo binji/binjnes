@@ -635,8 +635,7 @@ static void apu_tick(E *e) {
 
   if (timer_zero[0] | timer_zero[1] | timer_zero[2] | timer_zero[3]) {
     // Advance the sequence for reloaded timers.
-    a->seq = ((a->seq + 1) & timer_zero & (u32x4){7, 7, 31}) |
-             (a->seq & ~timer_zero);
+    a->seq = (a->seq + (1 & timer_zero)) & (u32x4){7, 7, 31};
 
     if (timer_zero[0]) {
       a->sample[0] = pduty[a->reg[2] >> 6][a->seq[0]];
@@ -763,7 +762,7 @@ static void apu_half(E *e) {
   A* a = &e->s.a;
   // length counter
   u32x4 len0 = a->len == 0, dec = a->en_mask & ~(len0 | a->halt);
-  a->len = ((a->len - 1) & dec) | (a->len & ~dec);
+  a->len = a->len - (1 & dec);
   a->en_mask &= ~len0;
 
   // sweep unit
