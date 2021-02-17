@@ -1842,6 +1842,7 @@ Result init_mapper(E *e) {
     e->s.m.chr_bank[0] = 0;
     e->s.m.chr_bank[1] = e->ci.chr_banks - 1;
     e->s.m.prg_bank = 0;
+    e->s.m.prg_ram_en = TRUE;
     e->cpu_write = mapper1_write;
     goto shared;
   case 2:
