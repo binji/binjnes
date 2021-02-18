@@ -10,6 +10,13 @@
 #include "host.h"
 #include "host-gl.h"
 
+#define OVERSCAN_TOP 8
+#define OVERSCAN_BOTTOM 8
+#define UL 0
+#define UR (SCREEN_WIDTH / 256.0f)
+#define VT (OVERSCAN_TOP / 256.0f)
+#define VB ((SCREEN_HEIGHT - OVERSCAN_BOTTOM) / 256.0f)
+
 typedef struct {
   f32 pos[2];
   f32 tex_coord[2];
@@ -27,10 +34,10 @@ typedef struct HostUI {
 
 static Result host_ui_init(struct HostUI* ui, SDL_Window* window) {
   static Vertex s_vertex_buffer[4] = {
-    {{-1, +1}, {0, 0}},
-    {{-1, -1}, {0, SCREEN_HEIGHT / 256.0f}},
-    {{+1, +1}, {SCREEN_WIDTH / 256.0f, 0}},
-    {{+1, -1}, {SCREEN_WIDTH / 256.0f, SCREEN_HEIGHT / 256.0f}},
+      {{-1, +1}, {UL, VT}},
+      {{-1, -1}, {UL, VB}},
+      {{+1, +1}, {UR, VT}},
+      {{+1, -1}, {UR, VB}},
   };
 
   static const char* s_vertex_shader =
@@ -107,7 +114,8 @@ void host_ui_event(struct HostUI* ui, union SDL_Event* event) {
     SDL_GL_GetDrawableSize(ui->window, &iw, &ih);
     f32 w = iw, h = ih;
     f32 aspect = w / h;
-    f32 want_aspect = (f32)SCREEN_WIDTH / SCREEN_HEIGHT;
+    f32 want_aspect = (f32)(SCREEN_WIDTH * 8) /
+                      ((SCREEN_HEIGHT - (OVERSCAN_TOP + OVERSCAN_BOTTOM)) * 7);
     f32 new_w = aspect < want_aspect ? w : h * want_aspect;
     f32 new_h = aspect < want_aspect ? w / want_aspect : h;
     f32 new_left = (w - new_w) * 0.5f;
