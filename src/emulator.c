@@ -103,10 +103,6 @@ static inline u16 interleave(u8 h, u8 l) {
          (((h * A & B) * C >> 48) & 0xAAAA);
 }
 
-static inline u8 get_pal_addr(u16 addr) {
-  return addr & (((addr & 0x13) == 0x10) ? 0x0f : 0x1f);
-}
-
 static inline u8 chr_read(E *e, u16 addr) {
   return e->chr_map[(addr >> 12) & 1][addr & 0xfff];
 }
@@ -128,7 +124,7 @@ u8 ppu_read(E *e, u16 addr) {
       if (addr >= 0x3f00) {
         // Palette ram. Return palette entry directly, but buffer the nametable
         // byte below.
-        result = e->s.p.palram[get_pal_addr(addr)];
+        result = e->s.p.palram[0][addr & 0x1f];
       }
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
@@ -151,7 +147,17 @@ void ppu_write(E *e, u16 addr, u8 val) {
     case 15:
       if (addr >= 0x3f00) {
         // Palette ram.
-        e->s.p.palram[get_pal_addr(addr)] = val & 0x3f;
+        u8 (*palram)[32] = e->s.p.palram;
+        val &= 0x3f; addr &= 0x1f;
+        if ((addr & 3) == 0) {
+          palram[0][addr] = palram[0][addr ^ 0x10] = val;
+          if ((addr & 0xf) == 0) {
+            palram[1][0] = palram[1][4] = palram[1][8] = palram[1][12] =
+            palram[1][16] = palram[1][20] = palram[1][24] = palram[1][28] = val;
+          }
+        } else {
+          palram[0][addr] = palram[1][addr] = val;
+        }
         break;
       }
       // Fallthrough.
@@ -168,7 +174,10 @@ static inline void read_atb(E *e) {
   u16 v = e->s.p.v;
   u16 at = 0x3c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
   int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
-  e->s.p.atb = (nt_read(e, at) >> shift) & 3;
+  u8 atb1 = (nt_read(e, at) >> shift) & 3;
+  u8 atb2 = (atb1 << 2) | atb1;
+  u8 atb4 = (atb2 << 4) | atb2;
+  e->s.p.atb = (atb4 << 8) | atb4;
 }
 
 static inline u8 read_ptb(E *e, u8 addend) {
@@ -191,42 +200,28 @@ static inline void incv(P* p) {
        : (p->v & ~0x73e0) | ((p->v + 0x20) & 0x3e0);
 }
 
-static void shift_bg(E *e) {
-  P *p = &e->s.p;
-  p->bgshift <<= 2;
-  p->atshift = (p->atshift << 2) | p->atlatch;
-}
+static void shift_bg(E *e) { e->s.p.bgatpreshift >>= 2; }
 
 static void shift_en(E *e) {
-  const u64 ones = 0x0101010101010101ull;
-  const u64 his = 0x8080808080808080ull;
-  const u64 los = 0x7f7f7f7f7f7f7f7full;
-  u64 active = 0;
-  int i;
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-  u8 idx = 0, pal = 0;
-  if (p->ppumask & 8) { // Show BG.
-    idx = (p->bgshift >> (30 - p->x * 2)) & p->bgleftmask & 3;
-    pal = (p->atshift >> (14 - p->x * 2)) & 3;
-  }
-
-  // Mark any zero counter lanes as active (i.e. set the active mask to
-  // 0xff). See
-  // https://graphics.stanford.edu/~seander/bithacks.html#ZeroInWord.
-  active = ~(((spr->counter & los) + los) | spr->counter | los);
-  // Only top bit of lane is set, fill the rest of the lane.
-  active |= active >> 1;
-  active |= active >> 2;
-  active |= active >> 4;
+  u8 idx = 0;
 
   // Decrement inactive counters. Active counters are always 0.
-  spr->counter -= ones & ~active;
+  u8x16 active = spr->counter == 0;
+  spr->counter -= 1 & ~active;
+
+  if (p->ppumask & 8) { // Show BG.
+    idx = ((p->bgatpreshift[1] & 3) << 2) |
+          (p->bgatpreshift[0] & p->bgsprleftmask[0] & 3);
+  }
 
   // TODO: smarter way to avoid sprites on line 0?
   if ((p->ppumask & 0x10) && p->scany != 0) { // Show sprites.
-    // Find first non-zero sprite, if any.
-    u64 non0 = (spr->shift[0] | spr->shift[1]) & active & his;
+    // Find first non-zero sprite, if any. Check only the high bit of the lane
+    // (the pixel that might be drawn).
+    u64x2 non0x2 = (u64x2)(spr->shift & active & 0x80);
+    u64 non0 = non0x2[0] | non0x2[1];
     if (non0) {
       int s = __builtin_ctzll(non0);
       // Sprite 0 hit only occurs:
@@ -235,47 +230,40 @@ static void shift_en(E *e) {
       //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
       //  * When x!=255
       //  * (sprite priority doesn't matter)
-      if ((((spr->spr0mask & non0) >> s) & spr->leftmask) && idx &&
-          p->scanx != 255) {
+      if ((((spr->spr0mask & non0) >> s) & p->bgsprleftmask[1]) && (idx & 3) &&
+          (p->fbidx & 255) != 255) {
         p->ppustatus |= 0x40;
       }
 
       // Check if sprite is on transparent BG pixel, or has priority.
-      if (!idx || (non0 & (-non0) & spr->pri)) {
-        idx = ((((spr->shift[1] >> s) & spr->leftmask) << 1) & 2) |
-              (((spr->shift[0] >> s) & spr->leftmask) & 1);
-        pal = ((spr->pal >> (s - 7)) & 3) + 4;
+      if (!(idx & 3) || (non0 & (-non0) & spr->pri)) {
+        int spridx = s >> 3;
+        u8x16 data = spr->shift >> 7;
+        idx = (((spr->pal[spridx] & 3) + 4) << 2) |
+              (((data[spridx + 8] << 1) | data[spridx]) & p->bgsprleftmask[1]);
       }
     }
   }
 
   // Shift BG/attribute registers.
-  p->bgshift <<= 2;
-  p->atshift = (p->atshift << 2) | p->atlatch;
+  p->bgatpreshift >>= 2;
 
   // Shift left side masks.
-  p->bgleftmask = (p->bgleftmask >> 2) | 0xc000;
-  spr->leftmask = (spr->leftmask >> 1) | 0x80;
+  p->bgsprleftmask = (p->bgsprleftmask >> 2) | 0xc000;
 
   // Shift all active sprites.
-  spr->shift[0] =
-      ((spr->shift[0] << 1) & active & ~ones) | (spr->shift[0] & ~active);
-  spr->shift[1] =
-      ((spr->shift[1] << 1) & active & ~ones) | (spr->shift[1] & ~active);
+  spr->shift = ((spr->shift << 1) & active) | (spr->shift & ~active);
 
   // Draw final pixel.
-  u8 col = p->palram[idx == 0 ? idx : ((pal << 2) | idx)];
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
-  e->frame_buffer[p->fbidx++] = s_nespal[col];
-  p->scanx++;
+  e->frame_buffer[p->fbidx++] = s_nespal[p->palram[1][idx]];
 }
 
 static void shift_dis(E *e) {
   P* p = &e->s.p;
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   // TODO: use p->v color if it is in the range [0x3f00,0x3f1f]
-  e->frame_buffer[p->fbidx++] = s_nespal[p->palram[0]];
-  p->scanx++;
+  e->frame_buffer[p->fbidx++] = s_nespal[p->palram[0][0]];
 }
 
 void ppu_step(E *e) {
@@ -305,21 +293,25 @@ repeat:
       case 6: shift_en(e); break;
       case 7: shift_dis(e); break;
       case 8: shift_bg(e); break;
-      case 9:
-        p->bgshift = (p->bgshift & 0xffff0000) | interleave(p->ptbh, p->ptbl);
-        p->atlatch = p->atb;
+      case 9: {
+        p->bgatshift[0] =
+            (interleave(reverse(p->ptbh), reverse(p->ptbl)) << 16) |
+            (p->bgatshift[0] >> 16);
+        p->bgatshift[1] = (p->atb << 16) | (p->bgatshift[1] >> 16);
+        p->bgatpreshift = p->bgatshift >> (p->x * 2);
         break;
+      }
       case 10:
         spr->state = spr->s = spr->d = 0;
         spr->cnt = 32;
         spr->sovf = FALSE;
-        spr->leftmask = (p->ppumask & 4) ? 0xff : 0;
-        p->bgleftmask = (p->ppumask & 2) ? 0xffff : 0;
+        p->bgsprleftmask[0] = (p->ppumask & 2) ? 0xffff : 0;
+        p->bgsprleftmask[1] = (p->ppumask & 4) ? 0xffff : 0;
         break;
       case 11: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
       case 12: spr_step(e); break;
       case 13: ppu_t_to_v(p, 0x041f); break;
-      case 14: ppu_t_to_v(p, 0x7be0); p->scany = p->scanx = 0; break;
+      case 14: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
       case 15: p->cnt1 = cnst; break;
       case 16: p->cnt2 = cnst; break;
       case 17:
@@ -462,6 +454,7 @@ repeat:;
       case 20: spr->tile = spr->t; break;
       case 21: spr->at = spr->t; break;
       case 22: {
+        int idx = (spr->s >> 2) - 1;
         if (spr->s <= spr->d) {
           u8 y = (p->scany - 1) - spr->y;
           if (spr->at & 0x80) { y = ~y; }  // Flip Y.
@@ -475,20 +468,22 @@ repeat:;
             ptbl = reverse(ptbl);
             ptbh = reverse(ptbh);
           }
-          shift_in(&spr->shift[0], ptbl);
-          shift_in(&spr->shift[1], ptbh);
-          shift_in(&spr->pal, spr->at & 3);
+          spr->shift[idx] = ptbl;
+          spr->shift[idx + 8] = ptbh;
+          spr->pal[idx] =  spr->at & 3;
           shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
           shift_in(&spr->spr0mask, (spr->s == 4 && spr->spr0) ? 0xff : 0);
-          shift_in(&spr->counter, spr->t);
+          spr->counter[idx] = spr->t;
+          spr->counter[idx+8] = spr->t;
         } else {
           // empty sprite.
-          spr->shift[0] >>= 8;
-          spr->shift[1] >>= 8;
-          spr->pal >>= 8;
+          spr->shift[idx] = 0;
+          spr->shift[idx + 8] = 0;
+          spr->pal[idx] = 0;
           spr->pri >>= 8;
           spr->spr0mask >>= 8;
-          shift_in(&spr->counter, 0xff);
+          spr->counter[idx] = 0xff;
+          spr->counter[idx+8] = 0xff;
         }
         break;
       }
@@ -974,6 +969,8 @@ void cpu_write(E *e, u16 addr, u8 val) {
         // x:              CBA = d: .....CBA
         p->x = val & 7;
         p->t = (p->t & 0xffe0) | (val >> 3);
+        int extra = p->fbidx & 7;
+        p->bgatpreshift = p->bgatshift >> ((p->x * 2) + extra);
         DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", p->t, p->x);
       } else {
         // w was 1.

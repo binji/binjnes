@@ -100,18 +100,20 @@ typedef struct {
 } C;
 
 typedef struct {
-  u64 shift[2], counter, pri, pal, spr0mask;
-  u8 state, cnt, s, d, y, t, at, tile, leftmask;
+  u8x16 counter, shift, pal;
+  u64 pri, spr0mask;
+  u8 state, cnt, s, d, y, t, at, tile;
   Bool sovf, spr0;
 } Spr;
 
 typedef struct {
   u8 ram[0x800], chr_ram[0x2000], oam[0x100], oam2[0x20];
-  u32 bgshift;
-  u16 cnt1, cnt2, v, t, atshift, bgleftmask;
-  u8 state, x, scanx, scany, ntb, atb, ptbl, ptbh, atlatch, readbuf;
+  u32x4 bgatshift, bgatpreshift;
+  u16x8 bgsprleftmask;
+  u16 cnt1, cnt2, v, t, atb;
+  u8 state, x, scany, ntb, ptbl, ptbh, readbuf;
   Bool w, oddframe;
-  u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
+  u8 palram[2][32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   u32 fbidx, bits_mask;
   Spr spr;
 } P;
