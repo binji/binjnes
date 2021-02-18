@@ -19,6 +19,8 @@
 #include "options.h"
 
 #define AUDIO_FREQUENCY 44100
+/* This value is arbitrary. Why not 1/10th of a second? */
+#define AUDIO_FRAMES (AUDIO_FREQUENCY / 10)
 #define DEFAULT_FRAMES 60
 #define MAX_PRINT_OPS_LIMIT 512
 #define MAX_PROFILE_LIMIT 1000
@@ -187,6 +189,7 @@ int main(int argc, char** argv) {
   ZERO_MEMORY(emulator_init);
   emulator_init.rom = rom;
   emulator_init.audio_frequency = AUDIO_FREQUENCY;
+  emulator_init.audio_frames = AUDIO_FRAMES;
   emulator_init.random_seed = s_random_seed;
   e = emulator_new(&emulator_init);
   CHECK(e != NULL);
