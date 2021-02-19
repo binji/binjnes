@@ -95,12 +95,14 @@ static inline u8 reverse(u8 b) {
   return ((b * 0x80200802ull) & 0x0884422110ull) * 0x0101010101ull >> 32;
 }
 
-// https://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps
-static inline u16 interleave(u8 h, u8 l) {
-  const u64 A = 0x0101010101010101ull, B = 0x8040201008040201ull,
-            C = 0x0102040810204081ull;
-  return (((l * A & B) * C >> 49) & 0x5555) |
-         (((h * A & B) * C >> 48) & 0xAAAA);
+// Derived from
+// https://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps and
+// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
+static inline u16 reverse_interleave(u8 h, u8 l) {
+  const u64 A = 0x1001001001001ull, B = 0x8084042021010ull,
+            C = 0x200040008001ull;
+  return (((l * A & B) * C >> 43) & 0x5555) |
+         (((h * A & B) * C >> 42) & 0xAAAA);
 }
 
 static inline u8 chr_read(E *e, u16 addr) {
@@ -294,9 +296,8 @@ repeat:
       case 7: shift_dis(e); break;
       case 8: shift_bg(e); break;
       case 9: {
-        p->bgatshift[0] =
-            (interleave(reverse(p->ptbh), reverse(p->ptbl)) << 16) |
-            (p->bgatshift[0] >> 16);
+        p->bgatshift[0] = (reverse_interleave(p->ptbh, p->ptbl) << 16) |
+                          (p->bgatshift[0] >> 16);
         p->bgatshift[1] = (p->atb << 16) | (p->bgatshift[1] >> 16);
         p->bgatpreshift = p->bgatshift >> (p->x * 2);
         break;
