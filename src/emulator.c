@@ -1116,8 +1116,9 @@ static void set_chr_map(E *e, u8 bank0, u8 bank1) {
   bank1 &= (e->ci.chr_banks - 1);
   e->chr_map[0] = e->ci.chr_data + (bank0 << 12);
   e->chr_map[1] = e->ci.chr_data + (bank1 << 12);
-  e->chr_map_write[0] = e->ci.chr_data_write + (bank0 << 12);
-  e->chr_map_write[1] = e->ci.chr_data_write + (bank1 << 12);
+  // TODO: chr_data_write always points into chr_ram (which is fixed at 8KiB).
+  e->chr_map_write[0] = e->ci.chr_data_write + ((bank0 & 1) << 12);
+  e->chr_map_write[1] = e->ci.chr_data_write + ((bank1 & 1) << 12);
 }
 
 static void set_prg_map(E *e, u8 bank0, u8 bank1) {
