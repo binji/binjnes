@@ -952,8 +952,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
         // x:              CBA = d: .....CBA
         p->x = val & 7;
         p->t = (p->t & 0xffe0) | (val >> 3);
-        int extra = p->fbidx & 7;
-        p->bgatpreshift = p->bgatshift >> ((p->x * 2) + extra);
+        p->bgatpreshift = p->bgatshift >> ((p->x + (p->fbidx & 7)) * 2);
         DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", p->t, p->x);
       } else {
         // w was 1.
