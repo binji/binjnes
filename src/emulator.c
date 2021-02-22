@@ -766,11 +766,11 @@ void apu_step(E *e) {
       bits &= bits - 1;
       switch (bit) {
         case 0: more = TRUE; break;
-        case 1: apu_tick(e); break; // tick
-        case 2: apu_quarter(e); break; // quarter
-        case 3: apu_half(e); break; // half
+        case 1: apu_tick(e); break;
+        case 2: apu_quarter(e); break;
+        case 3: apu_half(e); break;
         case 4: if (--a->cnt != 0) { a->state = cnst; bits = 0; } break;
-        case 5: break; // irq
+        case 5: if (!(a->reg[0x17] & 0x40)) { e->s.c.irq |= IRQ_FRAME; } break;
         case 6: a->cnt = cnst; break;
         case 7: a->cnt = (a->reg[0x17] & 0x80) ? 7455 : 3729; break;
         case 8: a->state = cnst; break;
@@ -852,10 +852,11 @@ static inline void read_joyp(E *e, Bool write) {
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
 u8 cpu_read(E *e, u16 addr) {
-  e->s.c.bus_write = FALSE;
+  C* c = &e->s.c;
+  c->bus_write = FALSE;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
-    return e->s.c.ram[addr & 0x7ff];
+    return c->ram[addr & 0x7ff];
 
   case 2: case 3: { // PPU
     switch (addr & 7) {
@@ -882,18 +883,23 @@ u8 cpu_read(E *e, u16 addr) {
   case 4: // APU & I/O
     switch (addr - 0x4000) {
       case 0x15: {
-        LOG("*** NYI: read($%04x)\n", addr);
-        return e->s.c.open_bus;
+        // TODO: DMC interrupt (bit 7), DMC en_mask (bit 4)
+        u8 result = ((c->irq & IRQ_FRAME) << 6) | (c->open_bus & 0x20) |
+                    ((e->s.a.en_mask[3] & 1) << 3) |
+                    ((e->s.a.en_mask[2] & 1) << 2) |
+                    ((e->s.a.en_mask[1] & 1) << 1) | (e->s.a.en_mask[0] & 1);
+        c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
+        return result;
       }
       case 0x16: { // JOY1
         read_joyp(e, FALSE);
-        u8 result = (e->s.c.open_bus & ~0x1f) | (e->s.j.joyp[0] & 1);
+        u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[0] & 1);
         e->s.j.joyp[0] >>= 1;
         return result;
       }
       case 0x17: { // JOY2
         read_joyp(e, FALSE);
-        u8 result = (e->s.c.open_bus & ~0x1f) | (e->s.j.joyp[1] & 1);
+        u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[1] & 1);
         e->s.j.joyp[1] >>= 1;
         return result;
       }
@@ -904,7 +910,7 @@ u8 cpu_read(E *e, u16 addr) {
     break;
 
   case 6: case 7:
-    return e->s.m.prg_ram_en ? e->s.c.prg_ram[addr & 0x1fff] : e->s.c.open_bus;
+    return e->s.m.prg_ram_en ? c->prg_ram[addr & 0x1fff] : c->open_bus;
 
   case 8: case 9: case 10: case 11: // ROM
     return e->prg_rom_map[0][addr - 0x8000];
@@ -912,7 +918,7 @@ u8 cpu_read(E *e, u16 addr) {
   case 12: case 13: case 14: case 15: // ROM
     return e->prg_rom_map[1][addr - 0xc000];
   }
-  return e->s.c.open_bus;
+  return c->open_bus;
 }
 
 void cpu_write(E *e, u16 addr, u8 val) {
@@ -1026,7 +1032,11 @@ void cpu_write(E *e, u16 addr, u8 val) {
         goto apu;
 
       case 0x10: case 0x11: case 0x12: case 0x13:   // DMC
-      case 0x17:                                              // Frame counter
+      case 0x17:                                    // Frame counter
+        // TODO: reset sequencer.
+        if (val & 0x20) { e->s.c.irq &= ~IRQ_FRAME; }
+        goto apu;
+
       apu: {
         static const char* bitnames[] = {
           "DDLCNNNN", "EPPPNSSS", "LLLLLLLL", "LLLLLHHH",
@@ -1311,7 +1321,10 @@ void cpu_step(E *e) {
       case 43: c->A = c->TL; break;
       case 44: c->X = c->TL; break;
       case 45: c->Y = c->TL; break;
-      case 46: if (c->has_nmi) { c->next_step = s_nmi; } break;
+      case 46:
+        if (c->has_nmi) { c->next_step = s_nmi; }
+        else if (c->irq && !c->I) { c->next_step = s_irq; }
+        break;
       case 47: set_P(e, c->TL); break;
       case 48: c->C = c->TL; break;
       case 49: c->I = 1; break;
@@ -1321,7 +1334,7 @@ void cpu_step(E *e) {
         if (c->has_nmi) {
           c->has_nmi = FALSE;
           c->veclo = 0xfa;
-        } else if (c->opcode == 0) { // TODO IRQ
+        } else if (c->opcode == 0 || c->irq) {
           c->veclo = 0xfe;
         }
         break;

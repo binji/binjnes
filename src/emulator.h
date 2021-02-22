@@ -68,6 +68,11 @@ typedef enum {
   MIRROR_HORIZONTAL = 3,
 } Mirror;
 
+typedef enum {
+  IRQ_FRAME = 0,
+  IRQ_DMC   = 1,
+} Irq;
+
 typedef struct {
   u8 *prg_data;
   u8 *chr_data, *chr_data_write;
@@ -94,7 +99,7 @@ typedef struct {
   u8 PCL, PCH, TL, TH, buslo, bushi, fixhi, veclo, oamhi;
   u8 A, X, Y, S;
   u8 ram[0x800], prg_ram[0x2000];
-  u8 opcode, open_bus;
+  u8 opcode, open_bus, irq;
   Bool C, Z, I, D, V, N; // Flags.
   Bool bus_write, has_nmi;
 } C;
