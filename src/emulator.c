@@ -41,40 +41,20 @@ typedef EmulatorConfig EConfig;
 typedef EmulatorEvent EEvent;
 typedef EmulatorInit EInit;
 
-// XXX
+// From FrakenGraphics, based on FBX Smooth:
+// https://www.patreon.com/posts/nes-palette-for-47391225
 static const RGBA s_nespal[] = {
-    MAKE_RGBA(84, 84, 84, 255),    MAKE_RGBA(0, 30, 116, 255),
-    MAKE_RGBA(8, 16, 144, 255),    MAKE_RGBA(48, 0, 136, 255),
-    MAKE_RGBA(68, 0, 100, 255),    MAKE_RGBA(92, 0, 48, 255),
-    MAKE_RGBA(84, 4, 0, 255),      MAKE_RGBA(60, 24, 0, 255),
-    MAKE_RGBA(32, 42, 0, 255),     MAKE_RGBA(8, 58, 0, 255),
-    MAKE_RGBA(0, 64, 0, 255),      MAKE_RGBA(0, 60, 0, 255),
-    MAKE_RGBA(0, 50, 60, 255),     MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(152, 150, 152, 255), MAKE_RGBA(8, 76, 196, 255),
-    MAKE_RGBA(48, 50, 236, 255),   MAKE_RGBA(92, 30, 228, 255),
-    MAKE_RGBA(136, 20, 176, 255),  MAKE_RGBA(160, 20, 100, 255),
-    MAKE_RGBA(152, 34, 32, 255),   MAKE_RGBA(120, 60, 0, 255),
-    MAKE_RGBA(84, 90, 0, 255),     MAKE_RGBA(40, 114, 0, 255),
-    MAKE_RGBA(8, 124, 0, 255),     MAKE_RGBA(0, 118, 40, 255),
-    MAKE_RGBA(0, 102, 120, 255),   MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(76, 154, 236, 255),
-    MAKE_RGBA(120, 124, 236, 255), MAKE_RGBA(176, 98, 236, 255),
-    MAKE_RGBA(228, 84, 236, 255),  MAKE_RGBA(236, 88, 180, 255),
-    MAKE_RGBA(236, 106, 100, 255), MAKE_RGBA(212, 136, 32, 255),
-    MAKE_RGBA(160, 170, 0, 255),   MAKE_RGBA(116, 196, 0, 255),
-    MAKE_RGBA(76, 208, 32, 255),   MAKE_RGBA(56, 204, 108, 255),
-    MAKE_RGBA(56, 180, 204, 255),  MAKE_RGBA(60, 60, 60, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
-    MAKE_RGBA(236, 238, 236, 255), MAKE_RGBA(168, 204, 236, 255),
-    MAKE_RGBA(188, 188, 236, 255), MAKE_RGBA(212, 178, 236, 255),
-    MAKE_RGBA(236, 174, 236, 255), MAKE_RGBA(236, 174, 212, 255),
-    MAKE_RGBA(236, 180, 176, 255), MAKE_RGBA(228, 196, 144, 255),
-    MAKE_RGBA(204, 210, 120, 255), MAKE_RGBA(180, 222, 120, 255),
-    MAKE_RGBA(168, 226, 144, 255), MAKE_RGBA(152, 226, 180, 255),
-    MAKE_RGBA(160, 214, 228, 255), MAKE_RGBA(160, 162, 160, 255),
-    MAKE_RGBA(0, 0, 0, 255),       MAKE_RGBA(0, 0, 0, 255),
+    0xff616161, 0xff880000, 0xff990d1f, 0xff791337, 0xff601256, 0xff10005d,
+    0xff000e52, 0xff08233a, 0xff0c3521, 0xff0e410d, 0xff174417, 0xff1f3a00,
+    0xff572f00, 0xff000000, 0xff000000, 0xff000000, 0xffaaaaaa, 0xffc44d0d,
+    0xffde244b, 0xffcf1269, 0xffad1490, 0xff481c9d, 0xff043492, 0xff055073,
+    0xff13695d, 0xff117a16, 0xff088013, 0xff497612, 0xff91661c, 0xff000000,
+    0xff000000, 0xff000000, 0xfffcfcfc, 0xfffc9a63, 0xfffc7e8a, 0xfffc6ab0,
+    0xfff26ddd, 0xffab71e7, 0xff5886e3, 0xff229ecc, 0xff00b1a8, 0xff00c172,
+    0xff4ecd5a, 0xff8ec234, 0xffcebe4f, 0xff424242, 0xff000000, 0xff000000,
+    0xfffcfcfc, 0xfffcd4be, 0xfffccaca, 0xfffcc4d9, 0xfffcc1ec, 0xffe7c3fa,
+    0xffc3cef7, 0xffa7cde2, 0xff9cdbda, 0xff9ee3c8, 0xffb8e5bf, 0xffc8ebb2,
+    0xffebe5b7, 0xffacacac, 0xff000000, 0xff000000,
 };
 
 static void disasm(E *e, u16 addr);
@@ -126,7 +106,7 @@ u8 ppu_read(E *e, u16 addr) {
       if (addr >= 0x3f00) {
         // Palette ram. Return palette entry directly, but buffer the nametable
         // byte below.
-        result = e->s.p.palram[0][addr & 0x1f];
+        result = e->s.p.palram[addr & 0x1f];
       }
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
@@ -149,16 +129,18 @@ void ppu_write(E *e, u16 addr, u8 val) {
     case 15:
       if (addr >= 0x3f00) {
         // Palette ram.
-        u8 (*palram)[32] = e->s.p.palram;
+        u8 *palram = e->s.p.palram;
+        RGBA* rgbapal = e->s.p.rgbapal;
         val &= 0x3f; addr &= 0x1f;
         if ((addr & 3) == 0) {
-          palram[0][addr] = palram[0][addr ^ 0x10] = val;
+          palram[addr] = palram[addr ^ 0x10] = val;
           if ((addr & 0xf) == 0) {
-            palram[1][0] = palram[1][4] = palram[1][8] = palram[1][12] =
-            palram[1][16] = palram[1][20] = palram[1][24] = palram[1][28] = val;
+            rgbapal[0] = rgbapal[4] = rgbapal[8] = rgbapal[12] = rgbapal[16] =
+                rgbapal[20] = rgbapal[24] = rgbapal[28] = s_nespal[val];
           }
         } else {
-          palram[0][addr] = palram[1][addr] = val;
+          palram[addr] = val;
+          rgbapal[addr] = s_nespal[val];
         }
         break;
       }
@@ -258,14 +240,14 @@ static void shift_en(E *e) {
 
   // Draw final pixel.
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
-  e->frame_buffer[p->fbidx++] = s_nespal[p->palram[1][idx]];
+  e->frame_buffer[p->fbidx++] = p->rgbapal[idx];
 }
 
 static void shift_dis(E *e) {
   P* p = &e->s.p;
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   // TODO: use p->v color if it is in the range [0x3f00,0x3f1f]
-  e->frame_buffer[p->fbidx++] = s_nespal[p->palram[0][0]];
+  e->frame_buffer[p->fbidx++] = p->rgbapal[0];
 }
 
 void ppu_step(E *e) {

@@ -107,13 +107,14 @@ typedef struct {
 } Spr;
 
 typedef struct {
+  RGBA rgbapal[32];
   u8 ram[0x800], chr_ram[0x2000], oam[0x100], oam2[0x20];
   u32x4 bgatshift, bgatpreshift;
   u16x8 bgsprleftmask;
   u16 cnt1, cnt2, v, t, atb;
   u8 state, x, scany, ntb, ptbl, ptbh, readbuf;
   Bool w, oddframe;
-  u8 palram[2][32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
+  u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   u32 fbidx, bits_mask;
   Spr spr;
 } P;
