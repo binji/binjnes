@@ -69,8 +69,8 @@ typedef enum {
 } Mirror;
 
 typedef enum {
-  IRQ_FRAME = 0,
-  IRQ_DMC   = 1,
+  IRQ_FRAME = 1,
+  IRQ_DMC   = 2,
 } Irq;
 
 typedef struct {
@@ -125,7 +125,7 @@ typedef struct {
 } P;
 
 typedef struct {
-  u32x4 timer, period, seq, start, cvol, halt, len, en_mask;
+  u32x4 timer, period, seq, start, cvol, halt, len, play_mask;
   u32x4 envdiv, envloop, envreload;                      // envelope
   u32x4 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
   f32x4 sample, vol, decay;
@@ -134,6 +134,7 @@ typedef struct {
   u16 cnt, noise;
   u8 state, reg[0x18], tricnt;
   Bool update, trireload;
+  u64 resetcy; // XXX
 } A;
 
 typedef struct {

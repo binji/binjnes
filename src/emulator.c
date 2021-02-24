@@ -571,16 +571,16 @@ static void start_chan(A* a, int chan, u8 val) {
     } else {
       a->start[chan] = ~0;
     }
-    a->en_mask[chan] = should_start ? ~0 : 0;
+    a->play_mask[chan] = should_start ? ~0 : 0;
     a->update = TRUE;
   }
 }
 
 static void set_period(A* a, int chan, u16 val) {
   if (!is_valid_period(chan, a->period[chan] = val)) {
-    a->en_mask[chan] = 0;
+    a->play_mask[chan] = 0;
   }
-  LOG("      chan%d: timer=%u len=%u\n", chan, a->period[chan], a->len[chan]);
+  DEBUG("      chan%d: timer=%u len=%u\n", chan, a->period[chan], a->len[chan]);
 }
 
 static void set_period_lo(A* a, int chan, u8 val) {
@@ -607,9 +607,8 @@ static void apu_tick(E *e) {
 
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
   // Reload the timers that are zero.
-  u32x4 timer_zero = (a->timer < timer_diff) & a->en_mask;
-  a->timer =
-      ((a->timer - timer_diff) & ~timer_zero) | (a->period & timer_zero);
+  u32x4 timer_zero = (a->timer < timer_diff) & a->play_mask;
+  a->timer = ((a->timer - timer_diff) & ~timer_zero) | (a->period & timer_zero);
 
   if (timer_zero[0] | timer_zero[1] | timer_zero[2] | timer_zero[3]) {
     // Advance the sequence for reloaded timers.
@@ -636,8 +635,8 @@ static void apu_tick(E *e) {
   }
 
   if (a->update) {
-    u32x4 en_mask = a->en_mask | (u32x4){0, 0, 0xffffffff, 0};
-    f32x4 sampvol = (f32x4)((u32x4)a->sample & en_mask) * a->vol;
+    u32x4 play_mask = a->play_mask | (u32x4){0, 0, 0xffffffff, 0};
+    f32x4 sampvol = (f32x4)((u32x4)a->sample & play_mask) * a->vol;
 
     // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
     // Started from a 31-entry table and calculated a quadratic regression.
@@ -724,8 +723,8 @@ static void apu_quarter(E *e) {
     // ... otherwise if the linear counter is non-zero, it is decremented.
     --a->tricnt;
   }
-  if (a->en_mask[2] && a->tricnt == 0) {
-    a->en_mask[2] = 0;
+  if (a->play_mask[2] && a->tricnt == 0) {
+    a->play_mask[2] = 0;
     a->update = TRUE;
   }
   // If the control flag is clear, the linear counter reload flag is cleared.
@@ -739,9 +738,9 @@ static void apu_half(E *e) {
   DEBUG("    1/2 (cy: %" PRIu64")\n", e->s.cy);
   A* a = &e->s.a;
   // length counter
-  u32x4 len0 = a->len == 0, dec = a->en_mask & ~(len0 | a->halt);
-  a->len = a->len - (1 & dec);
-  a->en_mask &= ~len0;
+  u32x4 len0 = a->len == 0;
+  a->len -= 1 & ~(len0 | a->halt);
+  a->play_mask &= ~len0;
 
   // sweep unit
   u32x4 diff = a->period >> a->swshift, ndiff = ~diff + (u32x4){0, 1};
@@ -773,7 +772,8 @@ void apu_step(E *e) {
         case 5: if (!(a->reg[0x17] & 0x40)) { e->s.c.irq |= IRQ_FRAME; } break;
         case 6: a->cnt = cnst; break;
         case 7: a->cnt = (a->reg[0x17] & 0x80) ? 7455 : 3729; break;
-        case 8: a->state = cnst; break;
+        case 8: if (a->reg[0x17] & 0x80) { apu_quarter(e); apu_half(e); } break;
+        case 9: a->state = cnst; break;
         default:
           FATAL("NYI: apu step %d\n", bit);
       }
@@ -782,25 +782,29 @@ void apu_step(E *e) {
 }
 
 static const u16 s_apu_consts[] = {
-    [0] = 3728, [2] = 1, [3] = 3728, [5] = 4,
-    [6] = 3729, [8] = 7, [11] = 10,  [13] = 0,
+    [0] = 3728, [2] = 1,   [3] = 3728, [5] = 4,  [6] = 3729,
+    [8] = 7,    [11] = 10, [15] = 0,   [17] = 0,
 };
 static const u16 s_apu_bits[] = {
- // 876543210
-  0b001000001,  //  0: more=T,cnt=3728               0.5
-  0b000000000,  //  1:                               0.5
-  0b000010010,  //  2: tick,--cnt,jnz 1              3728
-  0b001000101,  //  3: more=T,quarter,cnt=3728       3728.5
-  0b000000000,  //  4:                               0.5
-  0b000010010,  //  5: tick,--cnt,jnz 4              7456
-  0b001001101,  //  6: more=T,quarter,half,cnt=3729  7456.5
-  0b000000000,  //  7:                               0.5
-  0b000010010,  //  8: tick,--cnt,jnz 7              11185
-  0b010000101,  //  9: more=T,quarter,cnt=3729/7455  11185.5
-  0b000000000,  // 10:                               0.5
-  0b000110010,  // 11: tick,--cnt,jnz 10,irq         14914
-  0b000101101,  // 12: more=T,quarter,half,irq       14914.5
-  0b100100000,  // 13: irq,goto 0                    14915
+ // 9876543210
+  0b0001000001,  //  0: more=T,cnt=3728               0.5
+  0b0000000000,  //  1:                               0.5
+  0b0000010010,  //  2: tick,--cnt,jnz 1              3728
+  0b0001000101,  //  3: more=T,quarter,cnt=3728       3728.5
+  0b0000000000,  //  4:                               0.5
+  0b0000010010,  //  5: tick,--cnt,jnz 4              7456
+  0b0001001101,  //  6: more=T,quarter,half,cnt=3729  7456.5
+  0b0000000000,  //  7:                               0.5
+  0b0000010010,  //  8: tick,--cnt,jnz 7              11185
+  0b0010000101,  //  9: more=T,quarter,cnt=3729/7455  11185.5
+  0b0000000000,  // 10:                               0.5
+  0b0000110010,  // 11: tick,--cnt,jnz 10,irq         14914
+  0b0000101100,  // 12: quarter,half,irq              14914.5
+  0b1000100010,  // 13: tick,irq,goto 0               14915
+  0b0000000000,  // 14:        (even reset sequence)
+  0b0000000010,  // 15: tick   (odd reset sequence)
+  0b0000000000,  // 16:
+  0b1100000010,  // 17: tick,maybe quarter+half,goto 0
 };
 
 // CPU stuff ///////////////////////////////////////////////////////////////////
@@ -883,12 +887,13 @@ u8 cpu_read(E *e, u16 addr) {
   case 4: // APU & I/O
     switch (addr - 0x4000) {
       case 0x15: {
-        // TODO: DMC interrupt (bit 7), DMC en_mask (bit 4)
+        // TODO: DMC interrupt (bit 7), DMC len (bit 4)
         u8 result = ((c->irq & IRQ_FRAME) << 6) | (c->open_bus & 0x20) |
-                    ((e->s.a.en_mask[3] & 1) << 3) |
-                    ((e->s.a.en_mask[2] & 1) << 2) |
-                    ((e->s.a.en_mask[1] & 1) << 1) | (e->s.a.en_mask[0] & 1);
+                    ((e->s.a.len[3] > 0) << 3) | ((e->s.a.len[2] > 0) << 2) |
+                    ((e->s.a.len[1] > 0) << 1) | (e->s.a.len[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
+        DEBUG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
+              e->s.cy, (e->s.cy - e->s.a.resetcy) / 3);
         return result;
       }
       case 0x16: { // JOY1
@@ -1025,7 +1030,6 @@ void cpu_write(E *e, u16 addr, u8 val) {
         for (int i = 0; i < 4; ++i) {
           if (!(val & (1 << i))) {
             a->len[i] = 0;
-            a->en_mask[i] = 0;
             a->update = TRUE;
           }
         }
@@ -1033,8 +1037,10 @@ void cpu_write(E *e, u16 addr, u8 val) {
 
       case 0x10: case 0x11: case 0x12: case 0x13:   // DMC
       case 0x17:                                    // Frame counter
-        // TODO: reset sequencer.
-        if (val & 0x20) { e->s.c.irq &= ~IRQ_FRAME; }
+        DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
+              (u32)(e->s.cy & 1));
+        if (val & 0x40) { e->s.c.irq &= ~IRQ_FRAME; }
+        a->state = 15 - (e->s.cy & 1); // 3/4 cycles
         goto apu;
 
       apu: {
