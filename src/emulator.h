@@ -131,9 +131,9 @@ typedef struct {
   f32x4 sample, vol, decay;
   f32 mixed;
 
-  u16 cnt, noise;
-  u8 state, reg[0x18], tricnt;
-  Bool update, trireload;
+  u16 cnt, noise, dmctimer, dmcperiod, dmcbytes, dmcaddr;
+  u8 state, reg[0x18], tricnt, dmcout, dmcbits, dmcshift;
+  Bool update, trireload, dmcstart;
   u64 resetcy; // XXX
 } A;
 

@@ -610,7 +610,11 @@ static void apu_tick(E *e) {
   u16x8 timer_zero = (a->timer < timer_diff) & a->play_mask;
   a->timer = ((a->timer - timer_diff) & ~timer_zero) | (a->period & timer_zero);
 
-  if (timer_zero[0] | timer_zero[1] | timer_zero[2] | timer_zero[3]) {
+  // TODO: combine with timer?
+  u16 dmczero = -(a->dmctimer == 0);
+  a->dmctimer = ((a->dmctimer - 1) & ~dmczero) | (a->dmcperiod & dmczero);
+
+  if (timer_zero[0] | timer_zero[1] | timer_zero[2] | timer_zero[3] | dmczero) {
     // Advance the sequence for reloaded timers.
     a->seq = (a->seq + (1 & timer_zero)) & (u16x8){7, 7, 31};
 
@@ -630,7 +634,12 @@ static void apu_tick(E *e) {
            0x4000);
       a->sample[3] = a->noise & 1;
     }
-    // TODO: DMC
+    if (dmczero) {
+      u16 diff = ((a->dmcshift & 1) << 2) - 2;
+      if ((a->dmcout - 2) <= 123) { a->dmcout += diff; }
+      a->dmcshift >>= 1;
+      --a->dmcbits;
+    }
     a->update = TRUE;
   }
 
@@ -648,7 +657,7 @@ static void apu_tick(E *e) {
     static const f32 TB = 0.00653531668798749448, TC = -0.00002097005655295220,
                      TD = 0.00000003402641447451;
     f32 p = sampvol[0] + sampvol[1];
-    f32 t = 3 * sampvol[2] + 2 * sampvol[3] /*+ dmc*/;
+    f32 t = 3 * sampvol[2] + 2 * sampvol[3] + a->dmcout;
     a->mixed = p * (PB + p * PC) + t * (TB + t * (TC + t * TD));
     a->update = FALSE;
   }
@@ -860,6 +869,7 @@ static inline void read_joyp(E *e, Bool write) {
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
 u8 cpu_read(E *e, u16 addr) {
+  A* a = &e->s.a;
   C* c = &e->s.c;
   c->bus_write = FALSE;
   switch (addr >> 12) {
@@ -891,13 +901,13 @@ u8 cpu_read(E *e, u16 addr) {
   case 4: // APU & I/O
     switch (addr - 0x4000) {
       case 0x15: {
-        // TODO: DMC interrupt (bit 7), DMC len (bit 4)
-        u8 result = ((c->irq & IRQ_FRAME) << 6) | (c->open_bus & 0x20) |
-                    ((e->s.a.len[3] > 0) << 3) | ((e->s.a.len[2] > 0) << 2) |
-                    ((e->s.a.len[1] > 0) << 1) | (e->s.a.len[0] > 0);
+        u8 result = ((c->irq & (IRQ_FRAME | IRQ_DMC)) << 6) |
+                    (c->open_bus & 0x20) | ((a->dmcbytes > 0) << 4) |
+                    ((a->len[3] > 0) << 3) | ((a->len[2] > 0) << 2) |
+                    ((a->len[1] > 0) << 1) | (a->len[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
         DEBUG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
-              e->s.cy, (e->s.cy - e->s.a.resetcy) / 3);
+              e->s.cy, (e->s.cy - a->resetcy) / 3);
         return result;
       }
       case 0x16: { // JOY1
@@ -1031,16 +1041,28 @@ void cpu_write(E *e, u16 addr, u8 val) {
       case 0x0f: start_chan(a, 3, val); goto apu;
 
       case 0x15:
-        for (int i = 0; i < 4; ++i) {
-          if (!(val & (1 << i))) {
-            a->len[i] = 0;
-            a->update = TRUE;
-          }
+        if (val & 0x10) {
+          a->dmcstart = a->dmcbytes == 0;
+        } else {
+          a->dmcbytes = 0;
         }
+        for (int i = 0; i < 4; ++i) {
+          if (!(val & (1 << i))) { a->len[i] = 0; }
+        }
+        a->update |= !!(val & 0x1f);
         goto apu;
 
-      case 0x10: case 0x11: case 0x12: case 0x13:   // DMC
-        break;
+      // DMC
+      case 0x10: {
+        static const u16 rate[] = {428, 380, 340, 320, 286, 254, 226, 214,
+                                   190, 160, 142, 128, 106, 84,  72,  54};
+        a->dmcperiod = a->dmctimer = rate[val & 15];
+        goto apu;
+      }
+      case 0x11: a->dmcout = val & 0x7f; goto apu;
+      case 0x12: goto apu;
+      case 0x13: a->dmcbytes = (val << 4) + 1; goto apu;
+
       case 0x17:                                    // Frame counter
         DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
               (u32)(e->s.cy & 1));
