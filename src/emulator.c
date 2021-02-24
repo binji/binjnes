@@ -607,38 +607,34 @@ static void apu_tick(E *e) {
 
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
   // Reload the timers that are zero.
-  u16x8 timer_zero = (a->timer < timer_diff) & a->play_mask;
-  a->timer = ((a->timer - timer_diff) & ~timer_zero) | (a->period & timer_zero);
+  u16x8 timer0 = (a->timer < timer_diff) & a->play_mask;
+  a->timer = ((a->timer - timer_diff) & ~timer0) | (a->period & timer0);
 
-  // TODO: combine with timer?
-  u16 dmczero = -(a->dmctimer == 0);
-  a->dmctimer = ((a->dmctimer - 1) & ~dmczero) | (a->dmcperiod & dmczero);
-
-  if (timer_zero[0] | timer_zero[1] | timer_zero[2] | timer_zero[3] | dmczero) {
+  if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4]) {
     // Advance the sequence for reloaded timers.
-    a->seq = (a->seq + (1 & timer_zero)) & (u16x8){7, 7, 31};
+    a->seq = (a->seq + (1 & timer0)) & (u16x8){7, 7, 31};
 
-    if (timer_zero[0]) {
+    if (timer0[0]) {
       a->sample[0] = pduty[a->reg[2] >> 6][a->seq[0]];
     }
-    if (timer_zero[1]) {
+    if (timer0[1]) {
       a->sample[1] = pduty[a->reg[3] >> 6][a->seq[1]];
     }
-    if (timer_zero[2]) {
+    if (timer0[2]) {
       a->sample[2] = trisamp[a->seq[2]];
     }
-    if (timer_zero[3]) {
+    if (timer0[3]) {
       a->noise =
           (a->noise >> 1) |
           (((a->noise << 14) ^ (a->noise << ((a->reg[0xe] & 0x80) ? 8 : 13))) &
            0x4000);
       a->sample[3] = a->noise & 1;
     }
-    if (dmczero) {
+    if (timer0[4]) {
       u16 diff = ((a->dmcshift & 1) << 2) - 2;
       if ((a->dmcout - 2) <= 123) { a->dmcout += diff; }
       a->dmcshift >>= 1;
-      --a->dmcbits;
+      // TODO: if a->seq[4]==8 then need to reload next byte
     }
     a->update = TRUE;
   }
@@ -1056,7 +1052,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
       case 0x10: {
         static const u16 rate[] = {428, 380, 340, 320, 286, 254, 226, 214,
                                    190, 160, 142, 128, 106, 84,  72,  54};
-        a->dmcperiod = a->dmctimer = rate[val & 15];
+        a->period[4] = a->timer[4] = rate[val & 15];
         goto apu;
       }
       case 0x11: a->dmcout = val & 0x7f; goto apu;
