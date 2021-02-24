@@ -84,6 +84,7 @@ extern "C" {
   }
 
 typedef int8_t s8;
+typedef int16_t s16;
 typedef int32_t s32;
 typedef uint8_t u8;
 typedef uint16_t u16;
@@ -99,6 +100,7 @@ typedef enum Result { OK = 0, ERROR = 1 } Result;
 typedef u8 u8x16 __attribute__((vector_size(16)));
 typedef u16 u16x8 __attribute__((vector_size(16)));
 typedef u32 u32x4 __attribute__((vector_size(16)));
+typedef s32 s32x4 __attribute__((vector_size(16)));
 typedef u64 u64x2 __attribute__((vector_size(16)));
 typedef f32 f32x4 __attribute__((vector_size(16)));
 

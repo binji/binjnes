@@ -593,7 +593,7 @@ static void set_period_hi(A* a, int chan, u8 val) {
 }
 
 static void apu_tick(E *e) {
-  static const u32x4 timer_diff = {1, 1, 2, 1};
+  static const u16x8 timer_diff = {1, 1, 2, 1};
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
                                 {0, 1, 1, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 1, 1, 1, 1},
@@ -607,12 +607,12 @@ static void apu_tick(E *e) {
 
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
   // Reload the timers that are zero.
-  u32x4 timer_zero = (a->timer < timer_diff) & a->play_mask;
+  u16x8 timer_zero = (a->timer < timer_diff) & a->play_mask;
   a->timer = ((a->timer - timer_diff) & ~timer_zero) | (a->period & timer_zero);
 
   if (timer_zero[0] | timer_zero[1] | timer_zero[2] | timer_zero[3]) {
     // Advance the sequence for reloaded timers.
-    a->seq = (a->seq + (1 & timer_zero)) & (u32x4){7, 7, 31};
+    a->seq = (a->seq + (1 & timer_zero)) & (u16x8){7, 7, 31};
 
     if (timer_zero[0]) {
       a->sample[0] = pduty[a->reg[2] >> 6][a->seq[0]];
@@ -635,8 +635,11 @@ static void apu_tick(E *e) {
   }
 
   if (a->update) {
-    u32x4 play_mask = a->play_mask | (u32x4){0, 0, 0xffffffff, 0};
-    f32x4 sampvol = (f32x4)((u32x4)a->sample & play_mask) * a->vol;
+    typedef s16 s16x4 __attribute__((vector_size(8)));
+    u32x4 play_mask4 =
+        (u32x4) __builtin_convertvector(*(s16x4 *)&a->play_mask, s32x4) |
+        (s32x4){0, 0, -1, 0};
+    f32x4 sampvol = (f32x4)((u32x4)a->sample & play_mask4) * a->vol;
 
     // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
     // Started from a 31-entry table and calculated a quadratic regression.
@@ -738,19 +741,20 @@ static void apu_half(E *e) {
   DEBUG("    1/2 (cy: %" PRIu64")\n", e->s.cy);
   A* a = &e->s.a;
   // length counter
-  u32x4 len0 = a->len == 0;
+  u16x8 len0 = a->len == 0;
   a->len -= 1 & ~(len0 | a->halt);
   a->play_mask &= ~len0;
 
   // sweep unit
-  u32x4 diff = a->period >> a->swshift, ndiff = ~diff + (u32x4){0, 1};
-  u32x4 target = a->period + ((ndiff & a->swneg) | (diff & ~a->swneg));
-  u32x4 mute = (a->period < 8) | (target >= 0x7ff);
-  u32x4 swdiv0 = a->swdiv == 0, swupdate = swdiv0 & a->swen & ~mute,
+  u16x8 diff = {a->period[0] >> a->swshift[0], a->period[1] >> a->swshift[1]},
+        ndiff = ~diff + (u16x8){0, 1};
+  u16x8 target = a->period + ((ndiff & a->swneg) | (diff & ~a->swneg));
+  u16x8 mute = (a->period < 8) | (target >= 0x7ff);
+  u16x8 swdiv0 = a->swdiv == 0, swupdate = swdiv0 & a->swen & ~mute,
         swdec = ~(swdiv0 | a->swreload);
   a->period = (a->period & ~swupdate) | (target & swupdate);
   a->swdiv = ((a->swdiv - 1) & swdec) | (a->swperiod & ~swdec);
-  a->swreload = (u32x4){0, 0};
+  a->swreload = (u16x8){0, 0};
 }
 
 void apu_step(E *e) {

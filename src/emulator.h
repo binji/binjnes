@@ -125,9 +125,9 @@ typedef struct {
 } P;
 
 typedef struct {
-  u32x4 timer, period, seq, start, cvol, halt, len, play_mask;
-  u32x4 envdiv, envloop, envreload;                      // envelope
-  u32x4 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
+  u16x8 timer, period, seq, halt, len, play_mask;
+  u32x4 start, cvol, envdiv, envloop, envreload;         // envelope
+  u16x8 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
   f32x4 sample, vol, decay;
   f32 mixed;
 
