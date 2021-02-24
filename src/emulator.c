@@ -1092,7 +1092,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
     break;
 
   case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15:
-    e->cpu_write(e, addr, val);
+    e->mapper_write(e, addr, val);
     break;
   }
 }
@@ -1831,7 +1831,7 @@ Result init_mapper(E *e) {
   switch (e->ci.mapper) {
   case 0:
     CHECK_MSG(e->ci.prg_banks <= 2, "Too many PRG banks.\n");
-    e->cpu_write = mapper0_write;
+    e->mapper_write = mapper0_write;
     goto shared;
   case 1:
     CHECK_MSG(is_power_of_two(e->ci.chr_banks), "Expected POT CHR banks.\n");
@@ -1842,19 +1842,19 @@ Result init_mapper(E *e) {
     e->s.m.chr_bank[1] = e->ci.chr_banks - 1;
     e->s.m.prg_bank = 0;
     e->s.m.prg_ram_en = TRUE;
-    e->cpu_write = mapper1_write;
+    e->mapper_write = mapper1_write;
     goto shared;
   case 2:
     e->s.m.prg_bank = 0;
-    e->cpu_write = mapper2_write;
+    e->mapper_write = mapper2_write;
     goto shared;
   case 3:
     e->s.m.prg_bank = 0;
-    e->cpu_write = mapper3_write;
+    e->mapper_write = mapper3_write;
     goto shared;
   case 7:
     e->s.m.prg_bank = 0;
-    e->cpu_write = mapper7_write;
+    e->mapper_write = mapper7_write;
     set_mirror(e, MIRROR_SINGLE_0);
     set_chr_map(e, 0, e->ci.chr_banks - 1);
     set_prg_map(e, e->ci.prg_banks - 2, e->ci.prg_banks - 1);
