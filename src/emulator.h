@@ -95,7 +95,7 @@ typedef struct {
 
 typedef struct {
   u64 bits;
-  const u64 *step, *next_step;
+  const u8 *step, *next_step;
   u8 PCL, PCH, TL, TH, buslo, bushi, fixhi, veclo, oamhi;
   u8 A, X, Y, S;
   u8 ram[0x800], prg_ram[0x2000];
