@@ -649,7 +649,7 @@ static void apu_tick(E *e) {
                      TD = 0.00000003402641447451;
     f32 p = sampvol[0] + sampvol[1];
     f32 t = 3 * sampvol[2] + 2 * sampvol[3] /*+ dmc*/;
-    a->mixed = (PB * p + PC * p * p) + (TB * t + TC * t * t + TD * t * t * t);
+    a->mixed = p * (PB + p * PC) + t * (TB + t * (TC + t * TD));
     a->update = FALSE;
   }
 
