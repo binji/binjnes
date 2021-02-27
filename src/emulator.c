@@ -61,8 +61,8 @@ static void disasm(E *e, u16 addr);
 static void print_info(E *e);
 static void spr_step(E *e);
 
-static const u8 s_spr_consts[], *const s_cpu_decode,
-    s_opcode_bits[], *const s_nmi, *const s_irq, *const s_oamdma;
+static const u8 s_spr_consts[], s_opcode_bits[];
+static const u16 s_cpu_decode, s_nmi, s_irq, s_oamdma;
 static const u16 s_ppu_consts[], s_apu_consts[], s_apu_bits[], s_opcode_loc[];
 static const u32 s_ppu_bits[], s_spr_bits[], s_ppu_enabled_mask,
     s_ppu_disabled_mask;
@@ -1372,13 +1372,13 @@ void cpu_step(E *e) {
 #if DISASM
         disasm(e, get_u16(c->PCH, c->PCL) - 1);
 #endif
-        c->step = &s_opcode_bits[s_opcode_loc[c->opcode = busval]];
+        c->step = s_opcode_loc[c->opcode = busval];
         break;
       default:
         FATAL("NYI: cpu step %d\n", bit);
     }
   }
-  c->bits = s_cpu_bits[*(c->step++)];
+  c->bits = s_cpu_bits[s_opcode_bits[c->step++]];
   if (c->bits == 0) {
     FATAL("NYI: opcode %02x\n", c->opcode);
   }
@@ -1756,10 +1756,7 @@ static const u8 s_opcode_bits[] = {
   OAMDMA_RW100, OAMDMA_RW100, OAMDMA_RW25, OAMDMA_RW25, OAMDMA_RW5, // 255
   120,       122, // final byte, and fetch next instr
 };
-static const u8 *const s_cpu_decode = &s_opcode_bits[766],
-                *const s_nmi = &s_opcode_bits[767],
-                *const s_irq = &s_opcode_bits[773],
-                *const s_oamdma = &s_opcode_bits[779];
+static const u16 s_cpu_decode = 766, s_nmi = 767, s_irq = 773, s_oamdma = 779;
 
 static Result get_cart_info(E *e, const FileData *file_data) {
   const u32 kHeaderSize = 16;
