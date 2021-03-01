@@ -95,7 +95,7 @@ typedef struct {
 
 typedef struct {
   u64 bits;
-  u16 step, next_step;
+  u16 step, next_step, dmc_step;
   u8 PCL, PCH, TL, TH, buslo, bushi, fixhi, veclo, oamhi;
   u8 A, X, Y, S;
   u8 ram[0x800], prg_ram[0x2000];
@@ -132,8 +132,8 @@ typedef struct {
   f32 mixed;
 
   u16 cnt, noise, dmcbytes, dmcaddr;
-  u8 state, reg[0x18], tricnt, dmcout, dmcshift;
-  Bool update, trireload, dmcstart;
+  u8 state, reg[0x18], tricnt, dmcout, dmcbuf, dmcshift;
+  Bool update, trireload, dmcsilent, dmcfetch;
   u64 resetcy; // XXX
 } A;
 
