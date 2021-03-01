@@ -773,7 +773,7 @@ void apu_step(E *e) {
         case 2: apu_quarter(e); break;
         case 3: apu_half(e); break;
         case 4: if (--a->cnt != 0) { a->state = cnst; bits = 0; } break;
-        case 5: if (!(a->reg[0x17] & 0x40)) { e->s.c.irq |= IRQ_FRAME; } break;
+        case 5: if (!(a->reg[0x17] & 0xc0)) { e->s.c.irq |= IRQ_FRAME; } break;
         case 6: a->cnt = cnst; break;
         case 7: a->cnt = (a->reg[0x17] & 0x80) ? 7455 : 3729; break;
         case 8: if (a->reg[0x17] & 0x80) { apu_quarter(e); apu_half(e); } break;
@@ -1040,6 +1040,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
         goto apu;
 
       case 0x10: case 0x11: case 0x12: case 0x13:   // DMC
+        break;
       case 0x17:                                    // Frame counter
         DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
               (u32)(e->s.cy & 1));
