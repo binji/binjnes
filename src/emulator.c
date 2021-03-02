@@ -13,7 +13,7 @@
 #include "emulator.h"
 
 #define LOGLEVEL 1
-#define DISASM 1
+#define DISASM 0
 
 #if LOGLEVEL >= 1
 #define LOG(...) printf(__VA_ARGS__)
@@ -637,15 +637,19 @@ static void apu_tick(E *e) {
     }
     if (timer0[4]) {
       if (!a->dmcsilent) {
-        u16 diff = ((a->dmcshift & 1) << 2) - 2;
-        if ((a->dmcout - 2) <= 123) { a->dmcout += diff; }
+        u8 newdmcout = a->dmcout + ((a->dmcshift & 1) << 2) - 2;
+        if (newdmcout <= 127) { a->dmcout = newdmcout; }
         a->dmcshift >>= 1;
       }
       if (a->seq[4] == 0) {
-        a->dmcsilent = a->dmcbytes == 0;
-        if (!a->dmcsilent) {
+        DEBUG(" dmc output finished, fetch (cy: %" PRIu64 ")\n", e->s.cy);
+        if (a->dmcbytes != 0) {
+          a->dmcsilent = FALSE;
           a->dmcfetch = TRUE;
           a->dmcshift = a->dmcbuf;
+        } else if (!a->dmcsilent) {
+          a->dmcsilent = TRUE;
+          LOG(" dmc silenced (cy: %" PRIu64 ")\n", e->s.cy);
         }
       }
     }
@@ -653,12 +657,14 @@ static void apu_tick(E *e) {
   }
 
   if (a->dmcfetch) {
-    e->s.c.dmc_step = e->s.c.step; // TODO: Should finish writes first?
-    u8 stall = s_dmc_stall[s_opcode_bits[e->s.c.step]];
+    u16 step = e->s.c.step - 1;
+    e->s.c.dmc_step = step; // TODO: Should finish writes first?
+    u8 stall = s_dmc_stall[s_opcode_bits[step]];
     e->s.c.step = s_dmc + (4 - stall);
-    e->s.c.bits = s_cpu_bits[s_opcode_bits[e->s.c.step]];
+    e->s.c.bits = s_cpu_bits[s_opcode_bits[e->s.c.step++]];
     a->dmcfetch = FALSE;
-    LOG("queue dmcfetch (cy: %" PRIu64" (stall %d):\n", e->s.cy, stall);
+    LOG("queue dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
+        e->s.cy, stall, step, a->seq[4]);
   }
 
   if (a->update) {
@@ -924,7 +930,7 @@ u8 cpu_read(E *e, u16 addr) {
                     ((a->len[3] > 0) << 3) | ((a->len[2] > 0) << 2) |
                     ((a->len[1] > 0) << 1) | (a->len[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
-        DEBUG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
+        LOG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
               e->s.cy, (e->s.cy - a->resetcy) / 3);
         return result;
       }
@@ -1034,8 +1040,8 @@ void cpu_write(E *e, u16 addr, u8 val) {
     static const u16 s_noiselens[] = {4,   8,    16,   32,  64,  96,
                                       128, 160,  202,  254, 380, 508,
                                       762, 1016, 2034, 4068};
-    static const u16 dmcrate[] = {428, 380, 340, 320, 286, 254, 226, 214,
-                                  190, 160, 142, 128, 106, 84,  72,  54};
+    static const u16 dmcrate[] = {214, 190, 170, 160, 143, 127, 113, 107,
+                                  95,  80,  71,  64,  53,  42,  36,  27};
     A* a = &e->s.a;
     switch (addr - 0x4000) {
       // Pulse1
@@ -1061,13 +1067,19 @@ void cpu_write(E *e, u16 addr, u8 val) {
       case 0x0f: start_chan(a, 3, val); goto apu;
 
       // DMC
-      case 0x10: a->period[4] = a->timer[4] = dmcrate[val & 15]; goto apu;
+      case 0x10:
+        a->period[4] = a->timer[4] = dmcrate[val & 15];
+        if (!(val & 0x80)) { c->irq &= ~IRQ_DMC; }
+        goto apu;
       case 0x11: a->dmcout = val & 0x7f; goto apu;
       case 0x12: case 0x13: goto apu;
 
       case 0x15:
         if (val & 0x10) {
-          if (a->dmcbytes == 0) { a->dmcfetch = TRUE; start_dmc(a); }
+          if (a->dmcbytes == 0) {
+            a->dmcfetch = TRUE;
+            start_dmc(a);
+          }
         } else {
           a->dmcbytes = 0;
         }
@@ -1418,7 +1430,7 @@ void cpu_step(E *e) {
         e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
         c->step = c->dmc_step;
         // Increment sample address, decrement bytes remaining
-        ++e->s.a.dmcaddr;
+        e->s.a.dmcaddr = (e->s.a.dmcaddr + 1) | 0x8000;
         // If bytes remaining == 0:
         if (--e->s.a.dmcbytes == 0) {
           if (e->s.a.reg[0x10] & 0x40) {
@@ -1592,6 +1604,7 @@ static const u8 s_dmc_stall[] = {
     4, 3, 4, 3, 4, 3, 3, 4, 4, 4, 4, 4, 4, 3, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3,
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4,
     4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 2, 2, 2, 1, 3, 4,
+    4, 4,
 };
 
 static const u16 s_opcode_loc[256] = {
