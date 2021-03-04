@@ -12,7 +12,7 @@
 
 #include "emulator.h"
 
-#define LOGLEVEL 1
+#define LOGLEVEL 0
 #define DISASM 0
 
 #if LOGLEVEL >= 1
@@ -638,18 +638,20 @@ static void apu_tick(E *e) {
     }
     if (timer0[4]) {
       if (a->dmcbufstate) {
+        DEBUG("   dmc timer overflow (cy: %" PRIu64 ") (seq=%u) (timer=>%u)\n",
+              e->s.cy, a->seq[4], a->timer[4]);
         u8 newdmcout = a->dmcout + ((a->dmcshift & 1) << 2) - 2;
         if (newdmcout <= 127) { a->dmcout = newdmcout; }
         a->dmcshift >>= 1;
       }
       if (a->seq[4] == 0) {
         if (a->dmcen) {
-          LOG(" dmc output finished, fetch (cy: %" PRIu64 ")\n", e->s.cy);
+          DEBUG("  dmc output finished, fetch (cy: %" PRIu64 ")\n", e->s.cy);
           a->dmcfetch = TRUE;
         }
         if (a->dmcbufstate) {
-          LOG(" copy buf -> sr (cy: %" PRIu64 ") (bufstate=%u=>%u)\n", e->s.cy,
-              a->dmcbufstate, a->dmcbufstate - 1);
+          DEBUG("  copy buf -> sr (cy: %" PRIu64 ") (bufstate=%u=>%u)\n",
+                e->s.cy, a->dmcbufstate, a->dmcbufstate - 1);
           a->dmcshift = a->dmcbuf;
           --a->dmcbufstate;
         }
@@ -665,8 +667,8 @@ static void apu_tick(E *e) {
     e->s.c.step = s_dmc + (4 - stall);
     e->s.c.bits = s_cpu_bits[s_opcode_bits[e->s.c.step++]];
     a->dmcfetch = FALSE;
-    LOG("queue dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
-        e->s.cy, stall, step, a->seq[4]);
+    DEBUG(" QUEUE dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
+          e->s.cy, stall, step, a->seq[4]);
   }
 
   if (a->update) {
@@ -932,7 +934,7 @@ u8 cpu_read(E *e, u16 addr) {
                     ((a->len[3] > 0) << 3) | ((a->len[2] > 0) << 2) |
                     ((a->len[1] > 0) << 1) | (a->len[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
-        LOG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
+        DEBUG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
               e->s.cy, (e->s.cy - a->resetcy) / 3);
         return result;
       }
@@ -1042,8 +1044,8 @@ void cpu_write(E *e, u16 addr, u8 val) {
     static const u16 s_noiselens[] = {4,   8,    16,   32,  64,  96,
                                       128, 160,  202,  254, 380, 508,
                                       762, 1016, 2034, 4068};
-    static const u16 dmcrate[] = {214, 190, 170, 160, 143, 127, 113, 107,
-                                  95,  80,  71,  64,  53,  42,  36,  27};
+    static const u16 dmcrate[] = {213, 189, 169, 159, 142, 126, 112, 106,
+                                  94,  79,  70,  63,  52,  41,  35,  26};
     A* a = &e->s.a;
     switch (addr - 0x4000) {
       // Pulse1
@@ -1070,7 +1072,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
 
       // DMC
       case 0x10:
-        a->period[4] = a->timer[4] = dmcrate[val & 15];
+        a->period[4] = dmcrate[val & 15];
         if (!(val & 0x80)) { c->irq &= ~IRQ_DMC; }
         goto apu;
       case 0x11: a->dmcout = val & 0x7f; goto apu;
@@ -1080,11 +1082,13 @@ void cpu_write(E *e, u16 addr, u8 val) {
         if (val & 0x10) {
           if (!a->dmcen) {
             if (!a->dmcbufstate) {
-              LOG(" starting DMC with fetch (cy: %" PRIu64 ") (bufstate=%u)\n",
-                  e->s.cy, a->dmcbufstate);
+              DEBUG("STARTing DMC with fetch (cy: %" PRIu64
+                    ") (bufstate=%u) (seq=%u)\n",
+                    e->s.cy, a->dmcbufstate, a->seq[4]);
               a->dmcfetch = TRUE;
             } else {
-              LOG(" starting DMC WITHOUT fetch (cy: %" PRIu64 ")\n", e->s.cy);
+              DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
+                    e->s.cy, a->seq[4]);
             }
             start_dmc(a);
           }
@@ -1444,18 +1448,18 @@ void cpu_step(E *e) {
           if (e->s.a.reg[0x10] & 0x40) {
             e->s.a.dmcen = TRUE;
           } else {
-            LOG(" dmc channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
+            DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
             e->s.a.dmcen = FALSE;
             if (e->s.a.reg[0x10] & 0x80) {
               c->irq |= IRQ_DMC;
-              LOG("DMC irq!\n");
+              DEBUG("  dmc irq!\n");
             }
           }
         }
-        LOG("DO dmcfetch=%u (cy: %" PRIu64
-            ") (addr=>%04hx, bytes=>%u) (bufstate=%u=>2)\n",
-            e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes,
-            e->s.a.dmcbufstate);
+        DEBUG(" DO dmcfetch=%u (cy: %" PRIu64
+              ") (addr=>%04hx, bytes=>%u) (bufstate=%u=>2)\n",
+              e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes,
+              e->s.a.dmcbufstate);
         e->s.a.dmcbufstate = 2;
         break;
     }
@@ -2007,7 +2011,7 @@ Result init_emulator(E *e, const EInit *init) {
   e->s.a.cvol[2] = ~0;
   e->s.a.noise = 1;
   // DMC channel should never have playback stopped.
-  e->s.a.period[4] = 428; // TODO: correct initial DMC rate?
+  e->s.a.period[4] = 213;
   e->s.a.len[4] = 1;
   e->s.a.halt[4] = ~0;
   e->s.a.play_mask[4] = ~0;
