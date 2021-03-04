@@ -578,7 +578,8 @@ static void start_chan(A* a, int chan, u8 val) {
 
 static void start_dmc(A* a) {
   a->dmcaddr = 0xc000 + (a->reg[0x12] << 6);
-  a->dmcbytes = (a->reg[0x13] << 4) + 1;
+  a->dmcbytes = a->reg[0x13] << 4;
+  a->dmcen = TRUE;
 }
 
 static void set_period(A* a, int chan, u16 val) {
@@ -636,20 +637,21 @@ static void apu_tick(E *e) {
       a->sample[3] = a->noise & 1;
     }
     if (timer0[4]) {
-      if (!a->dmcsilent) {
+      if (a->dmcbufstate) {
         u8 newdmcout = a->dmcout + ((a->dmcshift & 1) << 2) - 2;
         if (newdmcout <= 127) { a->dmcout = newdmcout; }
         a->dmcshift >>= 1;
       }
       if (a->seq[4] == 0) {
-        DEBUG(" dmc output finished, fetch (cy: %" PRIu64 ")\n", e->s.cy);
-        if (a->dmcbytes != 0) {
-          a->dmcsilent = FALSE;
+        if (a->dmcen) {
+          LOG(" dmc output finished, fetch (cy: %" PRIu64 ")\n", e->s.cy);
           a->dmcfetch = TRUE;
+        }
+        if (a->dmcbufstate) {
+          LOG(" copy buf -> sr (cy: %" PRIu64 ") (bufstate=%u=>%u)\n", e->s.cy,
+              a->dmcbufstate, a->dmcbufstate - 1);
           a->dmcshift = a->dmcbuf;
-        } else if (!a->dmcsilent) {
-          a->dmcsilent = TRUE;
-          LOG(" dmc silenced (cy: %" PRIu64 ")\n", e->s.cy);
+          --a->dmcbufstate;
         }
       }
     }
@@ -926,7 +928,7 @@ u8 cpu_read(E *e, u16 addr) {
     switch (addr - 0x4000) {
       case 0x15: {
         u8 result = ((c->irq & (IRQ_FRAME | IRQ_DMC)) << 6) |
-                    (c->open_bus & 0x20) | ((a->dmcbytes > 0) << 4) |
+                    (c->open_bus & 0x20) | (a->dmcen << 4) |
                     ((a->len[3] > 0) << 3) | ((a->len[2] > 0) << 2) |
                     ((a->len[1] > 0) << 1) | (a->len[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
@@ -1076,12 +1078,18 @@ void cpu_write(E *e, u16 addr, u8 val) {
 
       case 0x15:
         if (val & 0x10) {
-          if (a->dmcbytes == 0) {
-            a->dmcfetch = TRUE;
+          if (!a->dmcen) {
+            if (!a->dmcbufstate) {
+              LOG(" starting DMC with fetch (cy: %" PRIu64 ") (bufstate=%u)\n",
+                  e->s.cy, a->dmcbufstate);
+              a->dmcfetch = TRUE;
+            } else {
+              LOG(" starting DMC WITHOUT fetch (cy: %" PRIu64 ")\n", e->s.cy);
+            }
             start_dmc(a);
           }
         } else {
-          a->dmcbytes = 0;
+          a->dmcen = FALSE;
         }
         for (int i = 0; i < 4; ++i) {
           if (!(val & (1 << i))) { a->len[i] = 0; }
@@ -1426,24 +1434,29 @@ void cpu_step(E *e) {
         c->step = s_opcode_loc[c->opcode = busval];
         break;
       case 63:
-        // Read byte and load into a->dmcbuf
         e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
         c->step = c->dmc_step;
-        // Increment sample address, decrement bytes remaining
         e->s.a.dmcaddr = (e->s.a.dmcaddr + 1) | 0x8000;
-        // If bytes remaining == 0:
-        if (--e->s.a.dmcbytes == 0) {
+        if (e->s.a.dmcbytes) {
+          --e->s.a.dmcbytes;
+        } else {
+          start_dmc(&e->s.a);
           if (e->s.a.reg[0x10] & 0x40) {
-            // If loop flag is set, reset address and bytes remaining
-            start_dmc(&e->s.a);
-          } else if (e->s.a.reg[0x10] & 0x80) {
-            // Else If IRQ flag is set, then set IRQ
-            c->irq |= IRQ_DMC;
-            LOG("DMC irq!\n");
+            e->s.a.dmcen = TRUE;
+          } else {
+            LOG(" dmc channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
+            e->s.a.dmcen = FALSE;
+            if (e->s.a.reg[0x10] & 0x80) {
+              c->irq |= IRQ_DMC;
+              LOG("DMC irq!\n");
+            }
           }
         }
-        LOG("DO dmcfetch=%u (cy: %" PRIu64 ") (addr=>%04hx, bytes=>%u)\n",
-            e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes);
+        LOG("DO dmcfetch=%u (cy: %" PRIu64
+            ") (addr=>%04hx, bytes=>%u) (bufstate=%u=>2)\n",
+            e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes,
+            e->s.a.dmcbufstate);
+        e->s.a.dmcbufstate = 2;
         break;
     }
   }
