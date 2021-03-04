@@ -1041,9 +1041,8 @@ void cpu_write(E *e, u16 addr, u8 val) {
   }
 
   case 4: { // APU & I/O
-    static const u16 s_noiselens[] = {4,   8,    16,   32,  64,  96,
-                                      128, 160,  202,  254, 380, 508,
-                                      762, 1016, 2034, 4068};
+    static const u16 s_noiserate[] = {1,   3,   7,   15,  31,  47,  63,   79,
+                                      100, 126, 189, 253, 380, 507, 1016, 2033};
     static const u16 dmcrate[] = {213, 189, 169, 159, 142, 126, 112, 106,
                                   94,  79,  70,  63,  52,  41,  35,  26};
     A* a = &e->s.a;
@@ -1067,7 +1066,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
 
       // Noise
       case 0x0c: set_vol(a, 3, val); set_halt(a, 3, val); goto apu;
-      case 0x0e: set_period(a, 3, s_noiselens[val & 15]); goto apu;
+      case 0x0e: set_period(a, 3, s_noiserate[val & 15]); goto apu;
       case 0x0f: start_chan(a, 3, val); goto apu;
 
       // DMC
