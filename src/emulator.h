@@ -122,6 +122,7 @@ typedef struct {
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   u32 fbidx, bits_mask;
   Spr spr;
+  u64 read_status_cy;
 } P;
 
 typedef struct {

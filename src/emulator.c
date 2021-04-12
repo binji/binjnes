@@ -307,8 +307,9 @@ repeat:
       case 21: if (z) { p->state = cnst; } break;
       case 22:
         if (p->ppuctrl & 0x80) { e->s.c.has_nmi = TRUE; }
-        p->ppustatus |= 0x80;
+        if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
         e->s.event |= EMULATOR_EVENT_NEW_FRAME;
+        LOG("(%" PRIu64 "): ppustatus |= 0x80\n", e->s.cy);
         break;
       case 23: p->ppustatus = 0; break;
       case 24: p->state = cnst; break;
@@ -913,7 +914,8 @@ u8 cpu_read(E *e, u16 addr) {
         u8 result = (e->s.p.ppustatus & 0xe0) | (e->s.p.ppulast & 0x1f);
         e->s.p.ppustatus &= ~0x80;  // Clear NMI flag.
         e->s.p.w = 0;
-        DEBUG("     ppu:status=%02hhx w=0\n", result);
+        e->s.p.read_status_cy = e->s.cy;
+        LOG("     [%" PRIu64 "] ppu:status=%02hhx w=0\n", e->s.cy, result);
         return result;
       }
       case 4:
@@ -2079,10 +2081,12 @@ EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 static void emulator_step_internal(E *e) {
   cpu_step(e);
   ppu_step(e);
+  e->s.cy += 1;
   ppu_step(e);
+  e->s.cy += 1;
   ppu_step(e);
+  e->s.cy += 1;
   apu_step(e);
-  e->s.cy += 3;  // Host counts PPU cycles, not CPU.
 }
 
 EEvent emulator_run_until(E *e, Ticks until_ticks) {
