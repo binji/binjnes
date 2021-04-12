@@ -2003,6 +2003,7 @@ Result init_emulator(E *e, const EInit *init) {
 #endif
   s->c.S = 0xfd;
   s->c.bits = 0;
+  s->c.I = TRUE;
   s->c.step = s->c.next_step = s_cpu_decode;
   s->p.bits_mask = s_ppu_disabled_mask;
   // Triangle volume is always full; disabled by len counter or linear counter.
