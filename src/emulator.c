@@ -663,13 +663,17 @@ static void apu_tick(E *e) {
 
   if (a->dmcfetch) {
     u16 step = e->s.c.step - 1;
-    e->s.c.dmc_step = step; // TODO: Should finish writes first?
-    u8 stall = s_dmc_stall[s_opcode_bits[step]];
-    e->s.c.step = s_dmc + (4 - stall);
-    e->s.c.bits = s_cpu_bits[s_opcode_bits[e->s.c.step++]];
+    if (step < s_dmc) {
+      e->s.c.dmc_step = step; // TODO: Should finish writes first?
+      u8 stall = s_dmc_stall[s_opcode_bits[step]];
+      e->s.c.step = s_dmc + (4 - stall);
+      e->s.c.bits = s_cpu_bits[s_opcode_bits[e->s.c.step++]];
+      DEBUG(" QUEUE dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
+            e->s.cy, stall, step, a->seq[4]);
+    } else {
+      DEBUG(" dmcfetch skipped (cy: %" PRIu64 "):\n", e->s.cy);
+    }
     a->dmcfetch = FALSE;
-    DEBUG(" QUEUE dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
-          e->s.cy, stall, step, a->seq[4]);
   }
 
   if (a->update) {
