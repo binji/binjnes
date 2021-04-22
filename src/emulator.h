@@ -117,7 +117,7 @@ typedef struct {
   u32x4 bgatshift, bgatpreshift;
   u16x8 bgsprleftmask;
   u16 cnt1, cnt2, v, t, atb;
-  u8 state, x, scany, ntb, ptbl, ptbh, readbuf;
+  u8 state, x, ntb, ptbl, ptbh, readbuf;
   Bool w, oddframe;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   u32 fbidx, bits_mask;

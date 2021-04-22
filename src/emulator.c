@@ -186,6 +186,9 @@ static inline void incv(P* p) {
 
 static void shift_bg(E *e) { e->s.p.bgatpreshift >>= 2; }
 
+static inline u8 scanx(P* p) { return p->fbidx & 255; }
+static inline u8 scany(P* p) { return p->fbidx >> 8; }
+
 static void shift_en(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
@@ -201,7 +204,7 @@ static void shift_en(E *e) {
   }
 
   // TODO: smarter way to avoid sprites on line 0?
-  if ((p->ppumask & 0x10) && p->scany != 0) { // Show sprites.
+  if ((p->ppumask & 0x10) && scany(p) != 0) { // Show sprites.
     // Find first non-zero sprite, if any. Check only the high bit of the lane
     // (the pixel that might be drawn).
     u64x2 non0x2 = (u64x2)(spr->shift & active & 0x80);
@@ -215,7 +218,7 @@ static void shift_en(E *e) {
       //  * When x!=255
       //  * (sprite priority doesn't matter)
       if ((((spr->spr0mask & non0) >> s) & p->bgsprleftmask[1]) && (idx & 3) &&
-          (p->fbidx & 255) != 255) {
+          scanx(p) != 255) {
         p->ppustatus |= 0x40;
       }
 
@@ -273,7 +276,7 @@ repeat:
       case 2: p->ptbl = read_ptb(e, 0); break;
       case 3: p->ptbh = read_ptb(e, 8); break;
       case 4: inch(p); break;
-      case 5: incv(p); p->scany++; break;
+      case 5: incv(p); break;
       case 6: shift_en(e); break;
       case 7: shift_dis(e); break;
       case 8: shift_bg(e); break;
@@ -294,7 +297,7 @@ repeat:
       case 11: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
       case 12: spr_step(e); break;
       case 13: ppu_t_to_v(p, 0x041f); break;
-      case 14: ppu_t_to_v(p, 0x7be0); p->scany = 0; break;
+      case 14: ppu_t_to_v(p, 0x7be0); break;
       case 15: p->cnt1 = cnst; break;
       case 16: p->cnt2 = cnst; break;
       case 17:
@@ -391,8 +394,8 @@ static const u32 s_ppu_bits[] = {
   0b1000000000000000000000000,  // 57: goto #0
 };
 
-static inline Bool y_in_range(E *e, u8 y) {
-  return y < 239 && (u8)(e->s.p.scany - y) < ((e->s.p.ppuctrl & 0x20) ? 16 : 8);
+static inline Bool y_in_range(P *p, u8 y) {
+  return y < 239 && (u8)(scany(p) - y) < ((p->ppuctrl & 0x20) ? 16 : 8);
 }
 
 static inline void spr_inc(u8 *val, Bool* ovf, u8 addend) {
@@ -428,7 +431,7 @@ repeat:;
       case 10: if (z) { spr->state = cnst; return; } break;
       case 11: spr->d = 0; break;
       case 12: spr->cnt = cnst; break;
-      case 13: if (y_in_range(e, spr->t)) { goto repeat; } break;
+      case 13: if (y_in_range(p, spr->t)) { goto repeat; } break;
       case 14: spr_inc(&spr->s, &spr->sovf, 3); break;
       case 15: spr_inc(&spr->s, &spr->sovf, 4); break;
       case 16: spr->state = cnst; break;
@@ -440,7 +443,7 @@ repeat:;
       case 22: {
         int idx = (spr->s >> 2) - 1;
         if (spr->s <= spr->d) {
-          u8 y = (p->scany - 1) - spr->y;
+          u8 y = (scany(p) - 1) - spr->y;
           if (spr->at & 0x80) { y = ~y; }  // Flip Y.
           u16 chr = (p->ppuctrl & 0x20) ?
             // 8x16 sprites.
@@ -919,7 +922,8 @@ u8 cpu_read(E *e, u16 addr) {
         e->s.p.ppustatus &= ~0x80;  // Clear NMI flag.
         e->s.p.w = 0;
         e->s.p.read_status_cy = e->s.cy;
-        LOG("     [%" PRIu64 "] ppu:status=%02hhx w=0\n", e->s.cy, result);
+        DEBUG("     [%" PRIu64 "] ppu:status=%02hhx w=0 fbx=%d fby=%d\n",
+              e->s.cy, result, scanx(&e->s.p), scany(&e->s.p));
         return result;
       }
       case 4:
@@ -994,11 +998,12 @@ void cpu_write(E *e, u16 addr, u8 val) {
       p->ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
-      DEBUG("     ppu:t=%04hx\n", p->t);
+      DEBUG("     ppu:t=%04hx  (ctrl=%02x)\n", p->t, val);
       break;
     case 1:
       p->ppumask = val;
       p->bits_mask = (val & 0x18) ? s_ppu_enabled_mask : s_ppu_disabled_mask;
+      DEBUG("     ppumask=%02x\n", val);
       break;
     case 3: p->oamaddr = val; break;
     case 4:
@@ -2154,7 +2159,7 @@ static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
 
 void disasm(E *e, u16 addr) {
-  printf("%04x: ", addr);
+  printf("$%02x:%04x: ", e->s.m.prg_bank, addr);
   u8 opcode = cpu_read(e, addr);
   const char* fmt = s_opcode_mnemonic[opcode];
   u8 bytes = s_opcode_bytes[opcode];
