@@ -38,10 +38,10 @@
   ["cpu_exec_space", "nes-test-roms/cpu_exec_space/test_cpu_exec_space_apu.nes", 350, "8112fd7be0d577e93e13836cab478ec210984208"],
   ["cpu_exec_space", "nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes", 75, "3807cc1bedb50bf6ec97a21f5de7500ea2e283df"],
 
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/1-cli_latency.nes", 20, "!33197f69a25109b8954a8e1b86a7109ebb10109a"],
+  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/1-cli_latency.nes", 20, "ccf4f6485e62031fa1e256895b078bfeef867773"],
   ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes", 150, "!e7fd97561159eb84b283734d86b8c38bdd5b4b34"],
   ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes", 200, "!ff8a9d43a46011c8e8ab9ee838ad487c83fbd58e"],
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes", 100, "!b2fe0c49ade652fecf0ffbbacdeed5658189dd82"],
+  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes", 100, "!ccb021b62ae6d27ab0e88425315859b13f68b9c2"],
   ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/5-branch_delays_irq.nes", 150, "!bdcf80f5484ea4f361acf487596a4261c55249ae"],
 
   ["cpu_timing_test6", "nes-test-roms/cpu_timing_test6/cpu_timing_test.nes", 700, "a8362d79c963e5aa0c0142f6bd04726043e3f60a"],
@@ -102,7 +102,7 @@
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes", 200, "a7b726a26b9f9b03b7a5ab11e12a0ad2ce2e986b"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes", 200, "c06c84c1a5b54970fa0cef892684182908b5bbb8"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes", 200, "e921a68d0cbc2cd9a2ca3f3e568e0e8ca61d8492"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/04-nmi_control.nes", 100, "!e311a7d51fbcc64d96a8d178ec76f11fab580c8c"],
+  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/04-nmi_control.nes", 100, "359b8cc399d9d6e80a2d0671be00e122fd7c881a"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/05-nmi_timing.nes", 300, "!7b4f2316e971fec2475ee2331e88fd86a7ba98a4"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/06-suppression.nes", 200, "!83dcfe9b9f0e4163dd465c482f8f77f58826e6b4"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes", 200, "!d273b13626ccd32e11eb4ba2f3e632fd3ee19085"],
