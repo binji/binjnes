@@ -101,7 +101,7 @@ typedef struct {
   u8 ram[0x800], prg_ram[0x2000];
   u8 opcode, open_bus, irq;
   Bool C, Z, I, D, V, N; // Flags.
-  Bool bus_write, has_nmi;
+  Bool bus_write, req_nmi, has_nmi, has_irq;
 } C;
 
 typedef struct {
