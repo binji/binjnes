@@ -86,7 +86,7 @@ static inline u16 reverse_interleave(u8 h, u8 l) {
 }
 
 static inline u8 chr_read(E *e, u16 addr) {
-  return e->chr_map[(addr >> 12) & 1][addr & 0xfff];
+  return e->chr_map[(addr >> 10) & 7][addr & 0x3ff];
 }
 
 static inline u8 nt_read(E *e, u16 addr) {
@@ -123,7 +123,7 @@ void ppu_write(E *e, u16 addr, u8 val) {
   switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      e->chr_map_write[(addr >> 12) & 1][addr & 0xfff] = val;
+      e->chr_map_write[(addr >> 10) & 7][addr & 0x3ff] = val;
       break;
 
     case 15:
@@ -978,11 +978,11 @@ u8 cpu_read(E *e, u16 addr) {
   case 6: case 7:
     return e->s.m.prg_ram_en ? c->prg_ram[addr & 0x1fff] : c->open_bus;
 
-  case 8: case 9: case 10: case 11: // ROM
-    return e->prg_rom_map[0][addr - 0x8000];
-
-  case 12: case 13: case 14: case 15: // ROM
-    return e->prg_rom_map[1][addr - 0xc000];
+   // ROM
+  case  8:  case 9: return e->prg_rom_map[0][addr - 0x8000];
+  case 10: case 11: return e->prg_rom_map[1][addr - 0xa000];
+  case 12: case 13: return e->prg_rom_map[2][addr - 0xc000];
+  case 14: case 15: return e->prg_rom_map[3][addr - 0xe000];
   }
   return c->open_bus;
 }
@@ -1202,21 +1202,37 @@ static void set_mirror(E *e, Mirror mirror) {
   }
 }
 
-static void set_chr_map(E *e, u8 bank0, u8 bank1) {
-  bank0 &= (e->ci.chr_banks - 1);
-  bank1 &= (e->ci.chr_banks - 1);
-  e->chr_map[0] = e->ci.chr_data + (bank0 << 12);
-  e->chr_map[1] = e->ci.chr_data + (bank1 << 12);
-  // TODO: chr_data_write always points into chr_ram (which is fixed at 8KiB).
-  e->chr_map_write[0] = e->ci.chr_data_write + ((bank0 & 1) << 12);
-  e->chr_map_write[1] = e->ci.chr_data_write + ((bank1 & 1) << 12);
+static void set_chr4k_map(E *e, u8 bank0, u8 bank1) {
+  bank0 &= (e->ci.chr4k_banks - 1);
+  bank1 &= (e->ci.chr4k_banks - 1);
+  for (int i = 0; i < 4; ++i) {
+    size_t offset = 0x400 * i;
+    e->chr_map[i] = e->ci.chr_data + (bank0 << 12) + offset;
+    e->chr_map[4 + i] = e->ci.chr_data + (bank1 << 12) + offset;
+    // TODO: chr_data_write always points into chr_ram (which is fixed at 8KiB).
+    e->chr_map_write[i] = e->ci.chr_data_write + ((bank0 & 1) << 12) + offset;
+    e->chr_map_write[4 + i] =
+        e->ci.chr_data_write + ((bank1 & 1) << 12) + offset;
+  }
 }
 
-static void set_prg_map(E *e, u8 bank0, u8 bank1) {
-  bank0 &= (e->ci.prg_banks - 1);
-  bank1 &= (e->ci.prg_banks - 1);
+static void set_chr8k_map(E *e, u8 bank) {
+  bank &= (e->ci.chr8k_banks - 1);
+  set_chr4k_map(e, bank * 2, bank * 2 + 1);
+}
+
+static void set_prg16k_map(E *e, u8 bank0, u8 bank1) {
+  bank0 &= (e->ci.prg16k_banks - 1);
+  bank1 &= (e->ci.prg16k_banks - 1);
   e->prg_rom_map[0] = e->ci.prg_data + (bank0 << 14);
-  e->prg_rom_map[1] = e->ci.prg_data + (bank1 << 14);
+  e->prg_rom_map[1] = e->ci.prg_data + (bank0 << 14) + 0x2000;
+  e->prg_rom_map[2] = e->ci.prg_data + (bank1 << 14);
+  e->prg_rom_map[3] = e->ci.prg_data + (bank1 << 14) + 0x2000;
+}
+
+static void set_prg32k_map(E *e, u8 bank) {
+  bank &= (e->ci.prg32k_banks - 1);
+  set_prg16k_map(e, bank * 2, bank * 2 + 1);
 }
 
 void mapper0_write(E *e, u16 addr, u8 val) {}
@@ -1245,29 +1261,27 @@ void mapper1_write(E *e, u16 addr, u8 val) {
           m->chr_bank[1] = m->mmc1_data;
           break;
         case 0xe: case 0xf:  // PRG bank.
-          assert(is_power_of_two(e->ci.prg_banks));
-          m->prg_bank = m->mmc1_data & (e->ci.prg_banks - 1);
+          assert(is_power_of_two(e->ci.prg16k_banks));
+          m->prg_bank = m->mmc1_data & (e->ci.prg16k_banks - 1);
           m->prg_ram_en = !(m->mmc1_data & 0x10);
           break;
       }
       if (m->mmc1_ctrl & 0x10) { // CHR 4KiB banks
-        set_chr_map(e, m->chr_bank[0], m->chr_bank[1]);
+        set_chr4k_map(e, m->chr_bank[0], m->chr_bank[1]);
       } else { // CHR 8KiB banks
-        m->chr_bank[0] &= ~1;
-        set_chr_map(e, m->chr_bank[0], m->chr_bank[0] + 1);
+        set_chr8k_map(e, m->chr_bank[0] >> 1);
       }
 
       switch (m->mmc1_ctrl & 0xc) {
       case 0:
       case 4: // PRG 32KiB banks
-        m->prg_bank &= ~1;
-        set_prg_map(e, m->prg_bank, m->prg_bank + 1);
+        set_prg32k_map(e, m->prg_bank >> 1);
         break;
       case 8: // bank0 is first, bank1 switches
-        set_prg_map(e, 0, m->prg_bank);
+        set_prg16k_map(e, 0, m->prg_bank);
         break;
       case 12: // bank0 switches, bank1 is last
-        set_prg_map(e, m->prg_bank, e->ci.prg_banks - 1);
+        set_prg16k_map(e, m->prg_bank, e->ci.prg16k_banks - 1);
         break;
       }
     }
@@ -1277,22 +1291,22 @@ void mapper1_write(E *e, u16 addr, u8 val) {
 void mapper2_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
-  m->prg_bank = val & (e->ci.prg_banks - 1);
-  set_prg_map(e, m->prg_bank, e->ci.prg_banks - 1);
+  m->prg_bank = val & (e->ci.prg16k_banks - 1);
+  set_prg16k_map(e, m->prg_bank, e->ci.prg16k_banks - 1);
 }
 
 void mapper3_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
-  m->chr_bank[0] = val & (e->ci.chr_banks - 1);
-  set_chr_map(e, m->chr_bank[0] * 2, m->chr_bank[0] * 2 + 1);
+  m->chr_bank[0] = val & (e->ci.chr8k_banks - 1);
+  set_chr8k_map(e, m->chr_bank[0]);
 }
 
 void mapper7_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
-  m->prg_bank = ((val & 7) * 2) & (e->ci.prg_banks - 1);
-  set_prg_map(e, m->prg_bank, m->prg_bank + 1);
+  m->prg_bank = (val & 7) & (e->ci.prg32k_banks - 1);
+  set_prg32k_map(e, m->prg_bank);
   set_mirror(e, MIRROR_SINGLE_0 + ((val & 0x10) ? 0 : 1));
 }
 
@@ -1947,13 +1961,13 @@ static Result get_cart_info(E *e, const FileData *file_data) {
   ci->ignore_mirror = (flag6 & 0x10) != 0;
 
   u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
-  u32 ines_prg_banks = file_data->data[4];
-  u32 ines_chr_banks = file_data->data[5];
-  u32 ines_data_size = (ines_prg_banks << 14) + (ines_chr_banks << 13);
+  u32 ines_prg16k_banks = file_data->data[4];
+  u32 ines_chr8k_banks = file_data->data[5];
+  u32 ines_data_size = (ines_prg16k_banks << 14) + (ines_chr8k_banks << 13);
 
-  u32 nes2_prg_banks = ((flag9 & 0xf) << 4) | file_data->data[4];
-  u32 nes2_chr_banks = (flag9 & 0xf0) | file_data->data[5];
-  u32 nes2_data_size = (nes2_prg_banks << 14) + (nes2_chr_banks << 13);
+  u32 nes2_prg16k_banks = ((flag9 & 0xf) << 4) | file_data->data[4];
+  u32 nes2_chr8k_banks = (flag9 & 0xf0) | file_data->data[5];
+  u32 nes2_data_size = (nes2_prg16k_banks << 14) + (nes2_chr8k_banks << 13);
 
   u32 data_size = kHeaderSize + trainer_size;
 
@@ -1964,31 +1978,36 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->is_nes2_0 = TRUE;
     ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
                  ((flag6 & 0xf0) >> 4);
-    ci->prg_banks = nes2_prg_banks;
-    ci->chr_banks = nes2_chr_banks;
+    ci->prg16k_banks = nes2_prg16k_banks;
+    ci->chr8k_banks = nes2_chr8k_banks;
   } else if ((flag7 & 0xc) == 0) {
     data_size += ines_data_size;
     ci->is_nes2_0 = FALSE;
     ci->mapper = (flag7 & 0xf0) | ((flag6 & 0xf0) >> 4);
-    ci->prg_banks = ines_prg_banks;
-    ci->chr_banks = ines_chr_banks;
+    ci->prg16k_banks = ines_prg16k_banks;
+    ci->chr8k_banks = nes2_chr8k_banks;
   } else {
     ci->mapper = (flag6 & 0xf0) >> 4;
-    ci->prg_banks = ines_prg_banks;
-    ci->chr_banks = ines_chr_banks;
+    ci->prg16k_banks = ines_prg16k_banks;
+    ci->chr8k_banks = nes2_chr8k_banks;
   }
+
+  ci->prg32k_banks = ci->prg16k_banks / 2;
+  ci->prg8k_banks = ci->prg16k_banks * 2;
+  ci->chr4k_banks = ci->chr8k_banks * 2;
+  ci->chr1k_banks = ci->chr8k_banks * 8;
 
   CHECK_MSG(file_data->size >= data_size, "file must be >= %d.\n", data_size);
 
   ci->prg_data = file_data->data + kHeaderSize + trainer_size;
-  if (ci->chr_banks == 0) { // Assume CHR RAM
+  if (ci->chr8k_banks == 0) { // Assume CHR RAM
     ci->chr_data = e->s.p.chr_ram;
-    ci->chr_banks = 2;  // Assume 8KiB of RAM (TODO: how to know?)
+    // Assume 8KiB of RAM (TODO: how to know?)
+    ci->chr8k_banks = 1;
+    ci->chr4k_banks = 2;
+    ci->chr1k_banks = 8;
   } else { // CHR ROM
-    ci->chr_data = ci->prg_data + (ci->prg_banks << 14);
-    // Multiply by two so chr_banks measures 4KiB banks, instead of 8KiB (as
-    // defined in the header).
-    ci->chr_banks *= 2;
+    ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
   }
   ci->chr_data_write = e->s.p.chr_ram;
 
@@ -2003,16 +2022,16 @@ Result set_rom_file_data(E *e, const FileData *rom) {
 Result init_mapper(E *e) {
   switch (e->ci.mapper) {
   case 0:
-    CHECK_MSG(e->ci.prg_banks <= 2, "Too many PRG banks.\n");
+    CHECK_MSG(e->ci.prg8k_banks <= 4, "Too many PRG banks.\n");
     e->mapper_write = mapper0_write;
     goto shared;
   case 1:
-    CHECK_MSG(is_power_of_two(e->ci.chr_banks), "Expected POT CHR banks.\n");
-    CHECK_MSG(is_power_of_two(e->ci.prg_banks), "Expected POT PRG banks.\n");
+    CHECK_MSG(is_power_of_two(e->ci.chr4k_banks), "Expected POT CHR banks.\n");
+    CHECK_MSG(is_power_of_two(e->ci.prg16k_banks), "Expected POT PRG banks.\n");
     e->s.m.mmc1_ctrl = 0xc | e->ci.mirror;
     e->s.m.mmc1_bits = 5;
     e->s.m.chr_bank[0] = 0;
-    e->s.m.chr_bank[1] = e->ci.chr_banks - 1;
+    e->s.m.chr_bank[1] = e->ci.chr4k_banks - 1;
     e->s.m.prg_bank = 0;
     e->s.m.prg_ram_en = TRUE;
     e->mapper_write = mapper1_write;
@@ -2029,14 +2048,14 @@ Result init_mapper(E *e) {
     e->s.m.prg_bank = 0;
     e->mapper_write = mapper7_write;
     set_mirror(e, MIRROR_SINGLE_0);
-    set_chr_map(e, 0, e->ci.chr_banks - 1);
-    set_prg_map(e, e->ci.prg_banks - 2, e->ci.prg_banks - 1);
+    set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
+    set_prg32k_map(e, e->ci.prg32k_banks - 1);
     break;
 
   shared:
     set_mirror(e, e->ci.mirror);
-    set_chr_map(e, 0, e->ci.chr_banks - 1);
-    set_prg_map(e, 0, e->ci.prg_banks - 1);
+    set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
+    set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
     break;
   default:
     CHECK_MSG(FALSE, "Unsupported mapper: %d", e->ci.mapper);

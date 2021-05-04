@@ -81,8 +81,8 @@ typedef struct {
   Bool has_trainer;
   Bool ignore_mirror;
   Bool is_nes2_0;
-  u16 prg_banks;
-  u16 chr_banks;
+  u16 prg8k_banks, prg16k_banks, prg32k_banks;
+  u16 chr1k_banks, chr4k_banks, chr8k_banks;
   u16 mapper;
 } CartInfo;
 
@@ -157,7 +157,7 @@ typedef struct Emulator {
   EmulatorConfig config;
   S s;
   CartInfo ci;
-  u8 *prg_rom_map[2], *nt_map[4], *chr_map[2], *chr_map_write[2];
+  u8 *prg_rom_map[4], *nt_map[4], *chr_map[8], *chr_map_write[8];
   void (*mapper_write)(struct Emulator*, u16, u8);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
