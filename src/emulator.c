@@ -85,11 +85,40 @@ static inline u16 reverse_interleave(u8 h, u8 l) {
          (((h * A & B) * C >> 42) & 0xAAAA);
 }
 
+static void do_a12_access(E* e, u16 addr) {
+  M* m = &e->s.m;
+  P* p = &e->s.p;
+  if (!m->has_a12_irq) return;
+
+  Bool low = (addr & 0x1000) == 0;
+  if (p->a12_low) {
+    p->a12_low_count += e->s.cy - p->last_vram_access_cy;
+  }
+  if (!low) {
+    if (p->a12_low_count >= 9) {
+      u8 counter = p->a12_irq_counter;
+      if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
+        p->a12_irq_counter = m->mmc3.irq_latch;
+        m->mmc3.irq_reload = FALSE;
+      } else if (--p->a12_irq_counter == 0 && m->mmc3.irq_enable) {
+        DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) (scany=%u)\n", e->s.cy,
+              p->frame, p->fbidx >> 8);
+        e->s.c.irq |= IRQ_MMC3;
+      }
+    }
+    p->a12_low_count = 0;
+  }
+  p->a12_low = low;
+  p->last_vram_access_cy = e->s.cy;
+}
+
 static inline u8 chr_read(E *e, u16 addr) {
+  do_a12_access(e, addr);
   return e->chr_map[(addr >> 10) & 7][addr & 0x3ff];
 }
 
 static inline u8 nt_read(E *e, u16 addr) {
+  do_a12_access(e, addr);
   return e->nt_map[(addr >> 10) & 3][addr & 0x3ff];
 }
 
@@ -120,6 +149,7 @@ u8 ppu_read(E *e, u16 addr) {
 
 void ppu_write(E *e, u16 addr, u8 val) {
   int top4 = addr >> 10;
+  do_a12_access(e, addr);
   switch (top4 & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
@@ -301,8 +331,9 @@ repeat:
       case 15: p->cnt1 = cnst; break;
       case 16: p->cnt2 = cnst; break;
       case 17:
-        LOG("(%" PRIu64 "): ppustatus = 0\n", e->s.cy);
+        DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0\n", e->s.cy, e->s.p.frame);
         p->fbidx = 0;
+        p->frame++;
         if ((p->oddframe ^= 1) && (p->ppumask & 8)) { goto repeat; }
         break;
       case 18: z = --p->cnt1 == 0; break;
@@ -312,11 +343,11 @@ repeat:
       case 22:
         if (p->ppuctrl & 0x80) {
           e->s.c.req_nmi = TRUE;
-          LOG("     [%" PRIu64 "] NMI\n", e->s.cy);
+          DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
         }
         if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
         e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-        LOG("(%" PRIu64 "): ppustatus |= 0x80\n", e->s.cy);
+        DEBUG("(%" PRIu64 "): [#%u] ppustatus |= 0x80\n", e->s.cy, e->s.p.frame);
         break;
       case 23: p->ppustatus = 0; break;
       case 24: p->state = cnst; break;
@@ -411,6 +442,14 @@ static inline void shift_in(u64* word, u8 byte) {
   *word = (*word >> 8) | ((u64)byte << 56);
 }
 
+static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
+  return (ppuctrl & 0x20) ?
+    // 8x16 sprites.
+    ((tile & 1) << 12) | ((tile & 0xfe) << 4) | ((y & 8) << 1) | (y & 7) :
+    // 8x8 sprites.
+    ((ppuctrl & 8) << 9) | (tile << 4) | (y & 7);
+}
+
 void spr_step(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
@@ -449,11 +488,7 @@ repeat:;
         if (spr->s <= spr->d) {
           u8 y = (scany(p) - 1) - spr->y;
           if (spr->at & 0x80) { y = ~y; }  // Flip Y.
-          u16 chr = (p->ppuctrl & 0x20) ?
-            // 8x16 sprites.
-            ((spr->tile & 1) << 12) | ((spr->tile & 0xfe) << 4) | ((y & 8) << 1) | (y & 7) :
-            // 8x8 sprites.
-            ((p->ppuctrl & 8) << 9) | (spr->tile << 4) | (y & 7);
+          u16 chr = spr_chr_addr(p->ppuctrl, spr->tile, y);
           u8 ptbl = chr_read(e, chr), ptbh = chr_read(e, chr + 8);
           if (spr->at & 0x40) {
             ptbl = reverse(ptbl);
@@ -475,6 +510,10 @@ repeat:;
           spr->spr0mask >>= 8;
           spr->counter[idx] = 0xff;
           spr->counter[idx+8] = 0xff;
+          // Dummy reads for MMC3 IRQ
+          u16 chr = spr_chr_addr(p->ppuctrl, 0xff, 0);
+          chr_read(e, chr);
+          chr_read(e, chr + 8);
         }
         break;
       }
@@ -824,7 +863,7 @@ void apu_step(E *e) {
         case 4: if (--a->cnt != 0) { a->state = cnst; bits = 0; } break;
         case 5:
           if (!(a->reg[0x17] & 0xc0)) {
-            LOG("     [%" PRIu64 "] frame irq\n", e->s.cy);
+            DEBUG("     [%" PRIu64 "] frame irq\n", e->s.cy);
             e->s.c.irq |= IRQ_FRAME;
           }
           break;
@@ -948,7 +987,7 @@ u8 cpu_read(E *e, u16 addr) {
   case 4: // APU & I/O
     switch (addr - 0x4000) {
       case 0x15: {
-        u8 result = ((c->irq & (IRQ_FRAME | IRQ_DMC)) << 6) |
+        u8 result = ((c->irq & (IRQ_FRAME | IRQ_DMC | IRQ_MMC3)) << 6) |
                     (c->open_bus & 0x20) | (a->dmcen << 4) |
                     ((a->len[3] > 0) << 3) | ((a->len[2] > 0) << 2) |
                     ((a->len[1] > 0) << 1) | (a->len[0] > 0);
@@ -1122,8 +1161,8 @@ void cpu_write(E *e, u16 addr, u8 val) {
         goto apu;
 
       case 0x17:                                    // Frame counter
-        LOG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
-            (u32)((e->s.cy / 3) & 1));
+        DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
+              (u32)((e->s.cy / 3) & 1));
         if (val & 0x40) { c->irq &= ~IRQ_FRAME; }
         a->state = 15 - ((e->s.cy / 3) & 1); // 3/4 cycles
         goto apu;
@@ -1171,7 +1210,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
   }
 
   case 6: case 7:
-    if (e->s.m.prg_ram_en) {
+    if (e->s.m.prg_ram_en && e->s.m.prg_ram_write_en) {
       c->prg_ram[addr & 0x1fff] = val;
     }
     break;
@@ -1202,18 +1241,22 @@ static void set_mirror(E *e, Mirror mirror) {
   }
 }
 
+static void set_chr1k_map(E *e, u8 bank0, u8 bank1, u8 bank2, u8 bank3,
+                          u8 bank4, u8 bank5, u8 bank6, u8 bank7) {
+  u8 banks[] = {bank0, bank1, bank2, bank3, bank4, bank5, bank6, bank7};
+  for (size_t i = 0; i < ARRAY_SIZE(banks); ++i) {
+    u8 bank = banks[i] & (e->ci.chr1k_banks - 1);
+    e->chr_map[i] = e->ci.chr_data + (bank << 10);
+    // TODO: chr_data_write always points into chr_ram (which is fixed at 8KiB).
+    e->chr_map_write[i] = e->ci.chr_data_write + ((bank & 7) << 10);
+  }
+}
+
 static void set_chr4k_map(E *e, u8 bank0, u8 bank1) {
   bank0 &= (e->ci.chr4k_banks - 1);
   bank1 &= (e->ci.chr4k_banks - 1);
-  for (int i = 0; i < 4; ++i) {
-    size_t offset = 0x400 * i;
-    e->chr_map[i] = e->ci.chr_data + (bank0 << 12) + offset;
-    e->chr_map[4 + i] = e->ci.chr_data + (bank1 << 12) + offset;
-    // TODO: chr_data_write always points into chr_ram (which is fixed at 8KiB).
-    e->chr_map_write[i] = e->ci.chr_data_write + ((bank0 & 1) << 12) + offset;
-    e->chr_map_write[4 + i] =
-        e->ci.chr_data_write + ((bank1 & 1) << 12) + offset;
-  }
+  set_chr1k_map(e, bank0 * 4, bank0 * 4 + 1, bank0 * 4 + 2, bank0 * 4 + 3,
+                bank1 * 4, bank1 * 4 + 1, bank1 * 4 + 2, bank1 * 4 + 3);
 }
 
 static void set_chr8k_map(E *e, u8 bank) {
@@ -1221,13 +1264,18 @@ static void set_chr8k_map(E *e, u8 bank) {
   set_chr4k_map(e, bank * 2, bank * 2 + 1);
 }
 
+static void set_prg8k_map(E *e, u8 bank0, u8 bank1, u8 bank2, u8 bank3) {
+  u8 banks[] = {bank0, bank1, bank2, bank3};
+  for (size_t i = 0; i < ARRAY_SIZE(banks); ++i) {
+    u8 bank = banks[i] & (e->ci.prg8k_banks - 1);
+    e->prg_rom_map[i] = e->ci.prg_data + (bank << 13);
+  }
+}
+
 static void set_prg16k_map(E *e, u8 bank0, u8 bank1) {
   bank0 &= (e->ci.prg16k_banks - 1);
   bank1 &= (e->ci.prg16k_banks - 1);
-  e->prg_rom_map[0] = e->ci.prg_data + (bank0 << 14);
-  e->prg_rom_map[1] = e->ci.prg_data + (bank0 << 14) + 0x2000;
-  e->prg_rom_map[2] = e->ci.prg_data + (bank1 << 14);
-  e->prg_rom_map[3] = e->ci.prg_data + (bank1 << 14) + 0x2000;
+  set_prg8k_map(e, bank0 * 2, bank0 * 2 + 1, bank1 * 2, bank1 * 2 + 1);
 }
 
 static void set_prg32k_map(E *e, u8 bank) {
@@ -1241,47 +1289,47 @@ void mapper1_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
   if (val & 0x80) {
-    m->mmc1_bits = 5;
-    m->mmc1_data = 0;
-    m->mmc1_ctrl |= 0xc;
+    m->mmc1.bits = 5;
+    m->mmc1.data = 0;
+    m->mmc1.ctrl |= 0xc;
   } else {
-    m->mmc1_data = (m->mmc1_data >> 1) | (val & 1) << 7;
-    if (--m->mmc1_bits == 0) {
-      m->mmc1_bits = 5;
-      m->mmc1_data >>= 3;
+    m->mmc1.data = (m->mmc1.data >> 1) | (val & 1) << 7;
+    if (--m->mmc1.bits == 0) {
+      m->mmc1.bits = 5;
+      m->mmc1.data >>= 3;
       switch (addr >> 12) {
         case 0x8: case 0x9:  // Control.
-          m->mmc1_ctrl = m->mmc1_data;
-          set_mirror(e, m->mmc1_data & 3);
+          m->mmc1.ctrl = m->mmc1.data;
+          set_mirror(e, m->mmc1.data & 3);
           break;
         case 0xa: case 0xb:  // CHR bank 0.
-          m->chr_bank[0] = m->mmc1_data;
+          m->chr_bank[0] = m->mmc1.data;
           break;
         case 0xc: case 0xd:  // CHR bank 1.
-          m->chr_bank[1] = m->mmc1_data;
+          m->chr_bank[1] = m->mmc1.data;
           break;
         case 0xe: case 0xf:  // PRG bank.
           assert(is_power_of_two(e->ci.prg16k_banks));
-          m->prg_bank = m->mmc1_data & (e->ci.prg16k_banks - 1);
-          m->prg_ram_en = !(m->mmc1_data & 0x10);
+          m->prg_bank[0] = m->mmc1.data & (e->ci.prg16k_banks - 1);
+          m->prg_ram_en = !(m->mmc1.data & 0x10);
           break;
       }
-      if (m->mmc1_ctrl & 0x10) { // CHR 4KiB banks
+      if (m->mmc1.ctrl & 0x10) { // CHR 4KiB banks
         set_chr4k_map(e, m->chr_bank[0], m->chr_bank[1]);
       } else { // CHR 8KiB banks
         set_chr8k_map(e, m->chr_bank[0] >> 1);
       }
 
-      switch (m->mmc1_ctrl & 0xc) {
+      switch (m->mmc1.ctrl & 0xc) {
       case 0:
       case 4: // PRG 32KiB banks
-        set_prg32k_map(e, m->prg_bank >> 1);
+        set_prg32k_map(e, m->prg_bank[0] >> 1);
         break;
       case 8: // bank0 is first, bank1 switches
-        set_prg16k_map(e, 0, m->prg_bank);
+        set_prg16k_map(e, 0, m->prg_bank[0]);
         break;
       case 12: // bank0 switches, bank1 is last
-        set_prg16k_map(e, m->prg_bank, e->ci.prg16k_banks - 1);
+        set_prg16k_map(e, m->prg_bank[0], e->ci.prg16k_banks - 1);
         break;
       }
     }
@@ -1291,8 +1339,8 @@ void mapper1_write(E *e, u16 addr, u8 val) {
 void mapper2_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
-  m->prg_bank = val & (e->ci.prg16k_banks - 1);
-  set_prg16k_map(e, m->prg_bank, e->ci.prg16k_banks - 1);
+  m->prg_bank[0] = val & (e->ci.prg16k_banks - 1);
+  set_prg16k_map(e, m->prg_bank[0], e->ci.prg16k_banks - 1);
 }
 
 void mapper3_write(E *e, u16 addr, u8 val) {
@@ -1302,11 +1350,80 @@ void mapper3_write(E *e, u16 addr, u8 val) {
   set_chr8k_map(e, m->chr_bank[0]);
 }
 
+void mapper4_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  assert(addr >= 0x8000);
+  switch (addr >> 12) {
+    case 8: case 9:  // Bank Select / Bank Data
+      if (addr & 1) {
+        u8 reg = m->mmc3.bank_select & 7;
+
+        if (reg <= 5) { // Set CHR bank
+          m->chr_bank[reg] = val;
+          if (m->mmc3.bank_select & 0x80) {
+            set_chr1k_map(e, m->chr_bank[2], m->chr_bank[3], m->chr_bank[4],
+                          m->chr_bank[5], m->chr_bank[0] & ~1,
+                          m->chr_bank[0] | 1, m->chr_bank[1] & ~1,
+                          m->chr_bank[1] | 1);
+          } else {
+            set_chr1k_map(e, m->chr_bank[0] & ~1, m->chr_bank[0] | 1,
+                          m->chr_bank[1] & ~1, m->chr_bank[1] | 1,
+                          m->chr_bank[2], m->chr_bank[3], m->chr_bank[4],
+                          m->chr_bank[5]);
+          }
+        } else { // Set PRG bank
+          m->prg_bank[reg - 6] = val;
+          if (m->mmc3.bank_select & 0x40) {
+            set_prg8k_map(e, e->ci.prg8k_banks - 2, m->prg_bank[1],
+                          m->prg_bank[0], e->ci.prg8k_banks - 1);
+          } else {
+            set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1],
+                          e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
+          }
+        }
+
+      } else {
+        m->mmc3.bank_select = val;
+      }
+      break;
+    case 10: case 11: // Mirroring / PRG RAM enable
+      if (addr & 1) {
+        m->prg_ram_en = !!(val & 0x80);
+        m->prg_ram_write_en = !(val & 0x40);
+        DEBUG("     [%" PRIu64 "] mmc3 prg ram en:%u write:%u\n", e->s.cy,
+            m->prg_ram_en, m->prg_ram_write_en);
+      } else {
+        set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
+      }
+      break;
+    case 12: case 13: // IRQ latch / IRQ reload
+      if (addr & 1) {
+        m->mmc3.irq_reload = TRUE;
+        e->s.p.a12_irq_counter = 0;
+        DEBUG("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
+      } else {
+        m->mmc3.irq_latch = val;
+        DEBUG("     [%" PRIu64 "] mmc3 irq latch = %u\n", e->s.cy, val);
+      }
+      break;
+    case 14: case 15: // IRQ disable / IRQ enable
+      if (addr & 1) {
+        m->mmc3.irq_enable = TRUE;
+        DEBUG("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
+      } else {
+        m->mmc3.irq_enable = FALSE;
+        e->s.c.irq &= ~IRQ_MMC3;
+        DEBUG("     [%" PRIu64 "] mmc3 irq disable\n", e->s.cy);
+      }
+      break;
+  }
+}
+
 void mapper7_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
-  m->prg_bank = (val & 7) & (e->ci.prg32k_banks - 1);
-  set_prg32k_map(e, m->prg_bank);
+  m->prg_bank[0] = (val & 7) & (e->ci.prg32k_banks - 1);
+  set_prg32k_map(e, m->prg_bank[0]);
   set_mirror(e, MIRROR_SINGLE_0 + ((val & 0x10) ? 0 : 1));
 }
 
@@ -1362,17 +1479,17 @@ void cpu_step(E *e) {
       case 0:
         if (c->has_nmi) {
           c->next_step = s_nmi_or_irq;
-          LOG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
+          DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
         } else if (c->has_irq) {
           c->next_step = s_nmi_or_irq;
-          LOG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy);
+          DEBUG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy);
         }
         break;
       case 1:
         c->has_nmi = c->req_nmi;
         c->has_irq = c->irq && !c->I;
         if (c->has_nmi || c->has_irq) {
-          LOG("     [%" PRIu64 "] NMI or IRQ requested\n", e->s.cy);
+          DEBUG("     [%" PRIu64 "] NMI or IRQ requested\n", e->s.cy);
         }
         break;
       case 2: c->bushi = c->PCH; c->buslo = c->PCL; break;
@@ -1473,10 +1590,10 @@ void cpu_step(E *e) {
       case 52:
         if (c->req_nmi) {
           c->veclo = 0xfa;
-          LOG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
+          DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
         } else if (c->opcode == 0 || c->irq) {
           c->veclo = 0xfe;
-          LOG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
+          DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
         }
         c->has_irq = FALSE;
         c->has_nmi = FALSE;
@@ -2028,24 +2145,39 @@ Result init_mapper(E *e) {
   case 1:
     CHECK_MSG(is_power_of_two(e->ci.chr4k_banks), "Expected POT CHR banks.\n");
     CHECK_MSG(is_power_of_two(e->ci.prg16k_banks), "Expected POT PRG banks.\n");
-    e->s.m.mmc1_ctrl = 0xc | e->ci.mirror;
-    e->s.m.mmc1_bits = 5;
+    e->s.m.mmc1.ctrl = 0xc | e->ci.mirror;
+    e->s.m.mmc1.bits = 5;
     e->s.m.chr_bank[0] = 0;
     e->s.m.chr_bank[1] = e->ci.chr4k_banks - 1;
-    e->s.m.prg_bank = 0;
-    e->s.m.prg_ram_en = TRUE;
+    e->s.m.prg_bank[0] = 0;
+    e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = TRUE;
     e->mapper_write = mapper1_write;
     goto shared;
   case 2:
-    e->s.m.prg_bank = 0;
+    e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper2_write;
     goto shared;
   case 3:
-    e->s.m.prg_bank = 0;
+    e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper3_write;
     goto shared;
+  case 4:
+    e->mapper_write = mapper4_write;
+    e->s.m.mmc3.bank_select = 0;
+    e->s.m.mmc3.irq_latch = 0;
+    e->s.m.mmc3.irq_reload = TRUE;
+    e->s.m.mmc3.irq_enable = FALSE;
+    e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = TRUE;
+    e->s.m.has_a12_irq = TRUE;
+    e->s.m.chr_bank[0] = e->s.m.chr_bank[1] = e->s.m.chr_bank[2] =
+        e->s.m.chr_bank[3] = e->s.m.chr_bank[4] = e->s.m.chr_bank[5] = 0;
+    e->s.m.prg_bank[0] = e->s.m.prg_bank[1] = 0;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
+    break;
   case 7:
-    e->s.m.prg_bank = 0;
+    e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper7_write;
     set_mirror(e, MIRROR_SINGLE_0);
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
@@ -2200,7 +2332,7 @@ static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
 
 void disasm(E *e, u16 addr) {
-  printf("$%02x:%04x: ", e->s.m.prg_bank, addr);
+  printf("$%02x:%04x: ", e->s.m.prg_bank[0], addr); // TODO: correct bank
   u8 opcode = cpu_read(e, addr);
   const char* fmt = s_opcode_mnemonic[opcode];
   u8 bytes = s_opcode_bytes[opcode];

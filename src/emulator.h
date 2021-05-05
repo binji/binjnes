@@ -71,6 +71,7 @@ typedef enum {
 typedef enum {
   IRQ_FRAME = 1,
   IRQ_DMC   = 2,
+  IRQ_MMC3  = 4,
 } Irq;
 
 typedef struct {
@@ -87,10 +88,18 @@ typedef struct {
 } CartInfo;
 
 typedef struct {
-  // TODO: reorganize when there are more mappers
-  u8 chr_bank[2], prg_bank;
-  u8 mmc1_bits, mmc1_data, mmc1_ctrl;
-  Bool prg_ram_en;
+  u8 chr_bank[6], prg_bank[2];
+  union {
+    struct {
+      u8 bits, data, ctrl;
+    } mmc1;
+
+    struct {
+      u8 bank_select, irq_latch;
+      Bool irq_enable, irq_reload;
+    } mmc3;
+  };
+  Bool prg_ram_en, prg_ram_write_en, has_a12_irq;
 } M;
 
 typedef struct {
@@ -116,13 +125,13 @@ typedef struct {
   u8 ram[0x800], chr_ram[0x2000], oam[0x100], oam2[0x20];
   u32x4 bgatshift, bgatpreshift;
   u16x8 bgsprleftmask;
-  u16 cnt1, cnt2, v, t, atb;
-  u8 state, x, ntb, ptbl, ptbh, readbuf;
-  Bool w, oddframe;
+  u16 cnt1, cnt2, v, t, atb, last_a12;
+  u8 state, x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
+  Bool w, oddframe, a12_low;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
-  u32 fbidx, bits_mask;
+  u32 fbidx, bits_mask, frame;
   Spr spr;
-  u64 read_status_cy;
+  u64 read_status_cy, last_vram_access_cy, a12_low_count;
 } P;
 
 typedef struct {
