@@ -46,8 +46,8 @@
 
   ["cpu_timing_test6", "nes-test-roms/cpu_timing_test6/cpu_timing_test.nes", 700, "a8362d79c963e5aa0c0142f6bd04726043e3f60a"],
 
-  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes", 300, "!b7180ffe1ce8a87930d236e82c5cc78eac2e36f5"],
-  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_2007_write.nes", 100, "50938a7d78d3f1a944f15498bdb9892223d83435"],
+  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes", 300, "!2abc839dff20fb135467340c36b0d782faade379"],
+  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_2007_write.nes", 100, "!a6b1aa92ba2598f32bc1f5f2858b7a8e2dd91750"],
   ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_4016_read.nes", 300, "!59749e57702bdcefa183a25906d7d262960c33ef"],
   ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/double_2007_read.nes", 300, "!4eb5daa585b4c3ece943f5611cff412c4a0e0410"],
   ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/read_write_2007.nes", 100, "91b25b4a2caa7a6b3aa9b83a670a9ea495d9f9a4"],
@@ -125,11 +125,11 @@
   ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/10.timing_order.nes", 100, "5377031883e4be2c64d1165cba994e9d7f39f121"],
   ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/11.edge_timing.nes", 50, "443fd271bb1f43c9f257ba8c03daf25b72238f55"],
 
-  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/1.Basics.nes", 100, "!af6d6bdecb84395c3dc2f64d619cd8d5876c3649"],
+  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/1.Basics.nes", 100, "c7d687553be621b31b7fe6adcf9ceb9e96a3acbe"],
   ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/2.Details.nes", 100, "!c7a7b4205e8ff9e51a6412194f7a33682c59c9dc"],
   ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/3.Timing.nes", 100, "!12c89e67d2e227284e3381bfb3f5145175b41b5d"],
   ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/4.Obscure.nes", 100, "!a7ca2a50e519c3acef9f216339224e1b38886bbe"],
-  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/5.Emulator.nes", 100, "!d5a3922465f415c27e70d5e28ee33b9a5adf6e8c"],
+  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/5.Emulator.nes", 100, "0c0519016f27fb72caea6d66167ceda64b7f5440"],
 
   ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/1.frame_basics.nes", 200, "2e8c7fcd5f2eb93b915a463306e6fbd9ff6fa86c"],
   ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes", 200, "42c4297e3856d622462dec04c54fdbd8d4d9e419"],

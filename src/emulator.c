@@ -101,8 +101,8 @@ static void do_a12_access(E* e, u16 addr) {
         p->a12_irq_counter = m->mmc3.irq_latch;
         m->mmc3.irq_reload = FALSE;
       } else if (--p->a12_irq_counter == 0 && m->mmc3.irq_enable) {
-        DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) (scany=%u)\n", e->s.cy,
-              p->frame, p->fbidx >> 8);
+        LOG("     [%" PRIu64 "] mmc3 irq (frame = %u) (scany=%u)\n", e->s.cy,
+            p->frame, p->fbidx >> 8);
         e->s.c.irq |= IRQ_MMC3;
       }
     }
@@ -347,6 +347,7 @@ repeat:
         }
         if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
         e->s.event |= EMULATOR_EVENT_NEW_FRAME;
+        ppu_read(e, p->v);
         DEBUG("(%" PRIu64 "): [#%u] ppustatus |= 0x80\n", e->s.cy, e->s.p.frame);
         break;
       case 23: p->ppustatus = 0; break;
@@ -358,7 +359,7 @@ repeat:
 }
 
 static const u32 s_ppu_enabled_mask =  0b1111111111111111101111111;
-static const u32 s_ppu_disabled_mask = 0b1111111111001110010000000;
+static const u32 s_ppu_disabled_mask = 0b1111111111000110010000000;
 static const u16 s_ppu_consts[] = {
     [0] = 240, [1] = 32,    [7] = 10,  [9] = 2,   [11] = 63,
     [12] = 12, [13] = 2,    [21] = 14, [25] = 1,  [26] = 340,
@@ -907,7 +908,7 @@ static const u16 s_apu_bits[] = {
 // CPU stuff ///////////////////////////////////////////////////////////////////
 
 static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
-#if LOGLEVEL >= 1
+#if LOGLEVEL >= 2
   static const char chan_str[][6] = {"1    ", " 2   ", "  T  ",
                                      "   N ", "    D", "xxxxx"};
   u8 cval[256] = {0};
@@ -1050,8 +1051,12 @@ void cpu_write(E *e, u16 addr, u8 val) {
       break;
     case 1:
       p->ppumask = val;
-      p->bits_mask = (val & 0x18) ? s_ppu_enabled_mask : s_ppu_disabled_mask;
-      DEBUG("     ppumask=%02x\n", val);
+      if (val & 0x18) {
+        p->bits_mask = s_ppu_enabled_mask;
+      } else {
+        p->bits_mask = s_ppu_disabled_mask;
+        ppu_read(e, p->v);
+      }
       break;
     case 3: p->oamaddr = val; break;
     case 4:
