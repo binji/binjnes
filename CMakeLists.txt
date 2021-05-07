@@ -25,35 +25,70 @@ add_custom_target(${name}-copy-to-bin ALL
 )
 endfunction ()
 
-set(OpenGL_GL_PREFERENCE "LEGACY")
-find_package(SDL2)
-find_package(OpenGL)
+if (NOT EMSCRIPTEN)
 
-if (SDL2_FOUND AND OPENGL_FOUND)
-  add_executable(binjnes
-    src/binjnes.c
-    src/common.c
-    src/emulator.c
-    src/host.c
-    src/host-gl.c
-    src/host-ui-simple.c
-    src/joypad.c
-  )
-  target_link_libraries(binjnes SDL2::SDL2 SDL2::SDL2main ${OPENGL_gl_LIBRARY})
+  set(OpenGL_GL_PREFERENCE "LEGACY")
+  find_package(SDL2)
+  find_package(OpenGL)
 
-  install(TARGETS binjnes DESTINATION bin)
-  target_copy_to_bin(binjnes)
-  if (SDL2_DYNAMIC)
-    install(FILES ${SDL2_RUNTIME_LIBRARY} DESTINATION bin)
+  if (SDL2_FOUND AND OPENGL_FOUND)
+    add_executable(binjnes
+      src/binjnes.c
+      src/common.c
+      src/emulator.c
+      src/host.c
+      src/host-gl.c
+      src/host-ui-simple.c
+      src/joypad.c
+    )
+    target_link_libraries(binjnes SDL2::SDL2 SDL2::SDL2main ${OPENGL_gl_LIBRARY})
+
+    install(TARGETS binjnes DESTINATION bin)
+    target_copy_to_bin(binjnes)
+    if (SDL2_DYNAMIC)
+      install(FILES ${SDL2_RUNTIME_LIBRARY} DESTINATION bin)
+    endif ()
   endif ()
-endif ()
 
-add_executable(binjnes-tester
-  src/common.c
-  src/options.c
-  src/emulator.c
-  src/joypad.c
-  src/tester.c
-)
-install(TARGETS binjnes-tester DESTINATION bin)
-target_copy_to_bin(binjnes-tester)
+  add_executable(binjnes-tester
+    src/common.c
+    src/options.c
+    src/emulator.c
+    src/joypad.c
+    src/tester.c
+  )
+  install(TARGETS binjnes-tester DESTINATION bin)
+  target_copy_to_bin(binjnes-tester)
+
+else (EMSCRIPTEN)
+
+  add_definitions(-Wno-format-security)
+
+  add_executable(binjnes
+    src/memory.c
+    src/emulator.c
+    src/joypad.c
+    src/emscripten/wrapper.c)
+  set(EXPORTED_JSON ${PROJECT_SOURCE_DIR}/src/emscripten/exported.json)
+  target_include_directories(binjnes PUBLIC ${PROJECT_SOURCE_DIR}/src)
+
+  set(LINK_FLAGS
+    --memory-init-file 0
+    -s EXPORTED_FUNCTIONS=\"@${EXPORTED_JSON}\"
+    -s MALLOC=emmalloc
+    -s ASSERTIONS=0
+    -s ENVIRONMENT=web
+    -s FILESYSTEM=0
+    -s EXIT_RUNTIME=0
+    -s MODULARIZE=1
+    -s EXPORT_NAME="Binjnes"
+  )
+
+  string(REPLACE ";" " " LINK_FLAGS_STR "${LINK_FLAGS}")
+
+  set_target_properties(binjnes
+    PROPERTIES
+    LINK_FLAGS "${LINK_FLAGS_STR}"
+    LINK_DEPENDS "${EXPORTED_JSON}"
+  )
+endif ()
