@@ -222,42 +222,40 @@ static inline u8 scany(P* p) { return p->fbidx >> 8; }
 static void shift_en(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-  u8 idx = 0;
+  int palidx = 0, bgpx = 0;
 
   // Decrement inactive counters. Active counters are always 0.
   u8x16 active = spr->counter == 0;
   spr->counter -= 1 & ~active;
 
   if (p->ppumask & 8) { // Show BG.
-    idx = ((p->bgatpreshift[1] & 3) << 2) |
-          (p->bgatpreshift[0] & p->bgsprleftmask[0] & 3);
+    bgpx = p->bgatpreshift[0] & p->bgsprleftmask[0] & 3;
+    palidx = ((p->bgatpreshift[1] & 3) << 2) | bgpx;
   }
 
   // TODO: smarter way to avoid sprites on line 0?
   if ((p->ppumask & 0x10) && scany(p) != 0) { // Show sprites.
-    // Find first non-zero sprite, if any. Check only the high bit of the lane
+    // Find first non-zero sprite, if any. Check only the low bit of the lane
     // (the pixel that might be drawn).
-    u64x2 non0x2 = (u64x2)(spr->shift & active & 0x80);
+    u64x2 non0x2 = (u64x2)(spr->shift & active & 1);
     u64 non0 = non0x2[0] | non0x2[1];
     if (non0) {
-      int s = __builtin_ctzll(non0);
       // Sprite 0 hit only occurs:
       //  * When sprite and background are both enabled
       //  * When sprite and background pixel are both opaque
       //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
       //  * When x!=255
       //  * (sprite priority doesn't matter)
-      if ((((spr->spr0mask & non0) >> s) & p->bgsprleftmask[1]) && (idx & 3) &&
+      if ((non0 & spr->spr0mask & p->bgsprleftmask[1]) && bgpx &&
           scanx(p) != 255) {
         p->ppustatus |= 0x40;
       }
 
       // Check if sprite is on transparent BG pixel, or has priority.
-      if (!(idx & 3) || (non0 & (-non0) & spr->pri)) {
-        int spridx = s >> 3;
-        u8x16 data = spr->shift >> 7;
-        idx = (((spr->pal[spridx] & 3) + 4) << 2) |
-              (((data[spridx + 8] << 1) | data[spridx]) & p->bgsprleftmask[1]);
+      if (!bgpx || (non0 & (-non0) & spr->pri)) {
+        int sidx = __builtin_ctzll(non0) >> 3;
+        u8 sprpx = ((spr->shift[sidx + 8] << 1) & 2) | (spr->shift[sidx] & 1);
+        palidx = spr->pal[sidx] | (sprpx & p->bgsprleftmask[1]);
       }
     }
   }
@@ -269,11 +267,11 @@ static void shift_en(E *e) {
   p->bgsprleftmask = (p->bgsprleftmask >> 2) | 0xc000;
 
   // Shift all active sprites.
-  spr->shift = ((spr->shift << 1) & active) | (spr->shift & ~active);
+  spr->shift = ((spr->shift >> 1) & active) | (spr->shift & ~active);
 
   // Draw final pixel.
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
-  e->frame_buffer[p->fbidx++] = p->rgbapal[idx];
+  e->frame_buffer[p->fbidx++] = p->rgbapal[palidx];
 }
 
 static void shift_dis(E *e) {
@@ -491,26 +489,23 @@ repeat:;
           if (spr->at & 0x80) { y = ~y; }  // Flip Y.
           u16 chr = spr_chr_addr(p->ppuctrl, spr->tile, y);
           u8 ptbl = chr_read(e, chr), ptbh = chr_read(e, chr + 8);
-          if (spr->at & 0x40) {
+          if (!(spr->at & 0x40)) {
             ptbl = reverse(ptbl);
             ptbh = reverse(ptbh);
           }
           spr->shift[idx] = ptbl;
           spr->shift[idx + 8] = ptbh;
-          spr->pal[idx] =  spr->at & 3;
+          spr->pal[idx] = ((spr->at & 3) + 4) << 2;
           shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
           shift_in(&spr->spr0mask, (spr->s == 4 && spr->spr0) ? 0xff : 0);
-          spr->counter[idx] = spr->t;
-          spr->counter[idx+8] = spr->t;
+          spr->counter[idx] = spr->counter[idx+8] = spr->t;
         } else {
           // empty sprite.
-          spr->shift[idx] = 0;
-          spr->shift[idx + 8] = 0;
-          spr->pal[idx] = 0;
+          spr->shift[idx] = spr->shift[idx + 8] = 0;
+          spr->pal[idx] = 4 << 2;
           spr->pri >>= 8;
           spr->spr0mask >>= 8;
-          spr->counter[idx] = 0xff;
-          spr->counter[idx+8] = 0xff;
+          spr->counter[idx] = spr->counter[idx+8] = 0xff;
           // Dummy reads for MMC3 IRQ
           u16 chr = spr_chr_addr(p->ppuctrl, 0xff, 0);
           chr_read(e, chr);
