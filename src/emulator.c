@@ -234,7 +234,8 @@ static void shift_en(E *e) {
   }
 
   // TODO: smarter way to avoid sprites on line 0?
-  if ((p->ppumask & 0x10) && scany(p) != 0) { // Show sprites.
+  if (any_true_u8x16(active) && (p->ppumask & 0x10) && // Show sprites.
+      scany(p) != 0) {
     // Find first non-zero sprite, if any. Check only the low bit of the lane
     // (the pixel that might be drawn).
     u64x2 non0x2 = (u64x2)(spr->shift & active & 1);
@@ -258,18 +259,13 @@ static void shift_en(E *e) {
         palidx = spr->pal[sidx] | (sprpx & p->bgsprleftmask[1]);
       }
     }
+
+    spr->shift = blendv_u8x16(spr->shift, spr->shift >> 1, active);
   }
 
-  // Shift BG/attribute registers.
   p->bgatpreshift >>= 2;
-
-  // Shift left side masks.
   p->bgsprleftmask = (p->bgsprleftmask >> 2) | 0xc000;
 
-  // Shift all active sprites.
-  spr->shift = ((spr->shift >> 1) & active) | (spr->shift & ~active);
-
-  // Draw final pixel.
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   e->frame_buffer[p->fbidx++] = p->rgbapal[palidx];
 }
@@ -657,7 +653,7 @@ static void apu_tick(E *e) {
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
   // Reload the timers that are zero.
   u16x8 timer0 = (a->timer < timer_diff) & a->play_mask;
-  a->timer = ((a->timer - timer_diff) & ~timer0) | (a->period & timer0);
+  a->timer = blendv_u16x8(a->timer - timer_diff, a->period, timer0);
 
   if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4]) {
     // Advance the sequence for reloaded timers.
@@ -795,10 +791,9 @@ static void apu_quarter(E *e) {
   a->decay = (f32x4)(((u32x4)a->decay & ~env0_start) |
                      ((u32x4)(a->decay - 1) & (~a->start & env0 & ~decay0)) |
                      ((u32x4)ffff & (a->start | (env0 & decay0 & a->envloop))));
-  a->envdiv = ((a->envdiv - 1) & ~env0_start) | (a->envreload & env0_start);
-  a->vol = (f32x4)(((u32x4)a->decay & ~a->cvol) | ((u32x4)a->vol & a->cvol));
-  u32x4 update4 = a->vol != oldvol;
-  a->update = update4[0] | update4[1] | update4[2] | update4[3];
+  a->envdiv = blendv_u32x4(a->envdiv - 1, a->envreload, env0_start);
+  a->vol = (f32x4)blendv_u32x4((u32x4)a->decay, (u32x4)a->vol, a->cvol);
+  a->update = any_true_u32x4(a->vol != oldvol);
   a->start = (u32x4){0, 0, 0, 0};
 
   // triangle linear counter
@@ -832,12 +827,12 @@ static void apu_half(E *e) {
   // sweep unit
   u16x8 diff = {a->period[0] >> a->swshift[0], a->period[1] >> a->swshift[1]},
         ndiff = ~diff + (u16x8){0, 1};
-  u16x8 target = a->period + ((ndiff & a->swneg) | (diff & ~a->swneg));
+  u16x8 target = a->period + blendv_u16x8(diff, ndiff, a->swneg);
   u16x8 mute = (a->period < 8) | (target >= 0x7ff);
   u16x8 swdiv0 = a->swdiv == 0, swupdate = swdiv0 & a->swen & ~mute,
         swdec = ~(swdiv0 | a->swreload);
-  a->period = (a->period & ~swupdate) | (target & swupdate);
-  a->swdiv = ((a->swdiv - 1) & swdec) | (a->swperiod & ~swdec);
+  a->period = blendv_u16x8(a->period, target, swupdate);
+  a->swdiv = blendv_u16x8(a->swperiod, a->swdiv - 1, swdec);
   a->swreload = (u16x8){0, 0};
 }
 

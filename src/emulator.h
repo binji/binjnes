@@ -8,6 +8,7 @@
 #define BINJNES_EMULATOR_H_
 
 #include "common.h"
+#include "vec.h"
 
 #ifdef __cplusplus
 extern "C" {
