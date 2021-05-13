@@ -2278,15 +2278,24 @@ u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
 
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
-static void emulator_step_internal(E *e) {
-  cpu_step(e);
-  ppu_step(e);
-  e->s.cy += 1;
-  ppu_step(e);
-  e->s.cy += 1;
-  ppu_step(e);
-  e->s.cy += 1;
-  apu_step(e);
+static void emulator_substep_loop(E *e, Ticks check_ticks) {
+  if (e->s.cy + 3 <= check_ticks) {
+    switch (e->s.cy % 3) { // Duff's device!
+      while (e->s.event == 0 && e->s.cy + 3 <= check_ticks) {
+        case 0: cpu_step(e); ppu_step(e); apu_step(e); ++e->s.cy;
+        case 1: ppu_step(e); ++e->s.cy;
+        case 2: ppu_step(e); ++e->s.cy;
+      }
+    }
+  }
+  // Unalign, if requested.
+  while (e->s.event == 0 && e->s.cy < check_ticks) {
+    switch (e->s.cy % 3) {
+      case 0: cpu_step(e); ppu_step(e); apu_step(e); ++e->s.cy; break;
+      case 1: ppu_step(e); ++e->s.cy; break;
+      case 2: ppu_step(e); ++e->s.cy; break;
+    }
+  }
 }
 
 EEvent emulator_run_until(E *e, Ticks until_ticks) {
@@ -2301,9 +2310,7 @@ EEvent emulator_run_until(E *e, Ticks until_ticks) {
       e->s.cy +
       (u32)DIV_CEIL(frames_left * PPU_TICKS_PER_SECOND, ab->frequency);
   Ticks check_ticks = MIN(until_ticks, max_audio_ticks);
-  while (e->s.event == 0 && e->s.cy < check_ticks) {
-    emulator_step_internal(e);
-  }
+  emulator_substep_loop(e, check_ticks);
   if (e->s.cy >= max_audio_ticks) {
     e->s.event |= EMULATOR_EVENT_AUDIO_BUFFER_FULL;
 #if 0
