@@ -12,6 +12,9 @@
 
 #include "emulator.h"
 
+#define SAVE_STATE_VERSION (0)
+#define SAVE_STATE_HEADER (u32)(0x23557a7e + SAVE_STATE_VERSION)
+
 #define LOGLEVEL 0
 #define DISASM 0
 
@@ -1216,8 +1219,8 @@ void cpu_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void set_mirror(E *e, Mirror mirror) {
-  switch (mirror) {
+static void update_nt_map(E* e) {
+  switch (e->s.p.mirror) {
     case MIRROR_HORIZONTAL:
       e->nt_map[0] = e->nt_map[1] = e->s.p.ram;
       e->nt_map[2] = e->nt_map[3] = e->s.p.ram + 0x400;
@@ -1236,15 +1239,25 @@ static void set_mirror(E *e, Mirror mirror) {
   }
 }
 
-static void set_chr1k_map(E *e, u8 bank0, u8 bank1, u8 bank2, u8 bank3,
-                          u8 bank4, u8 bank5, u8 bank6, u8 bank7) {
-  u8 banks[] = {bank0, bank1, bank2, bank3, bank4, bank5, bank6, bank7};
-  for (size_t i = 0; i < ARRAY_SIZE(banks); ++i) {
-    u8 bank = banks[i] & (e->ci.chr1k_banks - 1);
+static void set_mirror(E *e, Mirror mirror) {
+  e->s.p.mirror = mirror;
+  update_nt_map(e);
+}
+
+static void update_chr1k_map(E* e) {
+  for (size_t i = 0; i < ARRAY_SIZE(e->s.m.chr1k_bank); ++i) {
+    u8 bank = e->s.m.chr1k_bank[i] & (e->ci.chr1k_banks - 1);
     e->chr_map[i] = e->ci.chr_data + (bank << 10);
     // TODO: chr_data_write always points into chr_ram (which is fixed at 8KiB).
     e->chr_map_write[i] = e->ci.chr_data_write + ((bank & 7) << 10);
   }
+}
+
+static void set_chr1k_map(E *e, u8 bank0, u8 bank1, u8 bank2, u8 bank3,
+                          u8 bank4, u8 bank5, u8 bank6, u8 bank7) {
+  u8 banks[] = {bank0, bank1, bank2, bank3, bank4, bank5, bank6, bank7};
+  memcpy(e->s.m.chr1k_bank, banks, sizeof(e->s.m.chr1k_bank));
+  update_chr1k_map(e);
 }
 
 static void set_chr4k_map(E *e, u8 bank0, u8 bank1) {
@@ -1259,12 +1272,17 @@ static void set_chr8k_map(E *e, u8 bank) {
   set_chr4k_map(e, bank * 2, bank * 2 + 1);
 }
 
-static void set_prg8k_map(E *e, u8 bank0, u8 bank1, u8 bank2, u8 bank3) {
-  u8 banks[] = {bank0, bank1, bank2, bank3};
-  for (size_t i = 0; i < ARRAY_SIZE(banks); ++i) {
-    u8 bank = banks[i] & (e->ci.prg8k_banks - 1);
+static void update_prg8k_map(E* e) {
+  for (size_t i = 0; i < ARRAY_SIZE(e->s.m.prg8k_bank); ++i) {
+    u8 bank = e->s.m.prg8k_bank[i] & (e->ci.prg8k_banks - 1);
     e->prg_rom_map[i] = e->ci.prg_data + (bank << 13);
   }
+}
+
+static void set_prg8k_map(E *e, u8 bank0, u8 bank1, u8 bank2, u8 bank3) {
+  u8 banks[] = {bank0, bank1, bank2, bank3};
+  memcpy(e->s.m.prg8k_bank, banks, sizeof(e->s.m.prg8k_bank));
+  update_prg8k_map(e);
 }
 
 static void set_prg16k_map(E *e, u8 bank0, u8 bank1) {
@@ -2326,6 +2344,36 @@ EEvent emulator_run_until(E *e, Ticks until_ticks) {
     e->s.event |= EMULATOR_EVENT_UNTIL_TICKS;
   }
   return e->s.event;
+}
+
+void emulator_init_state_file_data(FileData* file_data) {
+  file_data->size = sizeof(S);
+  file_data->data = xmalloc(file_data->size);
+}
+
+Result emulator_read_state(Emulator *e, const FileData *file_data) {
+  CHECK_MSG(file_data->size == sizeof(S),
+            "save state file is wrong size: %ld, expected %ld.\n",
+            (long)file_data->size, (long)sizeof(S));
+  S *new_state = (S *)file_data->data;
+  CHECK_MSG(new_state->header == SAVE_STATE_HEADER,
+            "header mismatch: %u, expected %u.\n", new_state->header,
+            SAVE_STATE_HEADER);
+  memcpy(&e->s, new_state, sizeof(S));
+  // Fix pointers.
+  update_chr1k_map(e);
+  update_prg8k_map(e);
+  update_nt_map(e);
+  return OK;
+  ON_ERROR_RETURN;
+}
+
+Result emulator_write_state(Emulator *e, FileData *file_data) {
+  CHECK(file_data->size >= sizeof(S));
+  e->s.header = SAVE_STATE_HEADER;
+  memcpy(file_data->data, &e->s, file_data->size);
+  return OK;
+  ON_ERROR_RETURN;
 }
 
 // Debug stuff /////////////////////////////////////////////////////////////////

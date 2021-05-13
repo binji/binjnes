@@ -40,6 +40,7 @@ if (NOT EMSCRIPTEN)
       src/host-gl.c
       src/host-ui-simple.c
       src/joypad.c
+      src/rewind.c
     )
     target_link_libraries(binjnes SDL2::SDL2 SDL2::SDL2main ${OPENGL_gl_LIBRARY})
 
@@ -68,6 +69,7 @@ else (EMSCRIPTEN)
     src/memory.c
     src/emulator.c
     src/joypad.c
+    src/rewind.c
     src/emscripten/wrapper.c)
   set(EXPORTED_JSON ${PROJECT_SOURCE_DIR}/src/emscripten/exported.json)
   target_include_directories(binjnes PUBLIC ${PROJECT_SOURCE_DIR}/src)

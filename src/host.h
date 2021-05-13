@@ -10,6 +10,7 @@
 #include "common.h"
 #include "emulator.h"
 #include "joypad.h"
+#include "rewind.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -124,6 +125,7 @@ typedef struct HostInit {
   int audio_frequency;
   int audio_frames;
   f32 audio_volume;
+  RewindInit rewind;
   const char* joypad_filename;
 } HostInit;
 
@@ -161,6 +163,23 @@ void host_end_video(struct Host*);
 void host_set_palette(struct Host*, RGBA palette[4]);
 void host_enable_palette(struct Host*, Bool enabled);
 void host_render_screen_overlay(struct Host*, struct HostTexture*);
+
+/* Rewind support. */
+
+Ticks host_oldest_ticks(struct Host*);
+Ticks host_newest_ticks(struct Host*);
+
+Ticks host_get_rewind_oldest_ticks(struct Host*);
+Ticks host_get_rewind_newest_ticks(struct Host*);
+JoypadStats host_get_joypad_stats(struct Host*);
+RewindStats host_get_rewind_stats(struct Host*);
+
+Result host_write_joypad_to_file(struct Host*, const char* filename);
+
+void host_begin_rewind(struct Host*);
+Result host_rewind_to_ticks(struct Host*, Ticks ticks);
+void host_end_rewind(struct Host*);
+Bool host_is_rewinding(struct Host*);
 
 HostTexture* host_get_frame_buffer_texture(struct Host*);
 HostTexture* host_create_texture(struct Host*, int w, int h, HostTextureFormat);

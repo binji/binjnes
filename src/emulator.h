@@ -89,7 +89,8 @@ typedef struct {
 } CartInfo;
 
 typedef struct {
-  u8 chr_bank[6], prg_bank[2];
+  u8 chr1k_bank[8], prg8k_bank[4]; // Actual mapped bank indexes.
+  u8 chr_bank[6], prg_bank[2];     // Mapper's selected bank indexes.
   union {
     struct {
       u8 bits, data, ctrl;
@@ -133,6 +134,7 @@ typedef struct {
   u32 fbidx, bits_mask, frame;
   Spr spr;
   u64 read_status_cy, last_vram_access_cy, a12_low_count;
+  Mirror mirror;
 } P;
 
 typedef struct {
@@ -154,6 +156,7 @@ typedef struct {
 } J;
 
 typedef struct {
+  u32 header;
   u64 cy;
   EmulatorEvent event;
   C c;
@@ -186,6 +189,10 @@ FrameBuffer* emulator_get_frame_buffer(Emulator*);
 AudioBuffer* emulator_get_audio_buffer(Emulator*);
 u32 audio_buffer_get_frames(AudioBuffer*);
 Ticks emulator_get_ticks(Emulator*);
+
+void emulator_init_state_file_data(FileData*);
+Result emulator_read_state(Emulator*, const FileData*);
+Result emulator_write_state(Emulator*, FileData*);
 
 EmulatorEvent emulator_step(Emulator*);
 EmulatorEvent emulator_run_until(Emulator*, Ticks until_ticks);
