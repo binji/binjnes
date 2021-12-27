@@ -2073,73 +2073,102 @@ static const u16 s_cpu_decode = 781, s_nmi_or_irq = s_cpu_decode + 1,
 
 static Result get_cart_info(E *e, const FileData *file_data) {
   const u32 kHeaderSize = 16;
-  const u32 kTrainerSize = 512;
-  CHECK_MSG(file_data->size >= kHeaderSize, "file must be >= %d.", kHeaderSize);
+  CartInfo *ci = &e->ci;
 
+  CHECK_MSG(file_data->size >= kHeaderSize, "file must be >= %d.", kHeaderSize);
   CHECK_MSG(file_data->data[0] == 'N' && file_data->data[1] == 'E' &&
                 file_data->data[2] == 'S' && file_data->data[3] == '\x1a',
             "NES header not found.");
 
-  const u8 flag6 = file_data->data[6];
-  const u8 flag7 = file_data->data[7];
-  const u8 flag9 = file_data->data[9];
-
-  CartInfo* ci = &e->ci;
-  ci->mirror = (flag6 & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
-  ci->has_bat_ram = (flag6 & 4) != 0;
-  ci->has_trainer = (flag6 & 8) != 0;
-  ci->ignore_mirror = (flag6 & 0x10) != 0;
-
-  u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
-  u32 ines_prg16k_banks = file_data->data[4];
-  u32 ines_chr8k_banks = file_data->data[5];
-  u32 ines_data_size = (ines_prg16k_banks << 14) + (ines_chr8k_banks << 13);
-
-  u32 nes2_prg16k_banks = ((flag9 & 0xf) << 4) | file_data->data[4];
-  u32 nes2_chr8k_banks = (flag9 & 0xf0) | file_data->data[5];
-  u32 nes2_data_size = (nes2_prg16k_banks << 14) + (nes2_chr8k_banks << 13);
-
-  u32 data_size = kHeaderSize + trainer_size;
-
-  /* Use detection from NESwiki */
-  if ((flag7 & 0xc) == 8 &&
-      file_data->size >= kHeaderSize + trainer_size + nes2_data_size) {
-    data_size += nes2_data_size;
-    ci->is_nes2_0 = TRUE;
-    ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
-                 ((flag6 & 0xf0) >> 4);
-    ci->prg16k_banks = nes2_prg16k_banks;
-    ci->chr8k_banks = nes2_chr8k_banks;
-  } else if ((flag7 & 0xc) == 0) {
-    data_size += ines_data_size;
+  const CartDbInfo* cart_db_info = cartdb_info_from_file(file_data);
+  if (cart_db_info) {
     ci->is_nes2_0 = FALSE;
-    ci->mapper = (flag7 & 0xf0) | ((flag6 & 0xf0) >> 4);
-    ci->prg16k_banks = ines_prg16k_banks;
-    ci->chr8k_banks = nes2_chr8k_banks;
+    ci->has_trainer = FALSE;
+    ci->ignore_mirror = FALSE;
+    ci->mapper = cart_db_info->mapper;
+    ci->mirror = cart_db_info->mirror;
+    ci->has_bat_ram = cart_db_info->battery;
+    ci->prg16k_banks = cart_db_info->prg;
+    ci->chr4k_banks = cart_db_info->chr;
+    ci->prg_data = file_data->data + kHeaderSize;
+
+    ci->prg32k_banks = ci->prg16k_banks / 2;
+    ci->prg8k_banks = ci->prg16k_banks * 2;
+    ci->chr8k_banks = ci->chr8k_banks / 2;
+    ci->chr1k_banks = ci->chr8k_banks * 4;
+
+    if (cart_db_info->vram) {
+      ci->chr_data = e->s.p.chr_ram;
+      ci->chr8k_banks = cart_db_info->vram / 2;
+      ci->chr4k_banks = cart_db_info->vram;
+      ci->chr1k_banks = cart_db_info->vram * 4;
+    } else {
+      ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
+    }
+    ci->chr_data_write = e->s.p.chr_ram;
   } else {
-    ci->mapper = (flag6 & 0xf0) >> 4;
-    ci->prg16k_banks = ines_prg16k_banks;
-    ci->chr8k_banks = nes2_chr8k_banks;
+    const u32 kTrainerSize = 512;
+
+    const u8 flag6 = file_data->data[6];
+    const u8 flag7 = file_data->data[7];
+    const u8 flag9 = file_data->data[9];
+
+    ci->mirror = (flag6 & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
+    ci->has_bat_ram = (flag6 & 4) != 0;
+    ci->has_trainer = (flag6 & 8) != 0;
+    ci->ignore_mirror = (flag6 & 0x10) != 0;
+
+    u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
+    u32 ines_prg16k_banks = file_data->data[4];
+    u32 ines_chr8k_banks = file_data->data[5];
+    u32 ines_data_size = (ines_prg16k_banks << 14) + (ines_chr8k_banks << 13);
+
+    u32 nes2_prg16k_banks = ((flag9 & 0xf) << 4) | file_data->data[4];
+    u32 nes2_chr8k_banks = (flag9 & 0xf0) | file_data->data[5];
+    u32 nes2_data_size = (nes2_prg16k_banks << 14) + (nes2_chr8k_banks << 13);
+
+    u32 data_size = kHeaderSize + trainer_size;
+
+    /* Use detection from NESwiki */
+    if ((flag7 & 0xc) == 8 &&
+        file_data->size >= kHeaderSize + trainer_size + nes2_data_size) {
+      data_size += nes2_data_size;
+      ci->is_nes2_0 = TRUE;
+      ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
+                   ((flag6 & 0xf0) >> 4);
+      ci->prg16k_banks = nes2_prg16k_banks;
+      ci->chr8k_banks = nes2_chr8k_banks;
+    } else if ((flag7 & 0xc) == 0) {
+      data_size += ines_data_size;
+      ci->is_nes2_0 = FALSE;
+      ci->mapper = (flag7 & 0xf0) | ((flag6 & 0xf0) >> 4);
+      ci->prg16k_banks = ines_prg16k_banks;
+      ci->chr8k_banks = nes2_chr8k_banks;
+    } else {
+      ci->mapper = (flag6 & 0xf0) >> 4;
+      ci->prg16k_banks = ines_prg16k_banks;
+      ci->chr8k_banks = nes2_chr8k_banks;
+    }
+
+    ci->prg32k_banks = ci->prg16k_banks / 2;
+    ci->prg8k_banks = ci->prg16k_banks * 2;
+    ci->chr4k_banks = ci->chr8k_banks * 2;
+    ci->chr1k_banks = ci->chr8k_banks * 8;
+
+    CHECK_MSG(file_data->size >= data_size, "file must be >= %d.\n", data_size);
+
+    ci->prg_data = file_data->data + kHeaderSize + trainer_size;
+    if (ci->chr8k_banks == 0) { // Assume CHR RAM
+      ci->chr_data = e->s.p.chr_ram;
+      // Assume 8KiB of RAM (TODO: how to know?)
+      ci->chr8k_banks = 1;
+      ci->chr4k_banks = 2;
+      ci->chr1k_banks = 8;
+    } else { // CHR ROM
+      ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
+    }
+    ci->chr_data_write = e->s.p.chr_ram;
   }
-
-  ci->prg32k_banks = ci->prg16k_banks / 2;
-  ci->prg8k_banks = ci->prg16k_banks * 2;
-  ci->chr4k_banks = ci->chr8k_banks * 2;
-  ci->chr1k_banks = ci->chr8k_banks * 8;
-
-  CHECK_MSG(file_data->size >= data_size, "file must be >= %d.\n", data_size);
-
-  ci->prg_data = file_data->data + kHeaderSize + trainer_size;
-  if (ci->chr8k_banks == 0) { // Assume CHR RAM
-    ci->chr_data = e->s.p.chr_ram;
-    // Assume 8KiB of RAM (TODO: how to know?)
-    ci->chr8k_banks = 1;
-    ci->chr4k_banks = 2;
-    ci->chr1k_banks = 8;
-  } else { // CHR ROM
-    ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
-  }
-  ci->chr_data_write = e->s.p.chr_ram;
 
   return OK;
   ON_ERROR_RETURN;

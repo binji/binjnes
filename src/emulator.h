@@ -8,6 +8,7 @@
 #define BINJNES_EMULATOR_H_
 
 #include "common.h"
+#include "cartdb.h"
 #include "vec.h"
 
 #ifdef __cplusplus
@@ -61,13 +62,6 @@ enum {
   EMULATOR_EVENT_BREAKPOINT = 0x8,
   EMULATOR_EVENT_INVALID_OPCODE = 0x10,
 };
-
-typedef enum {
-  MIRROR_SINGLE_0 = 0,
-  MIRROR_SINGLE_1 = 1,
-  MIRROR_VERTICAL = 2,
-  MIRROR_HORIZONTAL = 3,
-} Mirror;
 
 typedef enum {
   IRQ_FRAME = 1,

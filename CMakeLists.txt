@@ -35,6 +35,7 @@ if (NOT EMSCRIPTEN)
     add_executable(binjnes
       src/binjnes.c
       src/common.c
+      src/cartdb.c
       src/emulator.c
       src/host.c
       src/host-gl.c
@@ -53,6 +54,7 @@ if (NOT EMSCRIPTEN)
 
   add_executable(binjnes-tester
     src/common.c
+    src/cartdb.c
     src/options.c
     src/emulator.c
     src/joypad.c
@@ -67,6 +69,7 @@ else (EMSCRIPTEN)
 
   add_executable(binjnes
     src/memory.c
+    src/cartdb.c
     src/emulator.c
     src/joypad.c
     src/rewind.c
