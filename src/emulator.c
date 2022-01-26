@@ -1440,6 +1440,12 @@ void mapper7_write(E *e, u16 addr, u8 val) {
   set_mirror(e, MIRROR_SINGLE_0 + ((val & 0x10) ? 0 : 1));
 }
 
+void mapper11_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  assert(addr >= 0x8000);
+  set_chr8k_map(e, (m->chr_bank[0] = (val >> 4) & (e->ci.chr8k_banks - 1)));
+  set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
+}
 
 static inline u8 get_P(E *e, Bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
@@ -2224,6 +2230,13 @@ Result init_mapper(E *e) {
     set_mirror(e, MIRROR_SINGLE_0);
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
     set_prg32k_map(e, e->ci.prg32k_banks - 1);
+    break;
+  case 11:
+    e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1;
+    e->mapper_write = mapper11_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg32k_map(e, e->s.m.prg_bank[0]);
     break;
 
   shared:
