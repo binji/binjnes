@@ -80,6 +80,7 @@ typedef struct {
   u16 prg8k_banks, prg16k_banks, prg32k_banks;
   u16 chr1k_banks, chr4k_banks, chr8k_banks;
   u16 mapper;
+  Board board;
 } CartInfo;
 
 typedef struct {
