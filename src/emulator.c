@@ -1461,18 +1461,6 @@ static inline void set_P(E *e, u8 val) {
   e->s.c.C = !!(val & 0x01);
 }
 
-static inline void u8_sum(u8 lhs, u8 rhs, u8* sum, u8* fixhi) {
-  u16 result = lhs + rhs;
-  *fixhi = result >> 8;
-  *sum = result;
-}
-
-static inline void u16_inc(u8* hi, u8* lo) {
-  u8 fixhi;
-  u8_sum(*lo, 1, lo, &fixhi);
-  *hi += fixhi;
-}
-
 static inline void rol(u8 val, Bool C, u8 *result, Bool *out_c) {
   *out_c = !!(val & 0x80);
   *result = (val << 1) | C;
@@ -1529,8 +1517,8 @@ void cpu_step(E *e) {
       case 17: c->TL = c->V; break;
       case 18: c->TL = c->N; break;
       case 19: c->TL = !c->TL; break;
-      case 20: u8_sum(c->TL, c->X, &c->TL, &c->fixhi); break;
-      case 21: u8_sum(c->TL, c->Y, &c->TL, &c->fixhi); break;
+      case 20: c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL); break;
+      case 21: c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL); break;
       case 22: c->TH = busval; break;
       case 23: c->TH += c->fixhi; break;
       case 24: busval = c->PCL; break;
@@ -1628,7 +1616,7 @@ void cpu_step(E *e) {
       }
       case 55: c->PCH = busval; break;
       case 56: c->PCH += c->fixhi; break;
-      case 57: u16_inc(&c->PCH, &c->PCL); break;
+      case 57: c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL); break;
       case 58: c->Z = c->TL == 0; c->N = !!(c->TL & 0x80); break;
       case 59: if (!c->fixhi) { ++c->step; } break;
       case 60: if (c->TL) { goto done; } c->TL = busval; break;
