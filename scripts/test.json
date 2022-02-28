@@ -81,6 +81,13 @@
   ["instr_timing", "nes-test-roms/instr_timing/rom_singles/1-instr_timing.nes", 1200, "3d592bfd810a456a80108504b862305ed89fc054"],
   ["instr_timing", "nes-test-roms/instr_timing/rom_singles/2-branch_timing.nes", 200, "1125bc485c10632060cb64c03744a71bac602dda"],
 
+  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/1-clocking.nes", 23, "cf1677f942b5361ed051fb31b3deca43028af9d7"],
+  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/2-details.nes", 50, "33845b458e0a20d6fee382a01a29b152afe13982"],
+  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/3-A12_clocking.nes", 24, "9311c847f820aaf14537edc2e727667aa460b1ef"],
+  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/4-scanline_timing.nes", 220, "!e96a4890d4af0e53e6a2b4f955c61347e4421672"],
+  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/5-MMC3.nes", 24, "2e370415422a739e6decb306cf116f60a418a1e2"],
+  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/6-MMC3_alt.nes", 50, "!4cb48805559af36cb6b8c3486e2bc52278f9ff75"],
+
   ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/01-implied.nes", 100, "8966af374dc4611514e6bb7f114917a6d75ec60a"],
   ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/02-immediate.nes", 100, "baaa28776925a6b7456d1df0eef15babf4522a86"],
   ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/03-zero_page.nes", 200, "fac09c072d149668afc5bbcec945a0c7180a697d"],
