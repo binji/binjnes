@@ -111,7 +111,7 @@
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes", 200, "e921a68d0cbc2cd9a2ca3f3e568e0e8ca61d8492"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/04-nmi_control.nes", 100, "359b8cc399d9d6e80a2d0671be00e122fd7c881a"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/05-nmi_timing.nes", 300, "1b77306f92ec1f9f38e120c7c9f6983694f27077"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/06-suppression.nes", 200, "!83dcfe9b9f0e4163dd465c482f8f77f58826e6b4"],
+  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/06-suppression.nes", 200, "59749e57702bdcefa183a25906d7d262960c33ef"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes", 200, "!d273b13626ccd32e11eb4ba2f3e632fd3ee19085"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/08-nmi_off_timing.nes", 300, "!41a3023cc2bc6394218ffe7041f527303e30c9bd"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/09-even_odd_frames.nes", 100, "5a0d80b027a66c0a443cafa2ec7c04a180c725ff"],
@@ -142,7 +142,7 @@
   ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes", 200, "42c4297e3856d622462dec04c54fdbd8d4d9e419"],
   ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes", 100, "e4ea5293660110d35f7e35bc6adf96036d0b7f71"],
   ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes", 200, "acfbacf96819c0344574f1d42e130eee84203b2c"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes", 100, "!f4d2ccd359a06fac40a8037d20272a67ab464b06"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/6.nmi_disable.nes", 100, "!6f30b5808d2dce2fba728cb15c8772c55452a4ea"],
+  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes", 200, "a4a6d75f44990a2c55e73b79d707278b1a4e908b"],
+  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/6.nmi_disable.nes", 300, "7de6452aa26aee3f54ac1d73b7438c690e29eb16"],
   ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/7.nmi_timing.nes", 150, "1fbbf690e5d61f76227a7d49779178dd08673ccf"]
 ]

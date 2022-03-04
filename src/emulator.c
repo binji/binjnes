@@ -356,8 +356,9 @@ repeat:
       case 20: if (!z) { p->state = cnst; } break;
       case 21: if (z) { p->state = cnst; } break;
       case 22:
-        if (p->ppuctrl & 0x80) {
+        if ((p->ppuctrl & 0x80)) {
           e->s.c.req_nmi = TRUE;
+          p->nmi_cy = e->s.cy;
           DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
         }
         break;
@@ -986,6 +987,7 @@ u8 cpu_read(E *e, u16 addr) {
         p->ppustatus &= ~0x80;  // Clear NMI flag.
         p->w = 0;
         p->read_status_cy = e->s.cy;
+        if (e->s.cy - p->nmi_cy <= 3) { e->s.c.req_nmi = FALSE; }
         DEBUG("     [%" PRIu64 "] ppu:status=%02hhx w=0 fbx=%d fby=%d\n",
               e->s.cy, result, scanx(p), scany(p));
         return result;
