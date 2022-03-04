@@ -356,7 +356,7 @@ repeat:
       case 20: if (!z) { p->state = cnst; } break;
       case 21: if (z) { p->state = cnst; } break;
       case 22:
-        if ((p->ppuctrl & 0x80)) {
+        if (p->ppuctrl & 0x80) {
           e->s.c.req_nmi = TRUE;
           p->nmi_cy = e->s.cy;
           DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
@@ -368,7 +368,11 @@ repeat:
         ppu_read(e, p->v);
         DEBUG("(%" PRIu64 "): [#%u] ppustatus |= 0x80\n", e->s.cy, e->s.p.frame);
         break;
-      case 24: p->ppustatus = 0; break;
+      case 24:
+        DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
+        p->ppustatus = 0;
+        if (e->s.cy == p->write_ctrl_cy) { e->s.c.req_nmi = FALSE; }
+        break;
       case 25: p->state = cnst; break;
       default:
         FATAL("NYI: ppu step %d\n", bit);
@@ -1061,7 +1065,9 @@ void cpu_write(E *e, u16 addr, u8 val) {
     case 0:
       if (p->ppustatus & val & (p->ppuctrl ^ val) & 0x80) {
         c->req_nmi = TRUE;
+        DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy);
       }
+      p->write_ctrl_cy = e->s.cy;
       p->ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
