@@ -366,7 +366,8 @@ repeat:
         if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
         e->s.event |= EMULATOR_EVENT_NEW_FRAME;
         ppu_read(e, p->v);
-        DEBUG("(%" PRIu64 "): [#%u] ppustatus |= 0x80\n", e->s.cy, e->s.p.frame);
+        DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
+              p->ppustatus);
         break;
       case 24:
         DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
@@ -1067,11 +1068,14 @@ void cpu_write(E *e, u16 addr, u8 val) {
         c->req_nmi = TRUE;
         DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy);
       }
+      if ((val & 0x80) == 0 && e->s.cy - p->nmi_cy <= 3) {
+        c->req_nmi = FALSE;
+      }
       p->write_ctrl_cy = e->s.cy;
       p->ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
-      DEBUG("     ppu:t=%04hx  (ctrl=%02x)\n", p->t, val);
+      DEBUG("(%" PRIu64 "): ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy, p->t, val);
       break;
     case 1:
       p->ppumask = val;

@@ -113,7 +113,7 @@
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/05-nmi_timing.nes", 300, "1b77306f92ec1f9f38e120c7c9f6983694f27077"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/06-suppression.nes", 200, "59749e57702bdcefa183a25906d7d262960c33ef"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes", 200, "fa297771d4ba5eb10f04d43119cc216fb2cd3c21"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/08-nmi_off_timing.nes", 300, "!41a3023cc2bc6394218ffe7041f527303e30c9bd"],
+  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/08-nmi_off_timing.nes", 300, "1006b1d0bbaffb32a3238d8bf1b8529770c280e4"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/09-even_odd_frames.nes", 100, "5a0d80b027a66c0a443cafa2ec7c04a180c725ff"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/10-even_odd_timing.nes", 100, "!a2f0f2ac7f8aad414550858ca55cf911ddb7ddda"],
 
