@@ -40,8 +40,8 @@
 
   ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/1-cli_latency.nes", 20, "ccf4f6485e62031fa1e256895b078bfeef867773"],
   ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes", 150, "a2f769b36ee21514eaac32fa050f64bacfb9874d"],
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes", 200, "!e15f9c60085075204db58bbaa9a50261d5da7119"],
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes", 100, "!2683ceea726fb14a1bd9a4d5d3f18b1203696094"],
+  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes", 200, "674a7993134e75720cc1a7fe20a7fa023e029b0b"],
+  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes", 100, "fa55ad54502647afa042f11a509f60dafb46fd35"],
   ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/5-branch_delays_irq.nes", 150, "!762e3f01796e40730ac649c9e8d972482e1e1b9e"],
 
   ["cpu_timing_test6", "nes-test-roms/cpu_timing_test6/cpu_timing_test.nes", 700, "a8362d79c963e5aa0c0142f6bd04726043e3f60a"],
@@ -117,8 +117,8 @@
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/09-even_odd_frames.nes", 100, "5a0d80b027a66c0a443cafa2ec7c04a180c725ff"],
   ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/10-even_odd_timing.nes", 100, "!a2f0f2ac7f8aad414550858ca55cf911ddb7ddda"],
 
-  ["sprdma_and_dmc_dma", "nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes", 150, "7deeacc8709d63d3d4e88b8f50e67cb27a324464"],
-  ["sprdma_and_dmc_dma", "nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes", 150, "ecb0aba8fd960f83ff4d2a7e86522525d06e903b"],
+  ["sprdma_and_dmc_dma", "nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes", 150, "!7deeacc8709d63d3d4e88b8f50e67cb27a324464"],
+  ["sprdma_and_dmc_dma", "nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes", 150, "!ecb0aba8fd960f83ff4d2a7e86522525d06e903b"],
 
   ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/01.basics.nes", 50, "6f8fed6686a8ad662db5a81c1906b9627e3013ee"],
   ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/02.alignment.nes", 50, "553e94f84bfb4e751393d29a66f8fcf34b777b52"],

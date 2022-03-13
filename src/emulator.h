@@ -108,6 +108,7 @@ typedef struct {
   u8 opcode, open_bus, irq;
   Bool C, Z, I, D, V, N; // Flags.
   Bool bus_write, req_nmi, has_nmi, has_irq;
+  u64 set_vec_cy;
 } C;
 
 typedef struct {
