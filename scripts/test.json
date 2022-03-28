@@ -20,7 +20,7 @@
   ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/10.len_halt_timing.nes", 20, "!3bf0b177fce425b9a9714bceee3e40c564449755"],
   ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/11.len_reload_timing.nes", 20, "!4f5dd29543bff31ef2bf5e4d9dceb5c8bb2ba643"],
 
-  ["blargg_nes_cpu_test5", "nes-test-roms/blargg_nes_cpu_test5/cpu.nes", 1000, ""],
+  ["blargg_nes_cpu_test5", "nes-test-roms/blargg_nes_cpu_test5/cpu.nes", 1000, "27a7c7f4ddaae96960aeb8dc2b95d2b0c9357095"],
   ["blargg_nes_cpu_test5", "nes-test-roms/blargg_nes_cpu_test5/official.nes", 650, "27a7c7f4ddaae96960aeb8dc2b95d2b0c9357095"],
 
   ["blargg_ppu_tests", "nes-test-roms/blargg_ppu_tests_2005.09.15b/palette_ram.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],

@@ -1591,8 +1591,14 @@ void cpu_step(E *e) {
           case 0x9b:                                          // SHS
             c->S = c->A & c->X;
             busval = c->S & (c->TH + 1); break;
-          case 0x9c: busval = c->Y & (c->TH + 1); break;      // SHY
-          case 0x9e: busval = c->X & (c->TH + 1); break;      // SHX
+          case 0x9c:
+            busval = c->Y & (c->TH + 1);
+            if (c->fixhi) { c->bushi = busval; }
+            break;                                            // SHY
+          case 0x9e:
+            busval = c->X & (c->TH + 1);
+            if (c->fixhi) { c->bushi = busval; }
+            break;                                            // SHX
           case 0xb8: c->V = 0; break;                         // CLV
           case 0xba: c->TL = c->X = c->S; break;              // TSX
           case 0xbb: c->A = c->X = c->S &= busval; break;     // TSX
@@ -1832,7 +1838,7 @@ static const u64 s_cpu_bits[] = {
  0b0010011000000000000000000000000000100000000000000000001000000101, // 121 arr_imm
  0b0010011000000000011000000000000000000000000000000000101000000101, // 122 lxa_imm
  0b0010010000000000000000000000000000100000000000000000000000000001, // 123 las
- 0b0010000000000000000000000000000001100000000000000000000000000001, // 124 special write
+ 0b0010000000000000000000000000000001100000000000000000000000010001, // 124 special write
 };
 
 // Determine how many cycles to stall:
