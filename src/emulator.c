@@ -2297,13 +2297,8 @@ Result init_emulator(E *e, const EInit *init) {
   S* s = &e->s;
   ZERO_MEMORY(*s);
   CHECK(SUCCESS(init_mapper(e)));
-#if 1
   s->c.PCL = cpu_read(e, 0xfffc);
   s->c.PCH = cpu_read(e, 0xfffd);
-#else
-  s->c.PCL = 0;
-  s->c.PCH = 0xc0;
-#endif
   s->c.S = 0xfd;
   s->c.bits = 0;
   s->c.I = TRUE;
