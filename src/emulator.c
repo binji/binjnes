@@ -2139,8 +2139,8 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
     ci->prg32k_banks = ci->prg16k_banks / 2;
     ci->prg8k_banks = ci->prg16k_banks * 2;
-    ci->chr8k_banks = ci->chr8k_banks / 2;
-    ci->chr1k_banks = ci->chr8k_banks * 4;
+    ci->chr8k_banks = ci->chr4k_banks / 2;
+    ci->chr1k_banks = ci->chr4k_banks * 4;
 
     if (cart_db_info->vram) {
       ci->chr_data = e->s.p.chr_ram;
