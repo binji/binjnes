@@ -1006,7 +1006,7 @@ u8 cpu_read(E *e, u16 addr) {
       case 4:
         return p->oam[p->oamaddr];
       case 7: {
-        u8 result = ppu_read(e, p->v);
+        u8 result = p->ppulast = ppu_read(e, p->v);
         inc_ppu_addr(p);
         do_a12_access(e, p->v);
         return result;

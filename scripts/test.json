@@ -35,6 +35,9 @@
 
   ["cpu_dummy_reads", "nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes", 100, "cecc1b2bd6e2ab7cbfe548b708418d965b4261ba"],
 
+  ["cpu_dummy_writes", "nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes", 330, "ed2f4932dc6eea4fa25255dee54665347f72e6f8"],
+  ["cpu_dummy_writes", "nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes", 240, "dc3b270c0af73e8209935649b3c7136de43e269e"],
+
   ["cpu_exec_space", "nes-test-roms/cpu_exec_space/test_cpu_exec_space_apu.nes", 350, "8112fd7be0d577e93e13836cab478ec210984208"],
   ["cpu_exec_space", "nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes", 75, "3807cc1bedb50bf6ec97a21f5de7500ea2e283df"],
 
