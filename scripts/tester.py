@@ -181,7 +181,12 @@ def main(args):
   if not os.path.exists(TEST_RESULT_DIR):
     os.makedirs(TEST_RESULT_DIR)
 
-  tests = [Test(*test) for test in json.load(open(TEST_JSON))]
+  tests = []
+  for suite_name, suite in json.load(open(TEST_JSON)).items():
+    dir_ = suite['dir']
+    for test in suite['tests']:
+      tests.append(Test(suite_name, os.path.join(dir_, test[0]), test[1], test[2]))
+
   tests = [test for test in tests if pattern_re.match(test.rom)]
 
   start_time = time.time()

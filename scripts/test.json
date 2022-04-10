@@ -1,151 +1,277 @@
-[
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/1-len_ctr.nes", 20, "24c17ad2526116a075fe3379d1b7227b45c3c54f"],
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/2-len_table.nes", 15, "cb7de3f978d012e34ce34b6b5d9b720aeb6e373f"],
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/3-irq_flag.nes", 20, "15aa65317def3dc7a811b0aecdd25f2637ac475b"],
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/4-jitter.nes", 20, "7eb8e34b2935ec153915a2d6e7db39a3a3cfd9f8"],
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/5-len_timing.nes", 150, "4d8cee6a56adee45340f76faa466b72d1ea3ba5c"],
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/6-irq_flag_timing.nes", 20, "3187bcdaf6136d5d97f03dece9d35f34cf751025"],
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/7-dmc_basics.nes", 30, "b904f09e017b5bd9f97b832cd8b7477225df0f05"],
-  ["apu_test", "nes-test-roms/apu_test/rom_singles/8-dmc_rates.nes", 30, "05b8ece3a9937c16fac7bd62ebd16c5390f36e94"],
+{
+  "apu_test": {
+    "dir": "nes-test-roms/apu_test/rom_singles/",
+    "tests": [
+      ["1-len_ctr.nes", 20, "24c17ad2526116a075fe3379d1b7227b45c3c54f"],
+      ["2-len_table.nes", 15, "cb7de3f978d012e34ce34b6b5d9b720aeb6e373f"],
+      ["3-irq_flag.nes", 20, "15aa65317def3dc7a811b0aecdd25f2637ac475b"],
+      ["4-jitter.nes", 20, "7eb8e34b2935ec153915a2d6e7db39a3a3cfd9f8"],
+      ["5-len_timing.nes", 150, "4d8cee6a56adee45340f76faa466b72d1ea3ba5c"],
+      ["6-irq_flag_timing.nes", 20, "3187bcdaf6136d5d97f03dece9d35f34cf751025"],
+      ["7-dmc_basics.nes", 30, "b904f09e017b5bd9f97b832cd8b7477225df0f05"],
+      ["8-dmc_rates.nes", 30, "05b8ece3a9937c16fac7bd62ebd16c5390f36e94"]
+    ]
+  },
 
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/01.len_ctr.nes", 30, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/02.len_table.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/03.irq_flag.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/04.clock_jitter.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/05.len_timing_mode0.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/06.len_timing_mode1.nes", 30, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/07.irq_flag_timing.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/08.irq_timing.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/09.reset_timing.nes", 20, "!4f5dd29543bff31ef2bf5e4d9dceb5c8bb2ba643"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/10.len_halt_timing.nes", 20, "!3bf0b177fce425b9a9714bceee3e40c564449755"],
-  ["blargg_apu", "nes-test-roms/blargg_apu_2005.07.30/11.len_reload_timing.nes", 20, "!4f5dd29543bff31ef2bf5e4d9dceb5c8bb2ba643"],
+  "blargg_apu": {
+    "dir": "nes-test-roms/blargg_apu_2005.07.30/",
+    "tests": [
+      ["01.len_ctr.nes", 30, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["02.len_table.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["03.irq_flag.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["04.clock_jitter.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["05.len_timing_mode0.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["06.len_timing_mode1.nes", 30, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["07.irq_flag_timing.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["08.irq_timing.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["09.reset_timing.nes", 20, "!4f5dd29543bff31ef2bf5e4d9dceb5c8bb2ba643"],
+      ["10.len_halt_timing.nes", 20, "!3bf0b177fce425b9a9714bceee3e40c564449755"],
+      ["11.len_reload_timing.nes", 20, "!4f5dd29543bff31ef2bf5e4d9dceb5c8bb2ba643"]
+    ]
+  },
 
-  ["blargg_nes_cpu_test5", "nes-test-roms/blargg_nes_cpu_test5/cpu.nes", 1000, "27a7c7f4ddaae96960aeb8dc2b95d2b0c9357095"],
-  ["blargg_nes_cpu_test5", "nes-test-roms/blargg_nes_cpu_test5/official.nes", 650, "27a7c7f4ddaae96960aeb8dc2b95d2b0c9357095"],
+  "blargg_nes_cpu_test5": {
+    "dir": "nes-test-roms/blargg_nes_cpu_test5/",
+    "tests": [
+      ["cpu.nes", 1000, "27a7c7f4ddaae96960aeb8dc2b95d2b0c9357095"],
+      ["official.nes", 650, "27a7c7f4ddaae96960aeb8dc2b95d2b0c9357095"]
+    ]
+  },
 
-  ["blargg_ppu_tests", "nes-test-roms/blargg_ppu_tests_2005.09.15b/palette_ram.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_ppu_tests", "nes-test-roms/blargg_ppu_tests_2005.09.15b/power_up_palette.nes", 20, "!b58f82c53a54571c719febc2ba10b2c235697ba6"],
-  ["blargg_ppu_tests", "nes-test-roms/blargg_ppu_tests_2005.09.15b/sprite_ram.nes", 20, "!2996cba7e3136a4100664c36bb70e6d6758ae77f"],
-  ["blargg_ppu_tests", "nes-test-roms/blargg_ppu_tests_2005.09.15b/vbl_clear_time.nes", 40, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
-  ["blargg_ppu_tests", "nes-test-roms/blargg_ppu_tests_2005.09.15b/vram_access.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+  "blargg_ppu_tests": {
+    "dir": "nes-test-roms/blargg_ppu_tests_2005.09.15b/",
+    "tests": [
+      ["palette_ram.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["power_up_palette.nes", 20, "!b58f82c53a54571c719febc2ba10b2c235697ba6"],
+      ["sprite_ram.nes", 20, "!2996cba7e3136a4100664c36bb70e6d6758ae77f"],
+      ["vbl_clear_time.nes", 40, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
+      ["vram_access.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"]
+    ]
+  },
 
-  ["branch_timing_tests", "nes-test-roms/branch_timing_tests/1.Branch_Basics.nes", 15, "5fc146b530ac463a1889e3bde071f1542b647344"],
-  ["branch_timing_tests", "nes-test-roms/branch_timing_tests/2.Backward_Branch.nes", 15, "6f37715c211de29b54f8ac427ba7c265820f7261"],
-  ["branch_timing_tests", "nes-test-roms/branch_timing_tests/3.Forward_Branch.nes", 15, "ba50649aefeae2c749b3c3bd9fa592c01fbc4575"],
+  "branch_timing_tests": {
+    "dir": "nes-test-roms/branch_timing_tests/",
+    "tests": [
+      ["1.Branch_Basics.nes", 15, "5fc146b530ac463a1889e3bde071f1542b647344"],
+      ["2.Backward_Branch.nes", 15, "6f37715c211de29b54f8ac427ba7c265820f7261"],
+      ["3.Forward_Branch.nes", 15, "ba50649aefeae2c749b3c3bd9fa592c01fbc4575"]
+    ]
+  },
 
-  ["cpu_dummy_reads", "nes-test-roms/cpu_dummy_reads/cpu_dummy_reads.nes", 100, "cecc1b2bd6e2ab7cbfe548b708418d965b4261ba"],
+  "cpu_dummy_reads": {
+    "dir": "nes-test-roms/cpu_dummy_reads/",
+    "tests": [
+      ["cpu_dummy_reads.nes", 100, "cecc1b2bd6e2ab7cbfe548b708418d965b4261ba"]
+    ]
+  },
 
-  ["cpu_dummy_writes", "nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_oam.nes", 330, "ed2f4932dc6eea4fa25255dee54665347f72e6f8"],
-  ["cpu_dummy_writes", "nes-test-roms/cpu_dummy_writes/cpu_dummy_writes_ppumem.nes", 240, "dc3b270c0af73e8209935649b3c7136de43e269e"],
+  "cpu_dummy_writes": {
+    "dir": "nes-test-roms/cpu_dummy_writes/",
+    "tests": [
+      ["cpu_dummy_writes_oam.nes", 330, "ed2f4932dc6eea4fa25255dee54665347f72e6f8"],
+      ["cpu_dummy_writes_ppumem.nes", 240, "dc3b270c0af73e8209935649b3c7136de43e269e"]
+    ]
+  },
 
-  ["cpu_exec_space", "nes-test-roms/cpu_exec_space/test_cpu_exec_space_apu.nes", 350, "8112fd7be0d577e93e13836cab478ec210984208"],
-  ["cpu_exec_space", "nes-test-roms/cpu_exec_space/test_cpu_exec_space_ppuio.nes", 75, "3807cc1bedb50bf6ec97a21f5de7500ea2e283df"],
+  "cpu_exec_space": {
+    "dir": "nes-test-roms/cpu_exec_space/",
+    "tests": [
+      ["test_cpu_exec_space_apu.nes", 350, "8112fd7be0d577e93e13836cab478ec210984208"],
+      ["test_cpu_exec_space_ppuio.nes", 75, "3807cc1bedb50bf6ec97a21f5de7500ea2e283df"]
+    ]
+  },
 
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/1-cli_latency.nes", 20, "ccf4f6485e62031fa1e256895b078bfeef867773"],
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/2-nmi_and_brk.nes", 150, "a2f769b36ee21514eaac32fa050f64bacfb9874d"],
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/3-nmi_and_irq.nes", 200, "674a7993134e75720cc1a7fe20a7fa023e029b0b"],
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/4-irq_and_dma.nes", 100, "fa55ad54502647afa042f11a509f60dafb46fd35"],
-  ["cpu_interrupts_v2", "nes-test-roms/cpu_interrupts_v2/rom_singles/5-branch_delays_irq.nes", 150, "!762e3f01796e40730ac649c9e8d972482e1e1b9e"],
+  "cpu_interrupts_v2": {
+    "dir": "nes-test-roms/cpu_interrupts_v2/rom_singles/",
+    "tests": [
+      ["1-cli_latency.nes", 20, "ccf4f6485e62031fa1e256895b078bfeef867773"],
+      ["2-nmi_and_brk.nes", 150, "a2f769b36ee21514eaac32fa050f64bacfb9874d"],
+      ["3-nmi_and_irq.nes", 200, "674a7993134e75720cc1a7fe20a7fa023e029b0b"],
+      ["4-irq_and_dma.nes", 100, "fa55ad54502647afa042f11a509f60dafb46fd35"],
+      ["5-branch_delays_irq.nes", 150, "!762e3f01796e40730ac649c9e8d972482e1e1b9e"]
+    ]
+  },
 
-  ["cpu_timing_test6", "nes-test-roms/cpu_timing_test6/cpu_timing_test.nes", 700, "a8362d79c963e5aa0c0142f6bd04726043e3f60a"],
+  "cpu_timing_test6": {
+    "dir": "nes-test-roms/cpu_timing_test6/",
+    "tests": [
+      ["cpu_timing_test.nes", 700, "a8362d79c963e5aa0c0142f6bd04726043e3f60a"]
+    ]
+  },
 
-  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_2007_read.nes", 300, "!2abc839dff20fb135467340c36b0d782faade379"],
-  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_2007_write.nes", 100, "!a6b1aa92ba2598f32bc1f5f2858b7a8e2dd91750"],
-  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/dma_4016_read.nes", 300, "!59749e57702bdcefa183a25906d7d262960c33ef"],
-  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/double_2007_read.nes", 300, "!4eb5daa585b4c3ece943f5611cff412c4a0e0410"],
-  ["dmc_dma_during_read4", "nes-test-roms/dmc_dma_during_read4/read_write_2007.nes", 100, "91b25b4a2caa7a6b3aa9b83a670a9ea495d9f9a4"],
+  "dmc_dma_during_read4": {
+    "dir": "nes-test-roms/dmc_dma_during_read4/",
+    "tests": [
+      ["dma_2007_read.nes", 300, "!2abc839dff20fb135467340c36b0d782faade379"],
+      ["dma_2007_write.nes", 100, "!a6b1aa92ba2598f32bc1f5f2858b7a8e2dd91750"],
+      ["dma_4016_read.nes", 300, "!59749e57702bdcefa183a25906d7d262960c33ef"],
+      ["double_2007_read.nes", 300, "!4eb5daa585b4c3ece943f5611cff412c4a0e0410"],
+      ["read_write_2007.nes", 100, "91b25b4a2caa7a6b3aa9b83a670a9ea495d9f9a4"]
+    ]
+  },
 
-  ["dmc_tests", "nes-test-roms/dmc_tests/buffer_retained.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
-  ["dmc_tests", "nes-test-roms/dmc_tests/latency.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
-  ["dmc_tests", "nes-test-roms/dmc_tests/status_irq.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
-  ["dmc_tests", "nes-test-roms/dmc_tests/status.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
+  "dmc_tests": {
+    "dir": "nes-test-roms/dmc_tests/",
+    "tests": [
+      ["buffer_retained.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
+      ["latency.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
+      ["status_irq.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
+      ["status.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"]
+    ]
+  },
 
-  ["instr_misc", "nes-test-roms/instr_misc/rom_singles/01-abs_x_wrap.nes", 100, "9fa1879d91eb52cda2ef5801076452f3f32ee83a"],
-  ["instr_misc", "nes-test-roms/instr_misc/rom_singles/02-branch_wrap.nes", 100, "21551b5a06b3d252c0395618ea42b5889b6c8b34"],
-  ["instr_misc", "nes-test-roms/instr_misc/rom_singles/03-dummy_reads.nes", 100, "98a4ffc1970627a3c889b096305066f1d5e92f1c"],
-  ["instr_misc", "nes-test-roms/instr_misc/rom_singles/04-dummy_reads_apu.nes", 200, "a494d08a9119a0f19eccf8f5c382dd0b90d66c19"],
+  "instr_misc": {
+    "dir": "nes-test-roms/instr_misc/rom_singles/",
+    "tests": [
+      ["01-abs_x_wrap.nes", 100, "9fa1879d91eb52cda2ef5801076452f3f32ee83a"],
+      ["02-branch_wrap.nes", 100, "21551b5a06b3d252c0395618ea42b5889b6c8b34"],
+      ["03-dummy_reads.nes", 100, "98a4ffc1970627a3c889b096305066f1d5e92f1c"],
+      ["04-dummy_reads_apu.nes", 200, "a494d08a9119a0f19eccf8f5c382dd0b90d66c19"]
+    ]
+  },
 
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/01-implied.nes", 100, "8966af374dc4611514e6bb7f114917a6d75ec60a"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/02-immediate.nes", 100, "baaa28776925a6b7456d1df0eef15babf4522a86"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/03-zero_page.nes", 200, "fac09c072d149668afc5bbcec945a0c7180a697d"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/04-zp_xy.nes", 300, "fbd9ea8b0638c7c439b9db4b674498a3ee9414e6"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/05-absolute.nes", 200, "eb163082114af45642dc28cde0f50409debc427b"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/06-abs_xy.nes", 400, "a474457f6265fc0c8ace378bbc236bb19e5f2b8e"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/07-ind_x.nes", 200, "7604539d5330c6cdacf506cc1a2a6164668cab6c"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/08-ind_y.nes", 200, "2baddaa537ef889c3b74c49813e40891727877a8"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/09-branches.nes", 100, "e0a9b6ed240a12ccc96ce2e1e9f34a683713c60d"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/10-stack.nes", 200, "b92a97652d48903ec6c561f58ed3ad7d5be590a6"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/11-jmp_jsr.nes", 100, "b1cf9035fffd834989f6e7efd6490a1fc87a2e13"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/12-rts.nes", 100, "b3139c5c9627d25dd0fb7a52f56d439475c8053d"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/13-rti.nes", 100, "11e51a0bb33a13f50d2e1b0f7d02a9dc74df00aa"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/14-brk.nes", 100, "0e06712223c1741ca3810cea3a3dfda62ce47f0a"],
-  ["instr_test-v3", "nes-test-roms/instr_test-v3/rom_singles/15-special.nes", 100, "340c760b15445a4e40ae64609785133ee1df0ab5"],
+  "instr_test-v3": {
+    "dir": "nes-test-roms/instr_test-v3/rom_singles/",
+    "tests": [
+      ["01-implied.nes", 100, "8966af374dc4611514e6bb7f114917a6d75ec60a"],
+      ["02-immediate.nes", 100, "baaa28776925a6b7456d1df0eef15babf4522a86"],
+      ["03-zero_page.nes", 200, "fac09c072d149668afc5bbcec945a0c7180a697d"],
+      ["04-zp_xy.nes", 300, "fbd9ea8b0638c7c439b9db4b674498a3ee9414e6"],
+      ["05-absolute.nes", 200, "eb163082114af45642dc28cde0f50409debc427b"],
+      ["06-abs_xy.nes", 400, "a474457f6265fc0c8ace378bbc236bb19e5f2b8e"],
+      ["07-ind_x.nes", 200, "7604539d5330c6cdacf506cc1a2a6164668cab6c"],
+      ["08-ind_y.nes", 200, "2baddaa537ef889c3b74c49813e40891727877a8"],
+      ["09-branches.nes", 100, "e0a9b6ed240a12ccc96ce2e1e9f34a683713c60d"],
+      ["10-stack.nes", 200, "b92a97652d48903ec6c561f58ed3ad7d5be590a6"],
+      ["11-jmp_jsr.nes", 100, "b1cf9035fffd834989f6e7efd6490a1fc87a2e13"],
+      ["12-rts.nes", 100, "b3139c5c9627d25dd0fb7a52f56d439475c8053d"],
+      ["13-rti.nes", 100, "11e51a0bb33a13f50d2e1b0f7d02a9dc74df00aa"],
+      ["14-brk.nes", 100, "0e06712223c1741ca3810cea3a3dfda62ce47f0a"],
+      ["15-special.nes", 100, "340c760b15445a4e40ae64609785133ee1df0ab5"]
+    ]
+  },
 
-  ["instr_timing", "nes-test-roms/instr_timing/rom_singles/1-instr_timing.nes", 1200, "3d592bfd810a456a80108504b862305ed89fc054"],
-  ["instr_timing", "nes-test-roms/instr_timing/rom_singles/2-branch_timing.nes", 200, "1125bc485c10632060cb64c03744a71bac602dda"],
+  "instr_timing": {
+    "dir": "nes-test-roms/instr_timing/rom_singles/",
+    "tests": [
+      ["1-instr_timing.nes", 1200, "3d592bfd810a456a80108504b862305ed89fc054"],
+      ["2-branch_timing.nes", 200, "1125bc485c10632060cb64c03744a71bac602dda"]
+    ]
+  },
 
-  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/1-clocking.nes", 23, "cf1677f942b5361ed051fb31b3deca43028af9d7"],
-  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/2-details.nes", 50, "33845b458e0a20d6fee382a01a29b152afe13982"],
-  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/3-A12_clocking.nes", 24, "9311c847f820aaf14537edc2e727667aa460b1ef"],
-  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/4-scanline_timing.nes", 220, "!e96a4890d4af0e53e6a2b4f955c61347e4421672"],
-  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/5-MMC3.nes", 24, "2e370415422a739e6decb306cf116f60a418a1e2"],
-  ["mmc3_test", "nes-test-roms/mmc3_test_2/rom_singles/6-MMC3_alt.nes", 50, "!4cb48805559af36cb6b8c3486e2bc52278f9ff75"],
+  "mmc3_test": {
+    "dir": "nes-test-roms/mmc3_test_2/rom_singles/",
+    "tests": [
+      ["1-clocking.nes", 23, "cf1677f942b5361ed051fb31b3deca43028af9d7"],
+      ["2-details.nes", 50, "33845b458e0a20d6fee382a01a29b152afe13982"],
+      ["3-A12_clocking.nes", 24, "9311c847f820aaf14537edc2e727667aa460b1ef"],
+      ["4-scanline_timing.nes", 220, "!e96a4890d4af0e53e6a2b4f955c61347e4421672"],
+      ["5-MMC3.nes", 24, "2e370415422a739e6decb306cf116f60a418a1e2"],
+      ["6-MMC3_alt.nes", 50, "!4cb48805559af36cb6b8c3486e2bc52278f9ff75"]
+    ]
+  },
 
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/01-implied.nes", 100, "8966af374dc4611514e6bb7f114917a6d75ec60a"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/02-immediate.nes", 100, "baaa28776925a6b7456d1df0eef15babf4522a86"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/03-zero_page.nes", 200, "fac09c072d149668afc5bbcec945a0c7180a697d"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/04-zp_xy.nes", 300, "fbd9ea8b0638c7c439b9db4b674498a3ee9414e6"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/05-absolute.nes", 200, "eb163082114af45642dc28cde0f50409debc427b"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/06-abs_xy.nes", 300, "a474457f6265fc0c8ace378bbc236bb19e5f2b8e"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/07-ind_x.nes", 200, "7604539d5330c6cdacf506cc1a2a6164668cab6c"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/08-ind_y.nes", 200, "2baddaa537ef889c3b74c49813e40891727877a8"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/09-branches.nes", 100, "e0a9b6ed240a12ccc96ce2e1e9f34a683713c60d"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/10-stack.nes", 200, "b92a97652d48903ec6c561f58ed3ad7d5be590a6"],
-  ["nes_instr_test", "nes-test-roms/nes_instr_test/rom_singles/11-special.nes", 100, "b1f60effa234569204aff901917e05d90842eb4d"],
+  "nes_instr_test": {
+    "dir": "nes-test-roms/nes_instr_test/rom_singles/",
+    "tests": [
+      ["01-implied.nes", 100, "8966af374dc4611514e6bb7f114917a6d75ec60a"],
+      ["02-immediate.nes", 100, "baaa28776925a6b7456d1df0eef15babf4522a86"],
+      ["03-zero_page.nes", 200, "fac09c072d149668afc5bbcec945a0c7180a697d"],
+      ["04-zp_xy.nes", 300, "fbd9ea8b0638c7c439b9db4b674498a3ee9414e6"],
+      ["05-absolute.nes", 200, "eb163082114af45642dc28cde0f50409debc427b"],
+      ["06-abs_xy.nes", 300, "a474457f6265fc0c8ace378bbc236bb19e5f2b8e"],
+      ["07-ind_x.nes", 200, "7604539d5330c6cdacf506cc1a2a6164668cab6c"],
+      ["08-ind_y.nes", 200, "2baddaa537ef889c3b74c49813e40891727877a8"],
+      ["09-branches.nes", 100, "e0a9b6ed240a12ccc96ce2e1e9f34a683713c60d"],
+      ["10-stack.nes", 200, "b92a97652d48903ec6c561f58ed3ad7d5be590a6"],
+      ["11-special.nes", 100, "b1f60effa234569204aff901917e05d90842eb4d"]
+    ]
+  },
 
-  ["oam_read", "nes-test-roms/oam_read/oam_read.nes", 100, "82f1728b3325039e618aaf60ba67ee222ed074c1"],
+  "oam_read": {
+    "dir": "nes-test-roms/oam_read/",
+    "tests": [
+      ["oam_read.nes", 100, "82f1728b3325039e618aaf60ba67ee222ed074c1"]
+    ]
+  },
 
-  ["oam_stress", "nes-test-roms/oam_stress/oam_stress.nes", 100, "!1085ebedec06b657a68dd9d121e958759c08c91e"],
+  "oam_stress": {
+    "dir": "nes-test-roms/oam_stress/",
+    "tests": [
+      ["oam_stress.nes", 100, "!1085ebedec06b657a68dd9d121e958759c08c91e"]
+    ]
+  },
 
-  ["ppu_open_bus", "nes-test-roms/ppu_open_bus/ppu_open_bus.nes", 100, "!e3e2185f20b4b7ded2e25dc9c70f25d1a302e2c5"],
+  "ppu_open_bus": {
+    "dir": "nes-test-roms/ppu_open_bus/",
+    "tests": [
+      ["ppu_open_bus.nes", 100, "!e3e2185f20b4b7ded2e25dc9c70f25d1a302e2c5"]
+    ]
+  },
 
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/01-vbl_basics.nes", 200, "a7b726a26b9f9b03b7a5ab11e12a0ad2ce2e986b"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/02-vbl_set_time.nes", 200, "c06c84c1a5b54970fa0cef892684182908b5bbb8"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/03-vbl_clear_time.nes", 200, "e921a68d0cbc2cd9a2ca3f3e568e0e8ca61d8492"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/04-nmi_control.nes", 100, "359b8cc399d9d6e80a2d0671be00e122fd7c881a"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/05-nmi_timing.nes", 300, "1b77306f92ec1f9f38e120c7c9f6983694f27077"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/06-suppression.nes", 200, "59749e57702bdcefa183a25906d7d262960c33ef"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/07-nmi_on_timing.nes", 200, "fa297771d4ba5eb10f04d43119cc216fb2cd3c21"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/08-nmi_off_timing.nes", 300, "1006b1d0bbaffb32a3238d8bf1b8529770c280e4"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/09-even_odd_frames.nes", 100, "5a0d80b027a66c0a443cafa2ec7c04a180c725ff"],
-  ["ppu_vbl_nmi", "nes-test-roms/ppu_vbl_nmi/rom_singles/10-even_odd_timing.nes", 100, "!a2f0f2ac7f8aad414550858ca55cf911ddb7ddda"],
+  "ppu_vbl_nmi": {
+    "dir": "nes-test-roms/ppu_vbl_nmi/rom_singles/",
+    "tests": [
+      ["01-vbl_basics.nes", 200, "a7b726a26b9f9b03b7a5ab11e12a0ad2ce2e986b"],
+      ["02-vbl_set_time.nes", 200, "c06c84c1a5b54970fa0cef892684182908b5bbb8"],
+      ["03-vbl_clear_time.nes", 200, "e921a68d0cbc2cd9a2ca3f3e568e0e8ca61d8492"],
+      ["04-nmi_control.nes", 100, "359b8cc399d9d6e80a2d0671be00e122fd7c881a"],
+      ["05-nmi_timing.nes", 300, "1b77306f92ec1f9f38e120c7c9f6983694f27077"],
+      ["06-suppression.nes", 200, "59749e57702bdcefa183a25906d7d262960c33ef"],
+      ["07-nmi_on_timing.nes", 200, "fa297771d4ba5eb10f04d43119cc216fb2cd3c21"],
+      ["08-nmi_off_timing.nes", 300, "1006b1d0bbaffb32a3238d8bf1b8529770c280e4"],
+      ["09-even_odd_frames.nes", 100, "5a0d80b027a66c0a443cafa2ec7c04a180c725ff"],
+      ["10-even_odd_timing.nes", 100, "!a2f0f2ac7f8aad414550858ca55cf911ddb7ddda"]
+    ]
+  },
 
-  ["sprdma_and_dmc_dma", "nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma_512.nes", 150, "!7deeacc8709d63d3d4e88b8f50e67cb27a324464"],
-  ["sprdma_and_dmc_dma", "nes-test-roms/sprdma_and_dmc_dma/sprdma_and_dmc_dma.nes", 150, "!ecb0aba8fd960f83ff4d2a7e86522525d06e903b"],
+  "sprdma_and_dmc_dma": {
+    "dir": "nes-test-roms/sprdma_and_dmc_dma/",
+    "tests": [
+      ["sprdma_and_dmc_dma_512.nes", 150, "!7deeacc8709d63d3d4e88b8f50e67cb27a324464"],
+      ["sprdma_and_dmc_dma.nes", 150, "!ecb0aba8fd960f83ff4d2a7e86522525d06e903b"]
+    ]
+  },
 
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/01.basics.nes", 50, "6f8fed6686a8ad662db5a81c1906b9627e3013ee"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/02.alignment.nes", 50, "553e94f84bfb4e751393d29a66f8fcf34b777b52"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/03.corners.nes", 20, "c79df868394c3b10a5de5b9017646b82e60ef3d8"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/04.flip.nes", 20, "94f20fcd9d27743964738e9f8413dd4b326b6c80"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/05.left_clip.nes", 50, "5d6ce495c18619f4c94d5cf2b5005fc6b7dd0aaf"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/06.right_edge.nes", 50, "6d09c825b35b45cdae8d3365ebcda1ee696d073b"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/07.screen_bottom.nes", 50, "a12ceb4042c6676288253accb9601707f5846940"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/08.double_height.nes", 20, "63a9bb4c3d7c53cc7feaafba0a388e0b15373082"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/09.timing_basics.nes", 100, "5a29023afe464c6cd66dc4bad1c832e82d46f2df"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/10.timing_order.nes", 100, "5377031883e4be2c64d1165cba994e9d7f39f121"],
-  ["sprite_hit_tests", "nes-test-roms/sprite_hit_tests_2005.10.05/11.edge_timing.nes", 50, "443fd271bb1f43c9f257ba8c03daf25b72238f55"],
+  "sprite_hit_tests": {
+    "dir": "nes-test-roms/sprite_hit_tests_2005.10.05/",
+    "tests": [
+      ["01.basics.nes", 50, "6f8fed6686a8ad662db5a81c1906b9627e3013ee"],
+      ["02.alignment.nes", 50, "553e94f84bfb4e751393d29a66f8fcf34b777b52"],
+      ["03.corners.nes", 20, "c79df868394c3b10a5de5b9017646b82e60ef3d8"],
+      ["04.flip.nes", 20, "94f20fcd9d27743964738e9f8413dd4b326b6c80"],
+      ["05.left_clip.nes", 50, "5d6ce495c18619f4c94d5cf2b5005fc6b7dd0aaf"],
+      ["06.right_edge.nes", 50, "6d09c825b35b45cdae8d3365ebcda1ee696d073b"],
+      ["07.screen_bottom.nes", 50, "a12ceb4042c6676288253accb9601707f5846940"],
+      ["08.double_height.nes", 20, "63a9bb4c3d7c53cc7feaafba0a388e0b15373082"],
+      ["09.timing_basics.nes", 100, "5a29023afe464c6cd66dc4bad1c832e82d46f2df"],
+      ["10.timing_order.nes", 100, "5377031883e4be2c64d1165cba994e9d7f39f121"],
+      ["11.edge_timing.nes", 50, "443fd271bb1f43c9f257ba8c03daf25b72238f55"]
+    ]
+  },
 
-  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/1.Basics.nes", 100, "c7d687553be621b31b7fe6adcf9ceb9e96a3acbe"],
-  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/2.Details.nes", 100, "!c7a7b4205e8ff9e51a6412194f7a33682c59c9dc"],
-  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/3.Timing.nes", 100, "!12c89e67d2e227284e3381bfb3f5145175b41b5d"],
-  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/4.Obscure.nes", 100, "!a7ca2a50e519c3acef9f216339224e1b38886bbe"],
-  ["sprite_overflow_tests", "nes-test-roms/sprite_overflow_tests/5.Emulator.nes", 100, "0c0519016f27fb72caea6d66167ceda64b7f5440"],
+  "sprite_overflow_tests": {
+    "dir": "nes-test-roms/sprite_overflow_tests/",
+    "tests": [
+      ["1.Basics.nes", 100, "c7d687553be621b31b7fe6adcf9ceb9e96a3acbe"],
+      ["2.Details.nes", 100, "!c7a7b4205e8ff9e51a6412194f7a33682c59c9dc"],
+      ["3.Timing.nes", 100, "!12c89e67d2e227284e3381bfb3f5145175b41b5d"],
+      ["4.Obscure.nes", 100, "!a7ca2a50e519c3acef9f216339224e1b38886bbe"],
+      ["5.Emulator.nes", 100, "0c0519016f27fb72caea6d66167ceda64b7f5440"]
+    ]
+  },
 
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/1.frame_basics.nes", 200, "2e8c7fcd5f2eb93b915a463306e6fbd9ff6fa86c"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/2.vbl_timing.nes", 200, "42c4297e3856d622462dec04c54fdbd8d4d9e419"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/3.even_odd_frames.nes", 100, "e4ea5293660110d35f7e35bc6adf96036d0b7f71"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/4.vbl_clear_timing.nes", 200, "acfbacf96819c0344574f1d42e130eee84203b2c"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/5.nmi_suppression.nes", 200, "a4a6d75f44990a2c55e73b79d707278b1a4e908b"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/6.nmi_disable.nes", 300, "7de6452aa26aee3f54ac1d73b7438c690e29eb16"],
-  ["vbl_nmi_timing", "nes-test-roms/vbl_nmi_timing/7.nmi_timing.nes", 150, "1fbbf690e5d61f76227a7d49779178dd08673ccf"]
-]
+  "vbl_nmi_timing": {
+    "dir": "nes-test-roms/vbl_nmi_timing/",
+    "tests": [
+      ["1.frame_basics.nes", 200, "2e8c7fcd5f2eb93b915a463306e6fbd9ff6fa86c"],
+      ["2.vbl_timing.nes", 200, "42c4297e3856d622462dec04c54fdbd8d4d9e419"],
+      ["3.even_odd_frames.nes", 100, "e4ea5293660110d35f7e35bc6adf96036d0b7f71"],
+      ["4.vbl_clear_timing.nes", 200, "acfbacf96819c0344574f1d42e130eee84203b2c"],
+      ["5.nmi_suppression.nes", 200, "a4a6d75f44990a2c55e73b79d707278b1a4e908b"],
+      ["6.nmi_disable.nes", 300, "7de6452aa26aee3f54ac1d73b7438c690e29eb16"],
+      ["7.nmi_timing.nes", 150, "1fbbf690e5d61f76227a7d49779178dd08673ccf"]
+    ]
+  }
+}
+
