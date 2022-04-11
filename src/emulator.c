@@ -145,8 +145,7 @@ static inline u8 nt_read(E *e, u16 addr) {
 
 u8 ppu_read(E *e, u16 addr) {
   u8 result = e->s.p.readbuf, buffer = 0xff;
-  int top4 = addr >> 10;
-  switch (top4 & 15) {
+  switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
       buffer = chr_read(e, addr);
@@ -169,9 +168,8 @@ u8 ppu_read(E *e, u16 addr) {
 }
 
 void ppu_write(E *e, u16 addr, u8 val) {
-  int top4 = addr >> 10;
   do_a12_access(e, addr);
-  switch (top4 & 15) {
+  switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
       e->chr_map_write[(addr >> 10) & 7][addr & 0x3ff] = val;
@@ -198,7 +196,7 @@ void ppu_write(E *e, u16 addr, u8 val) {
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
-      e->nt_map[(top4 - 8) & 3][addr & 0x3ff] = val;
+      e->nt_map[(addr >> 10) & 3][addr & 0x3ff] = val;
       break;
   }
 }
@@ -371,7 +369,6 @@ repeat:
       case 23:
         if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
         e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-        ppu_read(e, p->v);
         DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
               p->ppustatus);
         break;
@@ -1085,12 +1082,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
       break;
     case 1:
       p->ppumask = val;
-      if (val & 0x18) {
-        p->bits_mask = s_ppu_enabled_mask;
-      } else {
-        p->bits_mask = s_ppu_disabled_mask;
-        ppu_read(e, p->v);
-      }
+      p->bits_mask = val & 0x18 ? s_ppu_enabled_mask : s_ppu_disabled_mask;
       break;
     case 3: p->oamaddr = val; break;
     case 4:

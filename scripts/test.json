@@ -102,8 +102,8 @@
   "dmc_dma_during_read4": {
     "dir": "nes-test-roms/dmc_dma_during_read4/",
     "tests": [
-      ["dma_2007_read.nes", 300, "!2abc839dff20fb135467340c36b0d782faade379"],
-      ["dma_2007_write.nes", 100, "!a6b1aa92ba2598f32bc1f5f2858b7a8e2dd91750"],
+      ["dma_2007_read.nes", 300, "!b7180ffe1ce8a87930d236e82c5cc78eac2e36f5"],
+      ["dma_2007_write.nes", 100, "50938a7d78d3f1a944f15498bdb9892223d83435"],
       ["dma_4016_read.nes", 300, "!59749e57702bdcefa183a25906d7d262960c33ef"],
       ["double_2007_read.nes", 300, "!4eb5daa585b4c3ece943f5611cff412c4a0e0410"],
       ["read_write_2007.nes", 100, "91b25b4a2caa7a6b3aa9b83a670a9ea495d9f9a4"]
@@ -130,24 +130,25 @@
     ]
   },
 
-  "instr_test-v3": {
-    "dir": "nes-test-roms/instr_test-v3/rom_singles/",
+  "instr_test-v5": {
+    "dir": "nes-test-roms/instr_test-v5/rom_singles/",
     "tests": [
-      ["01-implied.nes", 100, "8966af374dc4611514e6bb7f114917a6d75ec60a"],
-      ["02-immediate.nes", 100, "baaa28776925a6b7456d1df0eef15babf4522a86"],
-      ["03-zero_page.nes", 200, "fac09c072d149668afc5bbcec945a0c7180a697d"],
-      ["04-zp_xy.nes", 300, "fbd9ea8b0638c7c439b9db4b674498a3ee9414e6"],
-      ["05-absolute.nes", 200, "eb163082114af45642dc28cde0f50409debc427b"],
-      ["06-abs_xy.nes", 400, "a474457f6265fc0c8ace378bbc236bb19e5f2b8e"],
-      ["07-ind_x.nes", 200, "7604539d5330c6cdacf506cc1a2a6164668cab6c"],
-      ["08-ind_y.nes", 200, "2baddaa537ef889c3b74c49813e40891727877a8"],
-      ["09-branches.nes", 100, "e0a9b6ed240a12ccc96ce2e1e9f34a683713c60d"],
-      ["10-stack.nes", 200, "b92a97652d48903ec6c561f58ed3ad7d5be590a6"],
-      ["11-jmp_jsr.nes", 100, "b1cf9035fffd834989f6e7efd6490a1fc87a2e13"],
-      ["12-rts.nes", 100, "b3139c5c9627d25dd0fb7a52f56d439475c8053d"],
-      ["13-rti.nes", 100, "11e51a0bb33a13f50d2e1b0f7d02a9dc74df00aa"],
-      ["14-brk.nes", 100, "0e06712223c1741ca3810cea3a3dfda62ce47f0a"],
-      ["15-special.nes", 100, "340c760b15445a4e40ae64609785133ee1df0ab5"]
+      ["01-basics.nes", 15, "5da5c67d41f261d236caeb4b5f9ca26d4b9895d8"],
+      ["02-implied.nes", 100, "52d66530f99e7f7579520bb26b4443fd713184c0"],
+      ["03-immediate.nes", 100, "aab6d5f59eef01d417025332887a1b4b40ea6ca9"],
+      ["04-zero_page.nes", 200, "e4ed6d19d28fc14a126f5a079b2508f9561472f1"],
+      ["05-zp_xy.nes", 300, "e2ebc2b6a74e9358e9342d8301d66cc075ffca38"],
+      ["06-absolute.nes", 200, "d22430f78b50e3e0a5cab47ea412bb508084534f"],
+      ["07-abs_xy.nes", 400, "9b9a2df3ade654a066306ec6cd0b323ccdc4eef1"],
+      ["08-ind_x.nes", 200, "2945bfa490b7056819b35caa74a1681e4b0dc239"],
+      ["09-ind_y.nes", 200, "19a218b45c2b8ed8181fea2f54e3f3625c00fd16"],
+      ["10-branches.nes", 100, "04f81f2212f3d0271be828d21c65d0a20d6a9117"],
+      ["11-stack.nes", 200, "82e7bce9886416b72c9bcf1a44835c5955f285a3"],
+      ["12-jmp_jsr.nes", 100, "0c8715987b004e92dc69286eb3af4211036449d4"],
+      ["13-rts.nes", 100, "d4bf09b1a38189821a119b64f42f1a561c8b8fff"],
+      ["14-rti.nes", 100, "d16095dc1a396e2a76fc33495abeb7363048ffa9"],
+      ["15-brk.nes", 100, "7397f3a826e779836dbcbc18472f085a04ceb698"],
+      ["16-special.nes", 100, "5d40b4be8321517bc2d51ee440d2d0e472673cc1"]
     ]
   },
 
@@ -206,6 +207,13 @@
     "dir": "nes-test-roms/ppu_open_bus/",
     "tests": [
       ["ppu_open_bus.nes", 100, "!e3e2185f20b4b7ded2e25dc9c70f25d1a302e2c5"]
+    ]
+  },
+
+  "ppu_read_buffer": {
+    "dir": "nes-test-roms/ppu_read_buffer/",
+    "tests": [
+      ["test_ppu_read_buffer.nes", 1250, "f500cd9c0bff959b2572c2fedea2ded1202a275a"]
     ]
   },
 
