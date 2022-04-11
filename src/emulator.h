@@ -102,7 +102,7 @@ typedef struct {
 typedef struct {
   u64 bits;
   u16 step, next_step, dmc_step;
-  u8 PCL, PCH, TL, TH, buslo, bushi, fixhi, veclo, oamhi;
+  u8 PCL, PCH, TL, TH, buslo, bushi, fixhi, veclo, oamlo, oamhi;
   u8 A, X, Y, S;
   u8 ram[0x800], prg_ram[0x2000];
   u8 opcode, open_bus, irq;

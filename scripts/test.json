@@ -43,7 +43,7 @@
     "tests": [
       ["palette_ram.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
       ["power_up_palette.nes", 20, "!b58f82c53a54571c719febc2ba10b2c235697ba6"],
-      ["sprite_ram.nes", 20, "!2996cba7e3136a4100664c36bb70e6d6758ae77f"],
+      ["sprite_ram.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
       ["vbl_clear_time.nes", 40, "fdccb15a7843f89285b34641f1c6e760b9ab159e"],
       ["vram_access.nes", 20, "fdccb15a7843f89285b34641f1c6e760b9ab159e"]
     ]

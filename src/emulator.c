@@ -1538,8 +1538,8 @@ void cpu_step(E *e) {
       case 3: c->bushi = 1; c->buslo = c->S; break;
       case 4: c->bushi = c->TH; c->buslo = c->TL; break;
       case 5: c->bushi = 0xff; c->buslo = c->veclo; c->I = 1; break;
-      case 6: c->bushi = c->oamhi; c->buslo = e->s.p.oamaddr; break;
-      case 7: e->s.p.oam[c->buslo] = c->TL; break;
+      case 6: c->bushi = c->oamhi; c->buslo = 0; c->oamlo = e->s.p.oamaddr; break;
+      case 7: e->s.p.oam[c->oamlo++] = c->TL; break;
       case 8: ++c->buslo; break;
       case 9: c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo)); break;
       case 10: c->TL = 0; break;
