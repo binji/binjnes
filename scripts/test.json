@@ -88,7 +88,7 @@
       ["2-nmi_and_brk.nes", 150, "a2f769b36ee21514eaac32fa050f64bacfb9874d"],
       ["3-nmi_and_irq.nes", 200, "674a7993134e75720cc1a7fe20a7fa023e029b0b"],
       ["4-irq_and_dma.nes", 100, "fa55ad54502647afa042f11a509f60dafb46fd35"],
-      ["5-branch_delays_irq.nes", 150, "!762e3f01796e40730ac649c9e8d972482e1e1b9e"]
+      ["5-branch_delays_irq.nes", 380, "a101ee78fca13d26fa2f97e04dc37daa143882f4"]
     ]
   },
 
@@ -166,7 +166,7 @@
       ["1-clocking.nes", 23, "cf1677f942b5361ed051fb31b3deca43028af9d7"],
       ["2-details.nes", 50, "33845b458e0a20d6fee382a01a29b152afe13982"],
       ["3-A12_clocking.nes", 24, "9311c847f820aaf14537edc2e727667aa460b1ef"],
-      ["4-scanline_timing.nes", 220, "!e96a4890d4af0e53e6a2b4f955c61347e4421672"],
+      ["4-scanline_timing.nes", 221, "!e96a4890d4af0e53e6a2b4f955c61347e4421672"],
       ["5-MMC3.nes", 24, "2e370415422a739e6decb306cf116f60a418a1e2"],
       ["6-MMC3_alt.nes", 50, "!4cb48805559af36cb6b8c3486e2bc52278f9ff75"]
     ]

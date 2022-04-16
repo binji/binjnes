@@ -358,12 +358,7 @@ repeat:
           u64 delta_cy = e->s.cy - e->s.c.set_vec_cy;
           e->s.c.req_nmi = TRUE;
           p->nmi_cy = e->s.cy;
-          if (delta_cy > 0 && delta_cy < 3) { // TODO: weird condition
-            DEBUG("     [%" PRIu64 "] Late override vec to NMI\n", e->s.cy);
-            e->s.c.veclo = 0xfa;
-          } else {
-            DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
-          }
+          DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
         }
         break;
       case 23:
@@ -2091,7 +2086,7 @@ static const u8 s_opcode_bits[] = {
   2, 5, 7, 14, 45, 46,        /* 0xff - ISB nnnn,x*/
 
   0,                          /* decode */
-  1, 61, 63, 64, 110, 111,    /* nmi or irq */
+  1, 1, 61, 63, 64, 110, 111, /* nmi or irq */
 
   /* oam dma */
 #define OAMDMA_RW 113, 114
@@ -2105,7 +2100,7 @@ static const u8 s_opcode_bits[] = {
   117, 117, 117, 118, /* DMC */
 };
 static const u16 s_cpu_decode = 781, s_nmi_or_irq = s_cpu_decode + 1,
-                 s_oamdma = s_nmi_or_irq + 6, s_dmc = s_oamdma + 514;
+                 s_oamdma = s_nmi_or_irq + 7, s_dmc = s_oamdma + 514;
 
 static Result get_cart_info(E *e, const FileData *file_data) {
   const u32 kHeaderSize = 16;
