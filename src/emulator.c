@@ -65,7 +65,7 @@ static void print_info(E *e);
 static void spr_step(E *e);
 
 static const u8 s_spr_consts[], s_opcode_bits[], s_dmc_stall[];
-static const u16 s_cpu_decode, s_nmi_or_irq, s_oamdma, s_dmc;
+static const u16 s_cpu_decode, s_callvec, s_oamdma, s_dmc;
 static const u16 s_ppu_consts[], s_apu_consts[], s_apu_bits[], s_opcode_loc[];
 static const u32 s_ppu_bits[], s_spr_bits[], s_ppu_enabled_mask,
     s_ppu_disabled_mask;
@@ -1515,10 +1515,10 @@ void cpu_step(E *e) {
     switch (bit) {
       case 0:
         if (c->has_nmi) {
-          c->next_step = s_nmi_or_irq;
+          c->next_step = s_callvec;
           DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
         } else if (c->has_irq) {
-          c->next_step = s_nmi_or_irq;
+          c->next_step = s_callvec;
           DEBUG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy);
         }
         break;
@@ -1637,6 +1637,9 @@ void cpu_step(E *e) {
         } else if (c->opcode == 0 || c->irq) {
           c->veclo = 0xfe;
           DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
+        } else {
+          c->veclo = 0xfc;
+          DEBUG("     [%" PRIu64 "] using reset vec\n", e->s.cy);
         }
         c->set_vec_cy = e->s.cy;
         c->has_irq = FALSE;
@@ -2086,7 +2089,7 @@ static const u8 s_opcode_bits[] = {
   2, 5, 7, 14, 45, 46,        /* 0xff - ISB nnnn,x*/
 
   0,                          /* decode */
-  1, 1, 61, 63, 64, 110, 111, /* nmi or irq */
+  1, 1, 61, 63, 64, 110, 111, /* nmi, irq or reset */
 
   /* oam dma */
 #define OAMDMA_RW 113, 114
@@ -2099,8 +2102,8 @@ static const u8 s_opcode_bits[] = {
 
   117, 117, 117, 118, /* DMC */
 };
-static const u16 s_cpu_decode = 781, s_nmi_or_irq = s_cpu_decode + 1,
-                 s_oamdma = s_nmi_or_irq + 7, s_dmc = s_oamdma + 514;
+static const u16 s_cpu_decode = 781, s_callvec = s_cpu_decode + 1,
+                 s_oamdma = s_callvec + 7, s_dmc = s_oamdma + 514;
 
 static Result get_cart_info(E *e, const FileData *file_data) {
   const u32 kHeaderSize = 16;
@@ -2284,12 +2287,11 @@ Result init_emulator(E *e, const EInit *init) {
   S* s = &e->s;
   ZERO_MEMORY(*s);
   CHECK(SUCCESS(init_mapper(e)));
-  s->c.PCL = cpu_read(e, 0xfffc);
-  s->c.PCH = cpu_read(e, 0xfffd);
-  s->c.S = 0xfd;
+  s->c.opcode = 1; // anything but 0, so it isn't interpreted as BRK.
   s->c.bits = 0;
   s->c.I = TRUE;
-  s->c.step = s->c.next_step = s_cpu_decode;
+  s->c.step = s_callvec;
+  s->c.next_step = s_cpu_decode;
   s->p.bits_mask = s_ppu_disabled_mask;
   // Triangle volume is always full; disabled by len counter or linear counter.
   e->s.a.vol[2] = 1;
