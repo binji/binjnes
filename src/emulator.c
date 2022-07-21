@@ -857,7 +857,9 @@ static void apu_half(E *e) {
         ndiff = ~diff + (u16x8){0, 1};
   u16x8 target = a->period + blendv_u16x8(diff, ndiff, a->swneg);
   u16x8 mute = (a->period < 8) | (target >= 0x7ff);
-  u16x8 swdiv0 = a->swdiv == 0, swupdate = swdiv0 & a->swen & ~mute,
+  u16x8 swdiv0 = a->swdiv == 0,
+        swshift0 = a->swshift == 0,
+        swupdate = ~swshift0 & swdiv0 & a->swen & ~mute,
         swdec = ~(swdiv0 | a->swreload);
   a->period = blendv_u16x8(a->period, target, swupdate);
   a->swdiv = blendv_u16x8(a->swperiod, a->swdiv - 1, swdec);
