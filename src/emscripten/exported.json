@@ -13,6 +13,7 @@
 "_get_frame_buffer_size",
 "_joypad_delete",
 "_joypad_new",
+"_malloc",
 "_set_joyp_A",
 "_set_joyp_B",
 "_set_joyp_down",
@@ -20,4 +21,5 @@
 "_set_joyp_right",
 "_set_joyp_select",
 "_set_joyp_start",
-"_set_joyp_up"]
+"_set_joyp_up"
+]
