@@ -51,7 +51,7 @@ static inline Bool any_true_u8x16(u8x16 a) {
 #elif __SSE2__
   return !!_mm_movemask_epi8((__m128i)a);
 #elif __wasm_simd128__
-  return wasm_i8x16_any_true(a);
+  return wasm_v128_any_true(a);
 #else
   u64x2 a64x2 = (u64x2)a;
   return !!(a64x2[0] | a64x2[1]);
