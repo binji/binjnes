@@ -347,7 +347,10 @@ repeat:
         DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0\n", e->s.cy, e->s.p.frame);
         p->fbidx = 0;
         p->frame++;
-        if ((p->oddframe ^= 1) && (p->ppumask & 8)) { goto repeat; }
+        if ((p->oddframe ^= 1) &&
+            !!(p->ppumask & 8) == (e->s.cy - p->bg_changed_cy > 2)) {
+          goto repeat;
+        }
         break;
       case 18: z = --p->cnt1 == 0; break;
       case 19: z = --p->cnt2 == 0; break;
@@ -1078,6 +1081,10 @@ void cpu_write(E *e, u16 addr, u8 val) {
       DEBUG("(%" PRIu64 "): ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy, p->t, val);
       break;
     case 1:
+      DEBUG("(%" PRIu64 "): ppumask: %02x=>%02x\n", e->s.cy, p->ppumask, val);
+      if ((val ^ p->ppumask) & 8) {
+        p->bg_changed_cy = e->s.cy;
+      }
       p->ppumask = val;
       p->bits_mask = val & 0x18 ? s_ppu_enabled_mask : s_ppu_disabled_mask;
       break;
