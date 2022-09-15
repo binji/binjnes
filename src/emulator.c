@@ -88,6 +88,41 @@ static inline u16 reverse_interleave(u8 h, u8 l) {
          (((h * A & B) * C >> 42) & 0xAAAA);
 }
 
+typedef struct {
+  int line;
+  int cy;
+} LYCY;
+
+static LYCY ppu_line_cy(P* p) {
+  u8 s = p->state;
+  u16 c1 = p->cnt1, c2 = p->cnt2;
+  switch (s) {
+    default:
+    case 0:         return (LYCY){0, 0};
+    case 1:         return (LYCY){240 - c1, s};
+    case 2 ... 7:   return (LYCY){240 - c1, s + 256 - 8 * c2};
+    case 8 ... 9:   return (LYCY){240 - c1, s + 248 - 8 * c2};
+    case 10 ... 11: return (LYCY){240 - c1, s + 246};
+    case 12 ... 13: return (LYCY){240 - c1, 321 - c2};
+    case 14 ... 21: return (LYCY){240 - c1, s + 324 - 8 * c2};
+    case 22 ... 24: return (LYCY){240 - c1, s + 316};
+    case 25:        return (LYCY){241 - c1, 0};
+    case 26:        return (LYCY){240, 1};
+    case 27:        return (LYCY){240, 341 - c2};
+    case 28 ... 29: return (LYCY){241, s - 28};
+    case 30:        return (LYCY){241 + (6821 - c2) / 341, (6821 - c2) % 341};
+    case 31:        return (LYCY){-1, 1};
+    case 32 ... 37: return (LYCY){-1, s + 226 - 8 * c2};
+    case 38 ... 39: return (LYCY){-1, s + 218 - 8 * c2};
+    case 40 ... 41: return (LYCY){-1, s + 216};
+    case 42 ... 43: return (LYCY){-1, 280 - c2};
+    case 44 ... 45: return (LYCY){-1, 305 - c2};
+    case 46 ... 47: return (LYCY){-1, 321 - c2};
+    case 48 ... 55: return (LYCY){-1, s + 290 - 8 * c2};
+    case 56 ... 58: return (LYCY){-1, 282 + s};
+  }
+}
+
 static void do_a12_access(E* e, u16 addr) {
   M* m = &e->s.m;
   P* p = &e->s.p;
@@ -98,16 +133,16 @@ static void do_a12_access(E* e, u16 addr) {
     p->a12_low_count += e->s.cy - p->last_vram_access_cy;
   }
   DEBUG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
-        ") (frame = %u) (scany=%u)\n",
-        e->s.cy, addr, low ? "lo" : "hi", p->a12_low_count, p->frame,
-        p->fbidx >> 8);
+        ") (frame = %u) (ly=%u [odd=%u]) (ppuctrl=%02x)\n",
+        e->s.cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame,
+        p->fbidx >> 8, p->oddframe, p->ppuctrl);
 
   if (!low) {
-    if (p->a12_low_count >= 9) {
+    if (p->a12_low_count >= 10) {
       Bool trigger_irq = FALSE;
       if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
         DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) (scany=%u)\n",
-               e->s.cy, p->frame, p->fbidx >> 8);
+              e->s.cy, p->frame, p->fbidx >> 8);
         p->a12_irq_counter = m->mmc3.irq_latch;
         m->mmc3.irq_reload = FALSE;
         if (e->ci.board != BOARD_TXROM_MMC3A && p->a12_irq_counter == 0) {
@@ -115,7 +150,7 @@ static void do_a12_access(E* e, u16 addr) {
         }
       } else {
         DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) (scany=%u)\n",
-               e->s.cy, p->frame, p->fbidx >> 8);
+              e->s.cy, p->frame, p->fbidx >> 8);
         if (--p->a12_irq_counter == 0) {
           trigger_irq = TRUE;
         }
@@ -201,7 +236,7 @@ void ppu_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static inline void read_ntb(E *e) { e->s.p.ntb = nt_read(e, e->s.p.v); }
+static inline void read_ntb(E *e) { e->s.p.ntb = nt_read(e, e->s.p.v & 0xfff); }
 
 static inline void read_atb(E *e) {
   u16 v = e->s.p.v;
@@ -301,10 +336,12 @@ void ppu_step(E *e) {
   Spr* spr = &p->spr;
 repeat:
   if (p->bits_mask == s_ppu_enabled_mask) {
+    LYCY lycy = ppu_line_cy(p);
     DEBUG("cy:%" PRIu64 " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u) "
-          "sprstate:%u (s:%u d:%u)\n",
+          "sprstate:%u (s:%u d:%u) (ly:%d cy:%d)\n",
           e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
-          (p->v >> 5) & 0x1f, (p->v >> 10) & 3, spr->state, spr->s, spr->d);
+          (p->v >> 5) & 0x1f, (p->v >> 10) & 3, spr->state, spr->s, spr->d,
+          lycy.line, lycy.cy);
   }
   Bool z = FALSE;
   u16 cnst = s_ppu_consts[p->state];
@@ -344,11 +381,13 @@ repeat:
       case 15: p->cnt1 = cnst; break;
       case 16: p->cnt2 = cnst; break;
       case 17:
-        DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0\n", e->s.cy, e->s.p.frame);
+        DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", e->s.cy,
+              e->s.p.frame, p->oddframe ^ 1);
         p->fbidx = 0;
         p->frame++;
         if ((p->oddframe ^= 1) &&
-            !!(p->ppumask & 8) == (e->s.cy - p->bg_changed_cy > 2)) {
+            !!(p->ppumask & 8) == (e->s.cy - p->bg_changed_cy >= 2)) {
+          DEBUG("(%" PRIu64 "): skipping cycle\n", e->s.cy);
           goto repeat;
         }
         break;
@@ -386,8 +425,8 @@ static const u32 s_ppu_enabled_mask =  0b11111111111111111101111111;
 static const u32 s_ppu_disabled_mask = 0b11111111111000110010000000;
 static const u16 s_ppu_consts[] = {
     [0] = 240, [1] = 32,    [7] = 10,  [9] = 2,   [11] = 63,
-    [12] = 12, [13] = 2,    [21] = 14, [25] = 1,  [26] = 339,
-    [27] = 27, [29] = 6819, [30] = 30, [31] = 32, [37] = 40,
+    [12] = 12, [13] = 2,    [21] = 14, [25] = 1,  [26] = 340,
+    [27] = 27, [29] = 6818, [30] = 30, [31] = 32, [37] = 40,
     [39] = 32, [41] = 22,   [42] = 42, [43] = 24, [44] = 44,
     [45] = 15, [46] = 46,   [47] = 2,  [55] = 48, [58] = 0,
 };
@@ -425,8 +464,8 @@ static const u32 s_ppu_bits[] = {
   0b00010000000000000000000000,  // 28: set NMI
   0b00100000010000000000000000,  // 29: set vblank,cnt2=6819
   0b00000110000000000000000000,  // 30: --cnt2,jnz #30
-  0b01000000010000000000000001,  // 31: ntb=read(nt(v)),clear flags,cnt2=32
-  0b00000000000000000000000000,  // 32:
+  0b00000000010000000000000001,  // 31: ntb=read(nt(v)),cnt2=32
+  0b01000000000000000000000000,  // 32: clear flags
   0b00000000000000000000000010,  // 33: atb=read(at(v))
   0b00000000000000000000000000,  // 34:
   0b00000000000000000000000100,  // 35: ptbl=read(pt(ntb))
@@ -505,42 +544,50 @@ repeat:;
       case 15: spr_inc(&spr->s, &spr->sovf, 4); break;
       case 16: spr->state = cnst; break;
       case 17: p->ppustatus |= 0x20; break;
-      case 18: spr->t = p->oam2[spr->s++]; break;
-      case 19: spr->y = spr->t; break;
-      case 20: spr->tile = spr->t; break;
-      case 21: spr->at = spr->t; break;
-      case 22: {
-        int idx = (spr->s >> 2) - 1;
+      case 18: read_ntb(e); break;  // Garbage nametable read
+      case 19: read_atb(e); break;  // Garbage attribute read
+      case 20:
+        spr->y = (scany(p) - 1) - p->oam2[spr->s];
+        spr->tile = p->oam2[spr->s + 1];
+        spr->at = p->oam2[spr->s + 2];
         if (spr->s <= spr->d) {
-          u8 y = (scany(p) - 1) - spr->y;
-          if (spr->at & 0x80) { y = ~y; }  // Flip Y.
-          u16 chr = spr_chr_addr(p->ppuctrl, spr->tile, y);
-          u8 ptbl = chr_read(e, chr), ptbh = chr_read(e, chr + 8);
+          if (spr->at & 0x80) { spr->y = ~spr->y; }  // Flip Y.
+          spr->ptbl = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y));
+        } else {
+          // Dummy read for MMC3 IRQ
+          chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0));
+        }
+        break;
+      case 21: {
+        int idx = spr->s >> 2;
+        u8 x = p->oam2[spr->s + 3];
+
+        if (spr->s + 4 <= spr->d) {
+          u8 ptbh = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y) + 8);
           if (!(spr->at & 0x40)) {
-            ptbl = reverse(ptbl);
+            spr->ptbl = reverse(spr->ptbl);
             ptbh = reverse(ptbh);
           }
-          spr->shift[idx] = ptbl;
+          spr->shift[idx] = spr->ptbl;
           spr->shift[idx + 8] = ptbh;
           spr->pal[idx] = ((spr->at & 3) + 4) << 2;
           shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
-          shift_in(&spr->spr0mask, (spr->s == 4 && spr->spr0) ? 0xff : 0);
-          spr->counter[idx] = spr->counter[idx+8] = spr->t;
+          shift_in(&spr->spr0mask, (spr->s == 0 && spr->spr0) ? 0xff : 0);
+          spr->counter[idx] = spr->counter[idx+8] = x;
         } else {
+          // Dummy read for MMC3 IRQ
+          chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0) + 8);
           // empty sprite.
           spr->shift[idx] = spr->shift[idx + 8] = 0;
           spr->pal[idx] = 4 << 2;
           spr->pri >>= 8;
           spr->spr0mask >>= 8;
           spr->counter[idx] = spr->counter[idx+8] = 0xff;
-          // Dummy reads for MMC3 IRQ
-          u16 chr = spr_chr_addr(p->ppuctrl, 0xff, 0);
-          chr_read(e, chr);
-          chr_read(e, chr + 8);
         }
+        spr->s += 4;
         break;
       }
-      case 23: goto repeat;
+      case 22: goto repeat;
       default:
         FATAL("NYI: spr step %d\n", bit);
     }
@@ -552,35 +599,35 @@ static const u8 s_spr_consts[] = {
     [14] = 14, [17] = 17, [25] = 18, [26] = 26,
 };
 static const u32 s_spr_bits[] = {
-  //   2         1         0
-  //321098765432109876543210
-  0b000000000000000000000010,  // 0: t=0xff
-  0b000000000000101001010100,  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
-  0b000000000000000000001001,  // 2: t=oam[s],s++
-  0b100000010110000000000000,  // 3: next if y in range,s+=3,more=T,goto 11
-  0b000000000000000000110100,  // 4: oam2[d]=t,d++,check spr0
-  0b000000000000000000001001,  // 5: t=oam[s],s++
-  0b000000000000000000010100,  // 6: oam2[d]=t,d++
-  0b000000000000000000001001,  // 7: t=oam[s],s++
-  0b000000000000000000010100,  // 8: oam2[d]=t,d++
-  0b000000000000000000001001,  // 9: t=oam[s],s++
-  0b000000000000000000010100,  // 10: oam2[d]=t,d++
-  0b100000000000010100000000,  // 11: more=T,z=sovf,jz 13
-  0b000000000000001010000000,  // 12: z=dovf,jnz 2
-  0b000000000000000000001001,  // 13: t=oam[s],s++
-  0b000000011010000000000000,  // 14: next if y in range,s+=4,goto 14
-  0b000000100000000000000000,  // 15: set overflow bit
-  0b000000000000000000001001,  // 16: t=oam[s],s++
-  0b000000010000000000000000,  // 17: goto 17
-  0b000011000000000000000000,  // 18: t=oam2[s],s++,do y
-  0b000101000000000000000000,  // 19: t=oam2[s],s++,do tile
-  0b001001000000000000000000,  // 20: t=oam2[s],s++,do attr
-  0b010001000000000000000000,  // 21: t=oam2[s],s++,do x
-  0b000000000000000000000000,  // 22:
-  0b000000000000000000000000,  // 23:
-  0b000000000000000000000000,  // 24:
-  0b000000000000001001000000,  // 25: --cnt,jnz 18
-  0b000000010000000000000000,  // 26: goto 26
+  //  2         1         0
+  //21098765432109876543210
+  0b00000000000000000000010,  // 0: t=0xff
+  0b00000000000101001010100,  // 1: oam2[d]=t,d++,--cnt,jnz 0,d=0
+  0b00000000000000000001001,  // 2: t=oam[s],s++
+  0b10000010110000000000000,  // 3: next if y in range,s+=3,more=T,goto 11
+  0b00000000000000000110100,  // 4: oam2[d]=t,d++,check spr0
+  0b00000000000000000001001,  // 5: t=oam[s],s++
+  0b00000000000000000010100,  // 6: oam2[d]=t,d++
+  0b00000000000000000001001,  // 7: t=oam[s],s++
+  0b00000000000000000010100,  // 8: oam2[d]=t,d++
+  0b00000000000000000001001,  // 9: t=oam[s],s++
+  0b00000000000000000010100,  // 10: oam2[d]=t,d++
+  0b10000000000010100000000,  // 11: more=T,z=sovf,jz 13
+  0b00000000000001010000000,  // 12: z=dovf,jnz 2
+  0b00000000000000000001001,  // 13: t=oam[s],s++
+  0b00000011010000000000000,  // 14: next if y in range,s+=4,goto 14
+  0b00000100000000000000000,  // 15: set overflow bit
+  0b00000000000000000001001,  // 16: t=oam[s],s++
+  0b00000010000000000000000,  // 17: goto 17
+  0b00001000000000000000000,  // 18: garbage read_ntb
+  0b00000000000000000000000,  // 19:
+  0b00010000000000000000000,  // 20: garbage read atb
+  0b00000000000000000000000,  // 21:
+  0b00100000000000000000000,  // 22: ptbl=chr_read(0)
+  0b00000000000000000000000,  // 23:
+  0b01000000000000000000000,  // 24: ptbh=chr_read(8)
+  0b00000000000001001000000,  // 25: --cnt,jnz 18
+  0b00000010000000000000000,  // 26: goto 26
 };
 
 // APU stuff ///////////////////////////////////////////////////////////////////
@@ -2493,12 +2540,13 @@ void disasm(E *e, u16 addr) {
 
 void print_info(E *e) {
   C* c = &e->s.c;
+  LYCY lycy = ppu_line_cy(&e->s.p);
   printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
-         "bus:%c %02x%02x  (cy:%08" PRIu64 ")",
+         "bus:%c %02x%02x  (ly:%d cy:%d) (cy:%08" PRIu64 ")",
          c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
          c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_', c->C ? 'C' : '_',
          get_P(e, FALSE), c->S, c->bus_write ? 'W' : 'R', c->bushi, c->buslo,
-         e->s.cy);
+         lycy.line, lycy.cy, e->s.cy);
 }
 
 static const char* s_opcode_mnemonic[256] = {

@@ -114,7 +114,7 @@ typedef struct {
 typedef struct {
   u8x16 counter, shift, pal;
   u64 pri, spr0mask;
-  u8 state, cnt, s, d, y, t, at, tile;
+  u8 state, cnt, s, d, y, t, at, tile, ptbl;
   Bool sovf, spr0;
 } Spr;
 
