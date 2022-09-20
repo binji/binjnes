@@ -1297,6 +1297,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
     if (e->s.m.prg_ram_en && e->s.m.prg_ram_write_en) {
       c->prg_ram[addr & 0x1fff] = val;
     }
+    e->mapper_prg_ram_write(e, addr, val);
     break;
 
   case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15:
@@ -1531,6 +1532,29 @@ void mapper11_write(E *e, u16 addr, u8 val) {
   assert(addr >= 0x8000);
   set_chr8k_map(e, (m->chr_bank[0] = (val >> 4) & (e->ci.chr8k_banks - 1)));
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
+}
+
+void mapper34_bnrom_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  assert(addr >= 0x8000);
+  set_prg32k_map(e, (m->prg_bank[0] = val & (e->ci.prg32k_banks - 1)));
+}
+
+void mapper34_nina001_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr) {
+  case 0x7ffd:
+    set_prg32k_map(e, (m->prg_bank[0] = val & 1 & (e->ci.prg32k_banks - 1)));
+    break;
+  case 0x7ffe:
+    set_chr4k_map(e, (m->chr_bank[0] = val & 0xf & (e->ci.chr4k_banks - 1)),
+                  m->chr_bank[1]);
+    break;
+  case 0x7fff:
+    set_chr4k_map(e, m->chr_bank[0],
+                  (m->chr_bank[1] = val & 0xf & (e->ci.chr4k_banks - 1)));
+    break;
+  }
 }
 
 static inline u8 get_P(E *e, Bool B) {
@@ -2228,6 +2252,13 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->is_nes2_0 = TRUE;
       ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
                    ((flag6 & 0xf0) >> 4);
+      u8 submapper = file_data->data[8] >> 4;
+      if (ci->mapper == 34) {
+        switch (submapper) {
+          case 1: ci->board = BOARD_NINA001; break;
+          case 2: ci->board = BOARD_BNROM; break;
+        }
+      }
       ci->prg16k_banks = nes2_prg16k_banks;
       ci->chr8k_banks = nes2_chr8k_banks;
     } else if ((flag7 & 0xc) == 0) {
@@ -2271,6 +2302,7 @@ Result set_rom_file_data(E *e, const FileData *rom) {
 }
 
 Result init_mapper(E *e) {
+  e->mapper_prg_ram_write = mapper0_write;
   switch (e->ci.mapper) {
   case 0:
     CHECK_MSG(e->ci.prg8k_banks <= 4, "Too many PRG banks.\n");
@@ -2325,12 +2357,38 @@ Result init_mapper(E *e) {
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0]);
     break;
+  case 34:
+    e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1;
+    if (e->ci.board == BOARD_DEFAULT) {
+      if (e->ci.chr4k_banks > 2) {
+        e->ci.board = BOARD_NINA001;
+      } else if (e->ci.chr4k_banks == 0 || e->ci.prg32k_banks > 2) {
+        e->ci.board = BOARD_BNROM;
+      }
+    }
+    if (e->ci.board == BOARD_BNROM) {
+      e->mapper_write = mapper34_bnrom_write;
+      set_mirror(e, e->ci.mirror);
+      set_chr8k_map(e, 0);
+      set_prg32k_map(e, e->s.m.prg_bank[0]);
+    } else if (e->ci.board == BOARD_NINA001) {
+      e->mapper_write = mapper0_write;
+      e->mapper_prg_ram_write = mapper34_nina001_write;
+      set_mirror(e, MIRROR_VERTICAL);
+      set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
+      set_prg32k_map(e, 0);
+      e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = TRUE;
+    } else {
+      goto unsupported;
+    }
+    break;
 
   shared:
     set_mirror(e, e->ci.mirror);
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
     set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
     break;
+  unsupported:
   default:
     CHECK_MSG(FALSE, "Unsupported mapper: %d", e->ci.mapper);
   }

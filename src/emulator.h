@@ -169,6 +169,7 @@ typedef struct Emulator {
   CartInfo ci;
   u8 *prg_rom_map[4], *nt_map[4], *chr_map[8], *chr_map_write[8];
   void (*mapper_write)(struct Emulator*, u16, u8);
+  void (*mapper_prg_ram_write)(struct Emulator*, u16, u8);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
