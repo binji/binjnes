@@ -1450,6 +1450,32 @@ void mapper3_write(E *e, u16 addr, u8 val) {
   set_chr8k_map(e, m->chr_bank[0]);
 }
 
+void mapper206_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  assert(addr >= 0x8000);
+  if ((addr & 0xe001) == 0x8000) { // Bank Select
+    m->m206.bank_select = val & 7;
+  } else if ((addr & 0xe001) == 0x8001) { // Bank data
+    u8 select = m->m206.bank_select;
+    switch (select) {
+      case 0 ... 1:  // CHR 2k banks at $0000, $0800
+        m->chr_bank[select] = val & 0b111110 & (e->ci.chr2k_banks - 1);
+        break;
+      case 2 ... 5:  // CHR 1k banks at $1000, $1400, $1800, $1C00
+        m->chr_bank[select] = val & 0b111111 & (e->ci.chr1k_banks - 1);
+        break;
+      case 6 ... 7:  // PRG 8k bank at $8000, $A000
+        m->prg_bank[select - 6] = val & 0b1111 & (e->ci.prg8k_banks - 1);
+        break;
+    }
+    set_chr1k_map(e, m->chr_bank[0], m->chr_bank[0] + 1, m->chr_bank[1],
+                  m->chr_bank[1] + 1, m->chr_bank[2], m->chr_bank[3],
+                  m->chr_bank[4], m->chr_bank[5]);
+    set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], e->ci.prg8k_banks - 2,
+                  e->ci.prg8k_banks - 1);
+  }
+}
+
 void mapper4_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   assert(addr >= 0x8000);
@@ -2210,12 +2236,14 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->prg32k_banks = ci->prg16k_banks / 2;
     ci->prg8k_banks = ci->prg16k_banks * 2;
     ci->chr8k_banks = ci->chr4k_banks / 2;
+    ci->chr2k_banks = ci->chr2k_banks * 2;
     ci->chr1k_banks = ci->chr4k_banks * 4;
 
     if (cart_db_info->vram) {
       ci->chr_data = e->s.p.chr_ram;
       ci->chr8k_banks = cart_db_info->vram / 2;
       ci->chr4k_banks = cart_db_info->vram;
+      ci->chr2k_banks = cart_db_info->vram * 2;
       ci->chr1k_banks = cart_db_info->vram * 4;
     } else {
       ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
@@ -2276,6 +2304,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->prg32k_banks = ci->prg16k_banks / 2;
     ci->prg8k_banks = ci->prg16k_banks * 2;
     ci->chr4k_banks = ci->chr8k_banks * 2;
+    ci->chr2k_banks = ci->chr8k_banks * 4;
     ci->chr1k_banks = ci->chr8k_banks * 8;
 
     CHECK_MSG(file_data->size >= data_size, "file must be >= %d.\n", data_size);
@@ -2286,6 +2315,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       // Assume 8KiB of RAM (TODO: how to know?)
       ci->chr8k_banks = 1;
       ci->chr4k_banks = 2;
+      ci->chr2k_banks = 4;
       ci->chr1k_banks = 8;
     } else { // CHR ROM
       ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
@@ -2381,6 +2411,12 @@ Result init_mapper(E *e) {
     } else {
       goto unsupported;
     }
+    break;
+  case 206:
+    e->mapper_write = mapper206_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
 
   shared:

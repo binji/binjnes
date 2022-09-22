@@ -78,7 +78,7 @@ typedef struct {
   Bool ignore_mirror;
   Bool is_nes2_0;
   u16 prg8k_banks, prg16k_banks, prg32k_banks;
-  u16 chr1k_banks, chr4k_banks, chr8k_banks;
+  u16 chr1k_banks, chr2k_banks, chr4k_banks, chr8k_banks;
   u16 mapper;
   Board board;
 } CartInfo;
@@ -95,6 +95,10 @@ typedef struct {
       u8 bank_select, irq_latch;
       Bool irq_enable, irq_reload;
     } mmc3;
+
+    struct {
+      u8 bank_select;
+    } m206;
   };
   Bool prg_ram_en, prg_ram_write_en, has_a12_irq;
 } M;
