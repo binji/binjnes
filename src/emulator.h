@@ -65,8 +65,8 @@ enum {
 
 typedef enum {
   IRQ_FRAME = 1,
-  IRQ_DMC   = 2,
-  IRQ_MMC3  = 4,
+  IRQ_DMC = 2,
+  IRQ_MAPPER = 4,
 } Irq;
 
 typedef struct {
@@ -84,8 +84,8 @@ typedef struct {
 } CartInfo;
 
 typedef struct {
-  u8 chr1k_bank[8], prg8k_bank[4]; // Actual mapped bank indexes.
-  u8 chr_bank[6], prg_bank[2];     // Mapper's selected bank indexes.
+  u16 chr1k_bank[8], prg8k_bank[4]; // Actual mapped bank indexes.
+  u16 chr_bank[8], prg_bank[2];     // Mapper's selected bank indexes.
   union {
     struct {
       u8 bits, data, ctrl;
@@ -99,8 +99,14 @@ typedef struct {
     struct {
       u8 bank_select;
     } m206;
+
+    struct {
+      u8 prg_mode, irq_latch, irq_counter;
+      u16 prescaler;
+      Bool irq_enable, irq_enable_after_ack, irq_cycle_mode;
+    } vrc;
   };
-  Bool prg_ram_en, prg_ram_write_en, has_a12_irq;
+  Bool prg_ram_en, prg_ram_write_en, has_a12_irq, has_vrc_irq;
 } M;
 
 typedef struct {
