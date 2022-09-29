@@ -232,6 +232,7 @@ void ppu_write(E *e, u16 addr, u8 val) {
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
       e->nt_map[(addr >> 10) & 3][addr & 0x3ff] = val;
+      DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x\n", e->s.cy, addr, val);
       break;
   }
 }
@@ -716,7 +717,7 @@ static void set_period_hi(A* a, int chan, u8 val) {
 }
 
 static void apu_tick(E *e) {
-  static const u16x8 timer_diff = {1, 1, 2, 1, 1};
+  static const u16x8 timer_diff = {1, 1, 2, 1, 1, 2, 2, 1};
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
                                 {0, 1, 1, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 1, 1, 1, 1},
@@ -733,9 +734,10 @@ static void apu_tick(E *e) {
   u16x8 timer0 = (a->timer < timer_diff) & a->play_mask;
   a->timer = blendv_u16x8(a->timer - timer_diff, a->period, timer0);
 
-  if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4]) {
+  if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4] | timer0[5] |
+      timer0[6] | timer0[7]) {
     // Advance the sequence for reloaded timers.
-    a->seq = (a->seq + (1 & timer0)) & (u16x8){7, 7, 31, 0, 7};
+    a->seq = (a->seq + (1 & timer0)) & (u16x8){7, 7, 31, 0, 7, 15, 15, 7};
 
     if (timer0[0]) {
       a->sample[0] = pduty[a->reg[2] >> 6][a->seq[0]];
@@ -774,6 +776,21 @@ static void apu_tick(E *e) {
         }
       }
     }
+    if (timer0[5]) {
+      a->vrc_sample[0] = (a->seq[5] <= a->vrc_duty[0]) | (a->vrc_duty[0] >> 3);
+    }
+    if (timer0[6]) {
+      a->vrc_sample[1] = (a->seq[6] <= a->vrc_duty[1]) | (a->vrc_duty[1] >> 3);
+    }
+    if (timer0[7]) {
+      a->vrc_sample[2] = 1;
+      a->vrc_vol[2] = a->vrc_sawaccum >> 3;
+      a->vrc_sawaccum += a->vrc_sawadd;
+      if (a->seq[7] == 7) {
+        a->vrc_sawaccum = 0;
+        a->seq[7] = 0;
+      }
+    }
     a->update = TRUE;
   }
 
@@ -808,6 +825,14 @@ static void apu_tick(E *e) {
     f32 p = sampvol[0] + sampvol[1];
     f32 t = 3 * sampvol[2] + 2 * sampvol[3] + a->dmcout;
     a->mixed = p * (PB + p * PC) + t * (TB + t * (TC + t * TD));
+
+    if (e->s.m.has_vrc_audio) {
+      u32x4 play_mask4 = (u32x4) __builtin_convertvector(
+          (s16x4)__builtin_shufflevector(a->play_mask, (u16x8){}, 5, 6, 7, 8),
+          s32x4);
+      f32x4 sampvol = (f32x4)((u32x4)a->vrc_sample & play_mask4) * a->vrc_vol;
+      a->mixed += (sampvol[0] + sampvol[1] + sampvol[2]) * 0.01f;
+    }
     a->update = FALSE;
   }
 
@@ -980,7 +1005,8 @@ static const u16 s_apu_bits[] = {
 static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
 #if LOGLEVEL >= 2
   static const char chan_str[][6] = {"1    ", " 2   ", "  T  ",
-                                     "   N ", "    D", "xxxxx"};
+                                     "   N ", "    D", "xxxxx",
+                                     "V    ", " V   ", "  S  "};
   u8 cval[256] = {0};
   char new_chrs[9] = {0};
   for (int i = 0; i < 8; ++i) {
@@ -1636,13 +1662,13 @@ void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
 
     case 0xf000: // IRQ latch low
       m->vrc.irq_latch = (m->vrc.irq_latch & 0xf0) | (val & 0xf);
-      LOG("[%" PRIu64 "]: irq latch=%u (%02x)\n", e->s.cy, m->vrc.irq_latch,
+      DEBUG("[%" PRIu64 "]: irq latch=%u (%02x)\n", e->s.cy, m->vrc.irq_latch,
           m->vrc.irq_latch);
       break;
 
     case 0xf001: // IRQ latch high
       m->vrc.irq_latch = (m->vrc.irq_latch & 0xf) | (val << 4);
-      LOG("[%" PRIu64 "]: irq latch=%u (%02x)\n", e->s.cy, m->vrc.irq_latch,
+      DEBUG("[%" PRIu64 "]: irq latch=%u (%02x)\n", e->s.cy, m->vrc.irq_latch,
           m->vrc.irq_latch);
       break;
 
@@ -1655,13 +1681,13 @@ void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
         m->vrc.irq_counter = m->vrc.irq_latch;
       }
       e->s.c.irq &= ~IRQ_MAPPER;
-      LOG("[%" PRIu64 "]: irq control=%02x\n", e->s.cy, val);
+      DEBUG("[%" PRIu64 "]: irq control=%02x\n", e->s.cy, val);
       break;
 
     case 0xf003: // IRQ acknowledge
       e->s.c.irq &= ~IRQ_MAPPER;
       m->vrc.irq_enable = m->vrc.irq_enable_after_ack;
-      LOG("[%" PRIu64 "]: irq ack\n", e->s.cy);
+      DEBUG("[%" PRIu64 "]: irq ack\n", e->s.cy);
       break;
   }
 }
@@ -1686,6 +1712,131 @@ MAPPER_VRC_WRITE(mapper_vrc4c_write, vrc4, 6, 7, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4d_write, vrc4, 3, 2, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4e_write, vrc4, 2, 3, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4f_write, vrc4, 0, 1, FALSE)
+
+void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  A *a = &e->s.a;
+  u8 chan = (addr >> 12) - 4;
+  switch (addr & 0xf003) {
+    case 0x8000 ... 0x8003: // 16k PRG Select
+      m->prg_bank[0] = (val & 0xf) << 1;
+      DEBUG("[%" PRIu64 "]: prg0=%u (%02x)\n", e->s.cy, m->prg_bank[0],
+            m->prg_bank[0]);
+      goto prg_select;
+
+    case 0x9000: case 0xa000:  // Pulse Control
+      a->vrc_duty[chan - 5] = val >> 4;
+      a->vrc_vol[chan - 5] = val & 0xf;
+      print_byte(addr, val, chan + 1, "MDDDVVVV");
+      break;
+    case 0xb000: // Saw Accum Rate
+      a->vrc_sawadd = val & 0x1f;
+      print_byte(addr, val, chan + 1, "XXAAAAAA");
+      break;
+    case 0x9001: case 0xa001: case 0xb001: // Freq Low
+      a->period[chan] = (a->period[chan] & 0x0f00) | val;
+      print_byte(addr, val, chan + 1, "LLLLLLLL");
+      break;
+    case 0x9002: case 0xa002: case 0xb002: // Freq High
+      a->period[chan] = (a->period[chan] & 0x00ff) | ((val & 0xf) << 8);
+      if (val & 0x80) { // Channel enabled.
+        a->play_mask[chan] = ~0;
+        a->len[chan] = 1;
+        a->halt[chan] = ~0;
+      } else {
+        a->timer[chan] = 0;
+        a->vrc_sample[chan - 5] = a->seq[chan] = 0;
+        a->play_mask[chan] = 0;
+      }
+      a->update = TRUE;
+      print_byte(addr, val, chan + 1, "EXXXHHHH");
+      break;
+
+    case 0xb003:
+      m->vrc.ppu_bank_style = val;
+      set_mirror(e, (((val >> 2) & 3) + 2) & 3);
+      m->prg_ram_en = !!(val & 0x80);
+      DEBUG("[%" PRIu64 "]: ppu bank=%u (%02x) mode=%u\n", e->s.cy, val, val,
+          val & 3);
+      goto chr_select;
+
+    case 0xc000 ... 0xc003: // 8k PRG Select
+      m->prg_bank[1] = val & 0x1f;
+      DEBUG("[%" PRIu64 "]: prg1=%u (%02x)\n", e->s.cy, m->prg_bank[1],
+          m->prg_bank[1]);
+      goto prg_select;
+
+    prg_select:
+      set_prg8k_map(e, m->prg_bank[0] & ~1, m->prg_bank[0] | 1, m->prg_bank[1],
+                    e->ci.prg8k_banks - 1);
+      break;
+
+    case 0xd000 ... 0xd003:
+    case 0xe000 ... 0xe003: { // CHR Select 0..7
+      u8 select = (((addr >> 12) - 0xd) << 2) | (addr & 3);
+      m->chr_bank[select] = val;
+      DEBUG("[%" PRIu64 "]: addr=%04x chr%u=%u (%02x)\n", e->s.cy, addr, select,
+          val, val);
+      goto chr_select;
+    }
+
+    chr_select:
+      switch (m->vrc.ppu_bank_style & 3) {
+        case 0:
+          set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                        m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                        m->chr_bank[6], m->chr_bank[7]);
+          break;
+
+        case 1:
+          set_chr1k_map(e, (m->chr_bank[0] << 1), (m->chr_bank[0] << 1) | 1,
+                        (m->chr_bank[1] << 1), (m->chr_bank[1] << 1) | 1,
+                        (m->chr_bank[2] << 1), (m->chr_bank[2] << 1) | 1,
+                        (m->chr_bank[3] << 1), (m->chr_bank[3] << 1) | 1);
+          break;
+
+        case 2 ... 3:
+          set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1],
+                           m->chr_bank[2], m->chr_bank[3],
+                           (m->chr_bank[4] << 1), (m->chr_bank[4] << 1) | 1,
+                           (m->chr_bank[5] << 1), (m->chr_bank[5] << 1) | 1);
+          break;
+      }
+      break;
+
+    case 0xf000: // IRQ latch
+      m->vrc.irq_latch = val;
+      DEBUG("[%" PRIu64 "]: irq latch=%u (%02x)\n", e->s.cy, m->vrc.irq_latch,
+          m->vrc.irq_latch);
+      break;
+
+    case 0xf001: // IRQ control
+      m->vrc.irq_enable_after_ack = val & 1;
+      m->vrc.irq_enable = !!(val & 2);
+      m->vrc.irq_cycle_mode = !!(val & 4);
+      m->vrc.prescaler = 0;
+      if (m->vrc.irq_enable) {
+        m->vrc.irq_counter = m->vrc.irq_latch;
+      }
+      e->s.c.irq &= ~IRQ_MAPPER;
+      DEBUG("[%" PRIu64 "]: irq control=%02x\n", e->s.cy, val);
+      break;
+
+    case 0xf002: // IRQ acknowledge
+      e->s.c.irq &= ~IRQ_MAPPER;
+      m->vrc.irq_enable = m->vrc.irq_enable_after_ack;
+      DEBUG("[%" PRIu64 "]: irq ack\n", e->s.cy);
+      break;
+  }
+}
+
+void mapper_vrc6a_write(E *e, u16 addr, u8 val) {
+  mapper_vrc6_shared_write(e, addr, val);
+}
+
+void mapper_vrc6b_write(E *e, u16 addr, u8 val) {
+  mapper_vrc6_shared_write(e, VRC_ADDR(addr, 1, 0), val);
+}
 
 void mapper34_bnrom_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
@@ -1758,7 +1909,7 @@ void cpu_step(E *e) {
       DEBUG("[%" PRIu64 "]: clocked %u=>%u\n", e->s.cy, m->vrc.irq_counter,
             m->vrc.irq_counter + 1);
       if (++m->vrc.irq_counter == 0) {
-        LOG("[%" PRIu64 "]: IRQ (reset to %u)\n", e->s.cy, m->vrc.irq_latch);
+        DEBUG("[%" PRIu64 "]: IRQ (reset to %u)\n", e->s.cy, m->vrc.irq_latch);
         e->s.c.irq |= IRQ_MAPPER;
         m->vrc.irq_counter = m->vrc.irq_latch;
       }
@@ -2607,8 +2758,17 @@ Result init_mapper(E *e) {
       default:
         goto unsupported;
     }
+  case 24:
+    e->mapper_write = mapper_vrc6a_write;
+    goto vrc6_shared;
+  case 26:
+    e->mapper_write = mapper_vrc6b_write;
+    goto vrc6_shared;
+  vrc6_shared:
+    e->s.m.has_vrc_audio = TRUE;
+    // fallthrough
   vrc4_shared:
-    LOG("setting has VRC irq\n");
+    DEBUG("setting has VRC irq\n");
     e->s.m.has_vrc_irq = TRUE;
     // fallthrough
   vrc_shared:

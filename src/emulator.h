@@ -104,9 +104,10 @@ typedef struct {
       u8 prg_mode, irq_latch, irq_counter;
       u16 prescaler;
       Bool irq_enable, irq_enable_after_ack, irq_cycle_mode;
+      u8 ppu_bank_style; // VRC6 only
     } vrc;
   };
-  Bool prg_ram_en, prg_ram_write_en, has_a12_irq, has_vrc_irq;
+  Bool prg_ram_en, prg_ram_write_en, has_a12_irq, has_vrc_irq, has_vrc_audio;
 } M;
 
 typedef struct {
@@ -148,11 +149,12 @@ typedef struct {
   u16x8 timer, period, seq, halt, len, play_mask;
   u32x4 start, cvol, envdiv, envloop, envreload;         // envelope
   u16x8 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
-  f32x4 sample, vol, decay;
+  f32x4 sample, vol, decay, vrc_sample, vrc_vol;
   f32 mixed;
 
   u16 cnt, noise, dmcbytes, dmcaddr;
-  u8 state, reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate;
+  u8 state, reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate,
+      vrc_duty[2], vrc_sawadd, vrc_sawaccum;
   Bool update, trireload, dmcen, dmcfetch;
   u64 resetcy; // XXX
 } A;
