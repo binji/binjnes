@@ -79,6 +79,7 @@ typedef struct {
   Bool is_nes2_0;
   u16 prg8k_banks, prg16k_banks, prg32k_banks;
   u16 chr1k_banks, chr2k_banks, chr4k_banks, chr8k_banks;
+  u16 prgram8k_banks;
   u16 mapper;
   Board board;
 } CartInfo;
@@ -203,6 +204,13 @@ Ticks emulator_get_ticks(Emulator*);
 void emulator_init_state_file_data(FileData*);
 Result emulator_read_state(Emulator*, const FileData*);
 Result emulator_write_state(Emulator*, FileData*);
+Result emulator_read_prg_ram(Emulator*, const FileData*);
+Result emulator_write_prg_ram(Emulator*, FileData*);
+
+Result emulator_read_state_from_file(Emulator*, const char* filename);
+Result emulator_write_state_to_file(Emulator*, const char* filename);
+Result emulator_read_prg_ram_from_file(Emulator*, const char* filename);
+Result emulator_write_prg_ram_to_file(Emulator*, const char* filename);
 
 EmulatorEvent emulator_step(Emulator*);
 EmulatorEvent emulator_run_until(Emulator*, Ticks until_ticks);

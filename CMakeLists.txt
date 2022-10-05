@@ -41,6 +41,7 @@ if (NOT EMSCRIPTEN)
       src/host-gl.c
       src/host-ui-simple.c
       src/joypad.c
+      src/options.c
       src/rewind.c
     )
     target_link_libraries(binjnes SDL2::SDL2 SDL2::SDL2main ${OPENGL_gl_LIBRARY})

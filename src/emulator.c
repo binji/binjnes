@@ -2534,6 +2534,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->chr4k_banks = cart_db_info->chr;
     ci->board = cart_db_info->board;
     ci->prg_data = file_data->data + kHeaderSize;
+    ci->prgram8k_banks = cart_db_info->wram;
 
     ci->prg32k_banks = ci->prg16k_banks / 2;
     ci->prg8k_banks = ci->prg16k_banks * 2;
@@ -2572,6 +2573,9 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     u32 nes2_prg16k_banks = ((flag9 & 0xf) << 4) | file_data->data[4];
     u32 nes2_chr8k_banks = (flag9 & 0xf0) | file_data->data[5];
     u32 nes2_data_size = (nes2_prg16k_banks << 14) + (nes2_chr8k_banks << 13);
+    u32 nes2_prg_ram_banks = (64 << (file_data->data[10] & 0xf)) >> 13;
+    u32 nes2_prg_ram_bat_banks =
+        (64 << ((file_data->data[10] & 0xf0) >> 4)) >> 13;
 
     u32 data_size = kHeaderSize + trainer_size;
 
@@ -2613,16 +2617,25 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       }
       ci->prg16k_banks = nes2_prg16k_banks;
       ci->chr8k_banks = nes2_chr8k_banks;
+      if (nes2_prg_ram_bat_banks > nes2_prg_ram_banks) {
+        ci->prgram8k_banks = nes2_prg_ram_bat_banks;
+        ci->has_bat_ram = TRUE;
+      } else {
+        ci->prgram8k_banks = nes2_prg_ram_banks;
+        ci->has_bat_ram = FALSE;
+      }
     } else if ((flag7 & 0xc) == 0) {
       data_size += ines_data_size;
       ci->is_nes2_0 = FALSE;
       ci->mapper = (flag7 & 0xf0) | ((flag6 & 0xf0) >> 4);
       ci->prg16k_banks = ines_prg16k_banks;
       ci->chr8k_banks = nes2_chr8k_banks;
+      ci->prgram8k_banks = file_data->data[8];
     } else {
       ci->mapper = (flag6 & 0xf0) >> 4;
       ci->prg16k_banks = ines_prg16k_banks;
       ci->chr8k_banks = nes2_chr8k_banks;
+      ci->prgram8k_banks = file_data->data[8];
     }
 
     ci->prg32k_banks = ci->prg16k_banks / 2;
@@ -2632,6 +2645,8 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->chr1k_banks = ci->chr8k_banks * 8;
 
     CHECK_MSG(file_data->size >= data_size, "file must be >= %d.\n", data_size);
+    CHECK_MSG(ci->prgram8k_banks <= 0x2000,
+              "prg ram size must be <= 8192 (got %u).\n", ci->prgram8k_banks);
 
     ci->prg_data = file_data->data + kHeaderSize + trainer_size;
     if (ci->chr8k_banks == 0) { // Assume CHR RAM
@@ -2981,6 +2996,77 @@ Result emulator_write_state(Emulator *e, FileData *file_data) {
   memcpy(file_data->data, &e->s, file_data->size);
   return OK;
   ON_ERROR_RETURN;
+}
+
+Result emulator_read_prg_ram(Emulator* e, const FileData* file_data) {
+  const size_t size = e->ci.prgram8k_banks << 13;
+  if (!e->ci.has_bat_ram) return OK;
+  CHECK_MSG(file_data->size == size,
+            "save file is wrong size: %ld, expected %ld.\n",
+            (long)file_data->size, (long)size);
+  memcpy(e->s.c.prg_ram, file_data->data, size);
+  return OK;
+  ON_ERROR_RETURN;
+}
+
+Result emulator_write_prg_ram(Emulator* e, FileData* file_data) {
+  const size_t size = e->ci.prgram8k_banks << 13;
+  if (!e->ci.has_bat_ram) return OK;
+  CHECK(file_data->size >= size);
+  memcpy(file_data->data, e->s.c.prg_ram, file_data->size);
+  return OK;
+  ON_ERROR_RETURN;
+}
+
+Result emulator_read_prg_ram_from_file(Emulator* e, const char* filename) {
+  if (!e->ci.has_bat_ram) return OK;
+  Result result = ERROR;
+  FileData file_data;
+  ZERO_MEMORY(file_data);
+  CHECK(SUCCESS(file_read(filename, &file_data)));
+  CHECK(SUCCESS(emulator_read_prg_ram(e, &file_data)));
+  result = OK;
+error:
+  file_data_delete(&file_data);
+  return result;
+}
+
+Result emulator_write_prg_ram_to_file(Emulator* e, const char* filename) {
+  if (!e->ci.has_bat_ram) return OK;
+  Result result = ERROR;
+  FileData file_data;
+  file_data.size = e->ci.prgram8k_banks << 13;
+  file_data.data = xmalloc(file_data.size);
+  CHECK(SUCCESS(emulator_write_prg_ram(e, &file_data)));
+  CHECK(SUCCESS(file_write(filename, &file_data)));
+  result = OK;
+error:
+  file_data_delete(&file_data);
+  return result;
+}
+
+Result emulator_read_state_from_file(Emulator* e, const char* filename) {
+  Result result = ERROR;
+  FileData file_data;
+  ZERO_MEMORY(file_data);
+  CHECK(SUCCESS(file_read(filename, &file_data)));
+  CHECK(SUCCESS(emulator_read_state(e, &file_data)));
+  result = OK;
+error:
+  file_data_delete(&file_data);
+  return result;
+}
+
+Result emulator_write_state_to_file(Emulator* e, const char* filename) {
+  Result result = ERROR;
+  FileData file_data;
+  emulator_init_state_file_data(&file_data);
+  CHECK(SUCCESS(emulator_write_state(e, &file_data)));
+  CHECK(SUCCESS(file_write(filename, &file_data)));
+  result = OK;
+error:
+  file_data_delete(&file_data);
+  return result;
 }
 
 // Debug stuff /////////////////////////////////////////////////////////////////
