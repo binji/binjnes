@@ -215,6 +215,9 @@ Result emulator_write_prg_ram_to_file(Emulator*, const char* filename);
 EmulatorEvent emulator_step(Emulator*);
 EmulatorEvent emulator_run_until(Emulator*, Ticks until_ticks);
 
+void emulator_ticks_to_time(Ticks, u32* day, u32* hr, u32* min, u32* sec,
+                            u32* ms);
+
 #ifdef __cplusplus
 }
 #endif

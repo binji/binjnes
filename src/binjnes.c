@@ -181,6 +181,30 @@ static void rewind_by(Ticks delta) {
     then = now - delta;
     host_rewind_to_ticks(host, then);
   }
+
+  Ticks oldest = host_get_rewind_oldest_ticks(host);
+  Ticks total = s_rewind_start - oldest;
+  Ticks then_diff = then - oldest;
+  int num_ticks = then_diff * (GLYPHS_PER_LINE - 2) / total;
+
+  char buffer[GLYPHS_PER_LINE + 1];
+  buffer[0] = '|';
+  int i;
+  for (i = 1; i < GLYPHS_PER_LINE - 1; ++i) {
+    buffer[i] = i < num_ticks ? '=' : ' ';
+  }
+  buffer[GLYPHS_PER_LINE - 1] = '|';
+  buffer[GLYPHS_PER_LINE] = 0;
+
+  u32 day, hr, min, sec, ms;
+  emulator_ticks_to_time(then, &day, &hr, &min, &sec, &ms);
+  char time[64];
+  snprintf(time, sizeof(time), "%u:%02u:%02u.%02u", day * 24 + hr, min, sec,
+           ms / 10);
+  size_t len = strlen(time);
+  memcpy(&buffer[(GLYPHS_PER_LINE - len) / 2], time, len);
+
+  set_status_text("%s", buffer);
 }
 
 static void end_rewind(void) {

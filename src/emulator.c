@@ -3069,6 +3069,16 @@ error:
   return result;
 }
 
+void emulator_ticks_to_time(Ticks ticks, u32* day, u32* hr, u32* min, u32* sec,
+                            u32* ms) {
+  u64 secs = ticks / PPU_TICKS_PER_SECOND;
+  *ms = (secs / 1000) % 1000;
+  *sec = secs % 60;
+  *min = (secs / 60) % 60;
+  *hr = (secs / (60 * 60)) % 24;
+  *day = secs / (60 * 60 * 24);
+}
+
 // Debug stuff /////////////////////////////////////////////////////////////////
 
 static const char* s_opcode_mnemonic[256];
