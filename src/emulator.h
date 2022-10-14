@@ -75,7 +75,7 @@ typedef struct {
   Mirror mirror;
   Bool has_bat_ram;
   Bool has_trainer;
-  Bool ignore_mirror;
+  Bool fourscreen;
   Bool is_nes2_0;
   u16 prg8k_banks, prg16k_banks, prg32k_banks;
   u16 chr1k_banks, chr2k_banks, chr4k_banks, chr8k_banks;
@@ -134,7 +134,7 @@ typedef struct {
 
 typedef struct {
   RGBA rgbapal[32];
-  u8 ram[0x800], chr_ram[0x2000], oam[0x100], oam2[0x20];
+  u8 ram[0x1000], chr_ram[0x2000], oam[0x100], oam2[0x20];
   u32x4 bgatshift, bgatpreshift;
   u16x8 bgsprleftmask;
   u16 cnt1, cnt2, v, t, atb, last_a12;

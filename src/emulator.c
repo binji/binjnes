@@ -1340,22 +1340,29 @@ void cpu_write(E *e, u16 addr, u8 val) {
 }
 
 static void update_nt_map(E* e) {
-  switch (e->s.p.mirror) {
-    case MIRROR_HORIZONTAL:
-      e->nt_map[0] = e->nt_map[1] = e->s.p.ram;
-      e->nt_map[2] = e->nt_map[3] = e->s.p.ram + 0x400;
-      break;
-    case MIRROR_VERTICAL:
-      e->nt_map[0] = e->nt_map[2] = e->s.p.ram;
-      e->nt_map[1] = e->nt_map[3] = e->s.p.ram + 0x400;
-      break;
-    case MIRROR_SINGLE_0:
-      e->nt_map[0] = e->nt_map[2] = e->nt_map[1] = e->nt_map[3] = e->s.p.ram;
-      break;
-    case MIRROR_SINGLE_1:
-      e->nt_map[0] = e->nt_map[2] = e->nt_map[1] = e->nt_map[3] =
-          e->s.p.ram + 0x400;
-      break;
+  if (e->ci.fourscreen) {
+    e->nt_map[0] = e->s.p.ram;
+    e->nt_map[1] = e->s.p.ram + 0x400;
+    e->nt_map[2] = e->s.p.ram + 0x800;
+    e->nt_map[3] = e->s.p.ram + 0xc00;
+  } else {
+    switch (e->s.p.mirror) {
+      case MIRROR_HORIZONTAL:
+        e->nt_map[0] = e->nt_map[1] = e->s.p.ram;
+        e->nt_map[2] = e->nt_map[3] = e->s.p.ram + 0x400;
+        break;
+      case MIRROR_VERTICAL:
+        e->nt_map[0] = e->nt_map[2] = e->s.p.ram;
+        e->nt_map[1] = e->nt_map[3] = e->s.p.ram + 0x400;
+        break;
+      case MIRROR_SINGLE_0:
+        e->nt_map[0] = e->nt_map[2] = e->nt_map[1] = e->nt_map[3] = e->s.p.ram;
+        break;
+      case MIRROR_SINGLE_1:
+        e->nt_map[0] = e->nt_map[2] = e->nt_map[1] = e->nt_map[3] =
+            e->s.p.ram + 0x400;
+        break;
+    }
   }
 }
 
@@ -2571,7 +2578,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
   if (cart_db_info) {
     ci->is_nes2_0 = FALSE;
     ci->has_trainer = FALSE;
-    ci->ignore_mirror = FALSE;
+    ci->fourscreen = FALSE;
     ci->mapper = cart_db_info->mapper;
     ci->mirror = cart_db_info->mirror;
     ci->has_bat_ram = cart_db_info->battery;
@@ -2583,12 +2590,9 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
     ci->prg32k_banks = ci->prg16k_banks / 2;
     ci->prg8k_banks = ci->prg16k_banks * 2;
-    ci->chr8k_banks = ci->chr4k_banks / 2;
-    ci->chr2k_banks = ci->chr2k_banks * 2;
-    ci->chr1k_banks = ci->chr4k_banks * 4;
     ci->prgram512b_banks = ci->prgram8k_banks * 16;
 
-    if (cart_db_info->vram) {
+    if (cart_db_info->vram && ci->chr4k_banks == 0) {
       ci->chr_data = e->s.p.chr_ram;
       ci->chr8k_banks = cart_db_info->vram / 2;
       ci->chr4k_banks = cart_db_info->vram;
@@ -2596,6 +2600,13 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->chr1k_banks = cart_db_info->vram * 4;
     } else {
       ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
+      ci->chr8k_banks = ci->chr4k_banks / 2;
+      ci->chr2k_banks = ci->chr4k_banks * 2;
+      ci->chr1k_banks = ci->chr4k_banks * 4;
+      if (cart_db_info->vram == 2) {
+        // Assume it is used for four screen mode.
+        ci->fourscreen = TRUE;
+      }
     }
     ci->chr_data_write = e->s.p.chr_ram;
   } else {
@@ -2608,7 +2619,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->mirror = (flag6 & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
     ci->has_bat_ram = (flag6 & 4) != 0;
     ci->has_trainer = (flag6 & 8) != 0;
-    ci->ignore_mirror = (flag6 & 0x10) != 0;
+    ci->fourscreen = (flag6 & 0x10) != 0;
 
     u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
     u32 ines_prg16k_banks = file_data->data[4];
