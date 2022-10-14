@@ -79,13 +79,14 @@ typedef struct {
   Bool is_nes2_0;
   u16 prg8k_banks, prg16k_banks, prg32k_banks;
   u16 chr1k_banks, chr2k_banks, chr4k_banks, chr8k_banks;
-  u16 prgram8k_banks;
+  u16 prgram512b_banks, prgram8k_banks;
   u16 mapper;
   Board board;
 } CartInfo;
 
 typedef struct {
-  u16 chr1k_bank[8], prg8k_bank[4]; // Actual mapped bank indexes.
+  u16 chr1k_bank[8], prg8k_bank[4],
+      prgram512b_bank[16];          // Actual mapped bank indexes.
   u16 chr_bank[8], prg_bank[2];     // Mapper's selected bank indexes.
   union {
     struct {
@@ -108,7 +109,8 @@ typedef struct {
       u8 ppu_bank_style; // VRC6 only
     } vrc;
   };
-  Bool prg_ram_en, prg_ram_write_en, has_a12_irq, has_vrc_irq, has_vrc_audio;
+  u16 prg_ram_bank_en, prg_ram_write_bank_en; // Bit map of enabled 512b banks.
+  Bool prg_ram_en, has_a12_irq, has_vrc_irq, has_vrc_audio;
 } M;
 
 typedef struct {
@@ -180,7 +182,8 @@ typedef struct Emulator {
   EmulatorConfig config;
   S s;
   CartInfo ci;
-  u8 *prg_rom_map[4], *nt_map[4], *chr_map[8], *chr_map_write[8];
+  u8 *prg_rom_map[4], *prg_ram_map[16], *nt_map[4], *chr_map[8],
+      *chr_map_write[8];
   void (*mapper_write)(struct Emulator*, u16, u8);
   void (*mapper_prg_ram_write)(struct Emulator*, u16, u8);
   FrameBuffer frame_buffer;

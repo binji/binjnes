@@ -33,6 +33,7 @@ typedef enum {
   BOARD_TXROM_MMC3A,
   BOARD_TXROM_MMC3B,
   BOARD_TXROM_MMC3C,
+  BOARD_HKROM, // MMC6
 
   // Mapper 34
   BOARD_BNROM,

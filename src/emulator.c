@@ -1114,8 +1114,12 @@ u8 cpu_read(E *e, u16 addr) {
     }
     break;
 
-  case 6: case 7:
-    return e->s.m.prg_ram_en ? c->prg_ram[addr & 0x1fff] : c->open_bus;
+  case 6: case 7: {
+    u8 bank = (addr >> 9) & 15;
+    return e->s.m.prg_ram_en && e->s.m.prg_ram_bank_en & (1 << bank)
+               ? e->prg_ram_map[bank][addr & 0x1ff]
+               : c->open_bus;
+  }
 
    // ROM
   case  8:  case 9: return e->prg_rom_map[0][addr - 0x8000];
@@ -1319,12 +1323,15 @@ void cpu_write(E *e, u16 addr, u8 val) {
     break;
   }
 
-  case 6: case 7:
-    if (e->s.m.prg_ram_en && e->s.m.prg_ram_write_en) {
-      c->prg_ram[addr & 0x1fff] = val;
+  case 6: case 7: {
+    u8 bank = (addr >> 9) & 15;
+    if (e->s.m.prg_ram_en &&
+        e->s.m.prg_ram_bank_en & e->s.m.prg_ram_write_bank_en & (1 << bank)) {
+      e->prg_ram_map[bank][addr & 0x1ff] = val;
     }
     e->mapper_prg_ram_write(e, addr, val);
     break;
+  }
 
   case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15:
     e->mapper_write(e, addr, val);
@@ -1407,6 +1414,27 @@ static void set_prg16k_map(E *e, u16 bank0, u16 bank1) {
 static void set_prg32k_map(E *e, u16 bank) {
   bank &= (e->ci.prg32k_banks - 1);
   set_prg16k_map(e, bank * 2, bank * 2 + 1);
+}
+
+static void update_prgram512b_map(E* e) {
+  for (size_t i = 0; i < ARRAY_SIZE(e->s.m.prgram512b_bank); ++i) {
+    u16 bank = e->s.m.prgram512b_bank[i] & (e->ci.prgram512b_banks - 1);
+    e->prg_ram_map[i] = e->s.c.prg_ram + (bank << 9);
+  }
+}
+
+static void set_prgram_default_map(E* e) {
+  for (size_t i = 0; i < ARRAY_SIZE(e->s.m.prgram512b_bank); ++i) {
+    e->s.m.prgram512b_bank[i] = i;
+  }
+  update_prgram512b_map(e);
+}
+
+void set_prgram_mirror(E* e, u16 bank_mask) {
+  for (size_t i = 0; i < ARRAY_SIZE(e->s.m.prgram512b_bank); ++i) {
+    e->s.m.prgram512b_bank[i] = i & bank_mask;
+  }
+  update_prgram512b_map(e);
 }
 
 void mapper0_write(E *e, u16 addr, u8 val) {}
@@ -1516,6 +1544,11 @@ void mapper4_write(E *e, u16 addr, u8 val) {
         }
       } else {
         m->mmc3.bank_select = val;
+        if (e->ci.board == BOARD_HKROM) {
+          m->prg_ram_en = !!(val & 0x20);
+          DEBUG("     [%" PRIu64 "] mmc6 prg ram en:%u\n", e->s.cy,
+              m->prg_ram_en);
+        }
       }
 
       if (m->mmc3.bank_select & 0x80) {
@@ -1540,10 +1573,22 @@ void mapper4_write(E *e, u16 addr, u8 val) {
     }
     case 10: case 11: // Mirroring / PRG RAM enable
       if (addr & 1) {
-        m->prg_ram_en = !!(val & 0x80);
-        m->prg_ram_write_en = !(val & 0x40);
-        DEBUG("     [%" PRIu64 "] mmc3 prg ram en:%u write:%u\n", e->s.cy,
-            m->prg_ram_en, m->prg_ram_write_en);
+        if (e->ci.board == BOARD_HKROM) {
+          u16 en = ((val >> 6) & 2) | ((val >> 5) & 1);
+          en |= en << 2; en |= en << 4;
+          m->prg_ram_bank_en = en << 8;
+
+          en = ((val >> 5) & 2) | ((val >> 4) & 1);
+          en |= en << 2; en |= en << 4;
+          m->prg_ram_write_bank_en = en << 8;
+          DEBUG("     [%" PRIu64 "] mmc6 prg ram en:%04x write:%04x\n", e->s.cy,
+                m->prg_ram_en, m->prg_ram_write_bank_en);
+        } else {
+          m->prg_ram_en = !!(val & 0x80);
+          m->prg_ram_write_bank_en = -!(val & 0x40);
+          DEBUG("     [%" PRIu64 "] mmc3 prg ram en:%04x write:%04x\n", e->s.cy,
+              m->prg_ram_en, m->prg_ram_write_bank_en);
+        }
       } else {
         set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
       }
@@ -1655,7 +1700,7 @@ void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
       break;
 
     case 0x9002: // PRG swap mode/WRAM control
-      e->s.m.prg_ram_write_en = val & 1;
+      e->s.m.prg_ram_write_bank_en = -(val & 1);
       m->vrc.prg_mode = (val >> 1) & 1;
       mapper_vrc_prg_map(e);
       break;
@@ -2541,6 +2586,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->chr8k_banks = ci->chr4k_banks / 2;
     ci->chr2k_banks = ci->chr2k_banks * 2;
     ci->chr1k_banks = ci->chr4k_banks * 4;
+    ci->prgram512b_banks = ci->prgram8k_banks * 16;
 
     if (cart_db_info->vram) {
       ci->chr_data = e->s.p.chr_ram;
@@ -2647,6 +2693,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->chr4k_banks = ci->chr8k_banks * 2;
     ci->chr2k_banks = ci->chr8k_banks * 4;
     ci->chr1k_banks = ci->chr8k_banks * 8;
+    ci->prgram512b_banks = ci->prgram8k_banks * 16;
 
     CHECK_MSG(file_data->size >= data_size, "file must be >= %d.\n", data_size);
     CHECK_MSG(ci->prgram8k_banks <= 0x2000,
@@ -2676,6 +2723,8 @@ Result set_rom_file_data(E *e, const FileData *rom) {
 
 Result init_mapper(E *e) {
   e->mapper_prg_ram_write = mapper0_write;
+  set_prgram_default_map(e);
+
   switch (e->ci.board) {
   case BOARD_MAPPER_0:
     CHECK_MSG(e->ci.prg8k_banks <= 4, "Too many PRG banks.\n");
@@ -2689,12 +2738,15 @@ Result init_mapper(E *e) {
     e->s.m.chr_bank[0] = 0;
     e->s.m.chr_bank[1] = e->ci.chr4k_banks - 1;
     e->s.m.prg_bank[0] = 0;
-    e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = TRUE;
+    e->s.m.prg_ram_en = TRUE;
+    e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     e->mapper_write = mapper1_write;
     goto shared;
   case BOARD_MAPPER_2:
     e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper2_write;
+    e->s.m.prg_ram_en = TRUE;
+    e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     goto shared;
   case BOARD_MAPPER_3:
     e->s.m.prg_bank[0] = 0;
@@ -2708,12 +2760,13 @@ Result init_mapper(E *e) {
   case BOARD_TXROM_MMC3A:
   case BOARD_TXROM_MMC3B:
   case BOARD_TXROM_MMC3C:
+  case BOARD_HKROM:
     e->mapper_write = mapper4_write;
     e->s.m.mmc3.bank_select = 0;
     e->s.m.mmc3.irq_latch = 0;
     e->s.m.mmc3.irq_reload = TRUE;
     e->s.m.mmc3.irq_enable = FALSE;
-    e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = TRUE;
+    e->s.m.prg_ram_en = TRUE;
     e->s.m.has_a12_irq = TRUE;
     e->s.m.chr_bank[0] = e->s.m.chr_bank[2] = e->s.m.chr_bank[4] =
         e->s.m.chr_bank[5] = 0;
@@ -2722,6 +2775,12 @@ Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
+    if (e->ci.board == BOARD_HKROM) {
+      set_prgram_mirror(e, 1);
+      e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = 0xff00;
+    } else {
+      e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
+    }
     break;
   case BOARD_MAPPER_7:
     e->s.m.prg_bank[0] = 0;
@@ -2779,7 +2838,8 @@ Result init_mapper(E *e) {
     e->s.m.has_vrc_irq = TRUE;
     // fallthrough
   vrc_shared:
-    e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = TRUE;
+    e->s.m.prg_ram_en = TRUE;
+    e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
@@ -2806,7 +2866,8 @@ Result init_mapper(E *e) {
       set_mirror(e, MIRROR_VERTICAL);
       set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
       set_prg32k_map(e, 0);
-      e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = TRUE;
+      e->s.m.prg_ram_en = TRUE;
+      e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     } else {
       goto unsupported;
     }
@@ -2973,6 +3034,7 @@ Result emulator_read_state(Emulator *e, const FileData *file_data) {
   // Fix pointers.
   update_chr1k_map(e);
   update_prg8k_map(e);
+  update_prgram512b_map(e);
   update_nt_map(e);
   return OK;
   ON_ERROR_RETURN;
