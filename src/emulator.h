@@ -75,6 +75,7 @@ typedef struct {
   Mirror mirror;
   Bool has_bat_ram;
   Bool has_trainer;
+  Bool ignore_mirror;
   Bool fourscreen;
   Bool is_nes2_0;
   u16 prg8k_banks, prg16k_banks, prg32k_banks;

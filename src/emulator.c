@@ -1657,12 +1657,12 @@ Bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, Bool chr_shift) {
     case 0x8000 ... 0x8003: // PRG select 0
       m->prg_bank[0] = val & 0x1f;
       mapper_vrc_prg_map(e);
-      break;
+      return TRUE;
 
     case 0xa000 ... 0xa003: // PRG select 1
       m->prg_bank[1] = val & 0x1f;
       mapper_vrc_prg_map(e);
-      break;
+      return TRUE;
 
     case 0xb000: case 0xc000: case 0xd000: case 0xe000:  // CHR select X low
     case 0xb002: case 0xc002: case 0xd002: case 0xe002:
@@ -1702,7 +1702,7 @@ void mapper_vrc2_shared_write(E* e, u16 addr, u8 val) {
 void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
   switch (addr) {
-    case 0x9000 ... 0x9001: // Mirror control
+    case 0x9000: // Mirror control
       set_mirror(e, (val + 2) & 3);
       break;
 
@@ -1764,6 +1764,30 @@ MAPPER_VRC_WRITE(mapper_vrc4c_write, vrc4, 6, 7, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4d_write, vrc4, 3, 2, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4e_write, vrc4, 2, 3, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4f_write, vrc4, 0, 1, FALSE)
+
+void mapper21_write(E* e, u16 addr, u8 val) {
+  if (addr & 0b110) {
+    mapper_vrc4a_write(e, addr, val);
+  } else {
+    mapper_vrc4c_write(e, addr, val);
+  }
+}
+
+void mapper23_write(E* e, u16 addr, u8 val) {
+  if (addr & 0b11) {
+    mapper_vrc4f_write(e, addr, val);
+  } else {
+    mapper_vrc4e_write(e, addr, val);
+  }
+}
+
+void mapper25_write(E* e, u16 addr, u8 val) {
+  if (addr & 0b11) {
+    mapper_vrc4b_write(e, addr, val);
+  } else {
+    mapper_vrc4d_write(e, addr, val);
+  }
+}
 
 void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
@@ -1961,7 +1985,8 @@ void cpu_step(E *e) {
       DEBUG("[%" PRIu64 "]: clocked %u=>%u\n", e->s.cy, m->vrc.irq_counter,
             m->vrc.irq_counter + 1);
       if (++m->vrc.irq_counter == 0) {
-        DEBUG("[%" PRIu64 "]: IRQ (reset to %u)\n", e->s.cy, m->vrc.irq_latch);
+        DEBUG("[%" PRIu64 "]: IRQ (reset to %u) [scany=%u]\n", e->s.cy,
+              m->vrc.irq_latch, scany(&e->s.p));
         e->s.c.irq |= IRQ_MAPPER;
         m->vrc.irq_counter = m->vrc.irq_latch;
       }
@@ -2576,8 +2601,10 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
   const CartDbInfo* cart_db_info = cartdb_info_from_file(file_data);
   if (cart_db_info) {
+    LOG("Found in cartdb\n");
     ci->is_nes2_0 = FALSE;
     ci->has_trainer = FALSE;
+    ci->ignore_mirror = FALSE;
     ci->fourscreen = FALSE;
     ci->mapper = cart_db_info->mapper;
     ci->mirror = cart_db_info->mirror;
@@ -2605,7 +2632,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->chr1k_banks = ci->chr4k_banks * 4;
       if (cart_db_info->vram == 2) {
         // Assume it is used for four screen mode.
-        ci->fourscreen = TRUE;
+        ci->ignore_mirror = ci->fourscreen = TRUE;
       }
     }
     ci->chr_data_write = e->s.p.chr_ram;
@@ -2619,7 +2646,8 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->mirror = (flag6 & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
     ci->has_bat_ram = (flag6 & 4) != 0;
     ci->has_trainer = (flag6 & 8) != 0;
-    ci->fourscreen = (flag6 & 0x10) != 0;
+    ci->ignore_mirror = (flag6 & 0x10) != 0;
+    ci->fourscreen = FALSE;
 
     u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
     u32 ines_prg16k_banks = file_data->data[4];
@@ -2638,6 +2666,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     /* Use detection from NESwiki */
     if ((flag7 & 0xc) == 8 &&
         file_data->size >= kHeaderSize + trainer_size + nes2_data_size) {
+      LOG("Found NES 2.0 header\n");
       data_size += nes2_data_size;
       ci->is_nes2_0 = TRUE;
       ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
@@ -2684,17 +2713,19 @@ static Result get_cart_info(E *e, const FileData *file_data) {
         ci->has_bat_ram = FALSE;
       }
     } else if ((flag7 & 0xc) == 0) {
+      LOG("Found iNES header\n");
       data_size += ines_data_size;
       ci->is_nes2_0 = FALSE;
       ci->mapper = (flag7 & 0xf0) | ((flag6 & 0xf0) >> 4);
       ci->prg16k_banks = ines_prg16k_banks;
-      ci->chr8k_banks = nes2_chr8k_banks;
+      ci->chr8k_banks = ines_chr8k_banks;
       ci->prgram8k_banks = file_data->data[8];
       ci->board = (Board)ci->mapper;
     } else {
+      LOG("Found archaic iNES header\n");
       ci->mapper = (flag6 & 0xf0) >> 4;
       ci->prg16k_banks = ines_prg16k_banks;
-      ci->chr8k_banks = nes2_chr8k_banks;
+      ci->chr8k_banks = ines_chr8k_banks;
       ci->prgram8k_banks = file_data->data[8];
       ci->board = (Board)ci->mapper;
     }
@@ -2773,6 +2804,7 @@ Result init_mapper(E *e) {
   case BOARD_TXROM_MMC3C:
   case BOARD_HKROM:
     e->mapper_write = mapper4_write;
+    e->ci.fourscreen = e->ci.ignore_mirror;
     e->s.m.mmc3.bank_select = 0;
     e->s.m.mmc3.irq_latch = 0;
     e->s.m.mmc3.irq_reload = TRUE;
@@ -2814,6 +2846,7 @@ Result init_mapper(E *e) {
     e->mapper_write = mapper_vrc4c_write;
     goto vrc4_shared;
   case BOARD_VRC2A:
+  case BOARD_MAPPER_22:
     e->mapper_write = mapper_vrc2a_write;
     goto vrc_shared;
   case BOARD_VRC2B:
@@ -2833,6 +2866,15 @@ Result init_mapper(E *e) {
     goto vrc4_shared;
   case BOARD_VRC4D:
     e->mapper_write = mapper_vrc4d_write;
+    goto vrc4_shared;
+  case BOARD_MAPPER_21:
+    e->mapper_write = mapper21_write;
+    goto vrc4_shared;
+  case BOARD_MAPPER_23:
+    e->mapper_write = mapper23_write;
+    goto vrc4_shared;
+  case BOARD_MAPPER_25:
+    e->mapper_write = mapper25_write;
     goto vrc4_shared;
   case BOARD_MAPPER_24:
     e->mapper_write = mapper_vrc6a_write;
