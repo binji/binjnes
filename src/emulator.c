@@ -2617,7 +2617,8 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
     ci->prg32k_banks = ci->prg16k_banks / 2;
     ci->prg8k_banks = ci->prg16k_banks * 2;
-    ci->prgram512b_banks = ci->prgram8k_banks * 16;
+    ci->prgram512b_banks =
+        ci->board == BOARD_HKROM ? 1 : ci->prgram8k_banks * 16;
 
     if (cart_db_info->vram && ci->chr4k_banks == 0) {
       ci->chr_data = e->s.p.chr_ram;
@@ -3102,7 +3103,7 @@ Result emulator_write_state(Emulator *e, FileData *file_data) {
 }
 
 Result emulator_read_prg_ram(Emulator* e, const FileData* file_data) {
-  const size_t size = e->ci.prgram8k_banks << 13;
+  const size_t size = e->ci.prgram512b_banks << 9;
   if (!e->ci.has_bat_ram) return OK;
   CHECK_MSG(file_data->size == size,
             "save file is wrong size: %ld, expected %ld.\n",
@@ -3113,7 +3114,7 @@ Result emulator_read_prg_ram(Emulator* e, const FileData* file_data) {
 }
 
 Result emulator_write_prg_ram(Emulator* e, FileData* file_data) {
-  const size_t size = e->ci.prgram8k_banks << 13;
+  const size_t size = e->ci.prgram512b_banks << 9;
   if (!e->ci.has_bat_ram) return OK;
   CHECK(file_data->size >= size);
   memcpy(file_data->data, e->s.c.prg_ram, file_data->size);
@@ -3138,7 +3139,7 @@ Result emulator_write_prg_ram_to_file(Emulator* e, const char* filename) {
   if (!e->ci.has_bat_ram) return OK;
   Result result = ERROR;
   FileData file_data;
-  file_data.size = e->ci.prgram8k_banks << 13;
+  file_data.size = e->ci.prgram512b_banks << 9;
   file_data.data = xmalloc(file_data.size);
   CHECK(SUCCESS(emulator_write_prg_ram(e, &file_data)));
   CHECK(SUCCESS(file_write(filename, &file_data)));
