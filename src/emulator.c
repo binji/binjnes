@@ -2800,6 +2800,7 @@ Result init_mapper(E *e) {
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
     set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
     break;
+  case BOARD_MAPPER_4:
   case BOARD_TXROM_MMC3A:
   case BOARD_TXROM_MMC3B:
   case BOARD_TXROM_MMC3C:
