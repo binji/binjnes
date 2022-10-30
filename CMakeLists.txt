@@ -64,6 +64,29 @@ if (NOT EMSCRIPTEN)
   install(TARGETS binjnes-tester DESTINATION bin)
   target_copy_to_bin(binjnes-tester)
 
+
+  # Sokol stuff
+  find_package(X11)
+  find_package(Threads)
+  find_package(ALSA)
+
+  add_executable(binjnes-sokol
+    src/main.c
+    src/sokol.c
+  )
+  target_include_directories(binjnes-sokol
+    PUBLIC ${PROJECT_SOURCE_DIR}/third_party)
+  target_link_libraries(binjnes-sokol
+    ${OPENGL_gl_LIBRARY}
+    ${X11_X11_LIB}
+    ${X11_Xi_LIB}
+    ${X11_Xcursor_LIB}
+    ALSA::ALSA
+    Threads::Threads
+  )
+  install(TARGETS binjnes-sokol DESTINATION bin)
+  target_copy_to_bin(binjnes-sokol)
+
 else (EMSCRIPTEN)
 
   add_definitions(-Wno-format-security)
