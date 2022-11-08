@@ -3044,27 +3044,26 @@ static void emulator_substep_loop(E *e, Ticks check_ticks) {
 
 EEvent emulator_run_until(E *e, Ticks until_ticks) {
   AudioBuffer* ab = &e->audio_buffer;
-  if (e->s.event & EMULATOR_EVENT_AUDIO_BUFFER_FULL) {
-    ab->position = ab->data;
+  if (audio_buffer_get_frames(ab) >= ab->frames) {
+    // Move extra frames down.
+    f32 *end = ab->data + ab->frames;
+    assert(ab->position >= end);
+    u32 extra_frames = ab->position - end;
+    memmove(ab->data, end, extra_frames * sizeof(f32));
+    ab->position = ab->data + extra_frames;
   }
   e->s.event = 0;
 
+  assert(audio_buffer_get_frames(ab) < ab->frames);
   u64 frames_left = ab->frames - audio_buffer_get_frames(ab);
   Ticks max_audio_ticks =
       e->s.cy +
-      (u32)DIV_CEIL(frames_left * PPU_TICKS_PER_SECOND, ab->frequency);
+      (u32)DIV_CEIL(frames_left * PPU_TICKS_PER_SECOND, ab->frequency) + 5;
   Ticks check_ticks = MIN(until_ticks, max_audio_ticks);
+  u32 old_freq_counter = ab->freq_counter;
   emulator_substep_loop(e, check_ticks);
-  if (e->s.cy >= max_audio_ticks) {
+  if (audio_buffer_get_frames(ab) >= ab->frames) {
     e->s.event |= EMULATOR_EVENT_AUDIO_BUFFER_FULL;
-#if 0
-    int frames = audio_buffer_get_frames(ab);
-    for (int i = 0; i < frames; ++i) {
-      if (i && (i & 31) == 0) { printf("\n"); }
-      printf("%02x ", ab->data[i]);
-    }
-    printf("\n");
-#endif
   }
   if (e->s.cy >= until_ticks) {
     e->s.event |= EMULATOR_EVENT_UNTIL_TICKS;

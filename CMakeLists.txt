@@ -71,7 +71,13 @@ if (NOT EMSCRIPTEN)
   find_package(ALSA)
 
   add_executable(binjnes-sokol
-    src/main.c
+    src/binjnes-sokol.c
+    src/cartdb.c
+    src/common.c
+    src/emulator.c
+    src/joypad.c
+    src/options.c
+    src/rewind.c
     src/sokol.c
   )
   target_include_directories(binjnes-sokol
