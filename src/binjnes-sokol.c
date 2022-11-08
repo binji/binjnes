@@ -427,7 +427,10 @@ static void init_emulator(void) {
       replace_extension(s_rom_filename, SAVE_STATE_EXTENSION);
   emulator_read_prg_ram_from_file(e, s_save_filename);
 
-error:;
+  return;
+
+error:
+  exit(1);
 }
 
 static void init(void) {
