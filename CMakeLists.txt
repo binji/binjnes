@@ -26,33 +26,6 @@ add_custom_target(${name}-copy-to-bin ALL
 endfunction ()
 
 if (NOT EMSCRIPTEN)
-
-  set(OpenGL_GL_PREFERENCE "LEGACY")
-  find_package(SDL2)
-  find_package(OpenGL)
-
-  if (SDL2_FOUND AND OPENGL_FOUND)
-    add_executable(binjnes
-      src/binjnes.c
-      src/common.c
-      src/cartdb.c
-      src/emulator.c
-      src/host.c
-      src/host-gl.c
-      src/host-ui-simple.c
-      src/joypad.c
-      src/options.c
-      src/rewind.c
-    )
-    target_link_libraries(binjnes SDL2::SDL2 SDL2::SDL2main ${OPENGL_gl_LIBRARY})
-
-    install(TARGETS binjnes DESTINATION bin)
-    target_copy_to_bin(binjnes)
-    if (SDL2_DYNAMIC)
-      install(FILES ${SDL2_RUNTIME_LIBRARY} DESTINATION bin)
-    endif ()
-  endif ()
-
   add_executable(binjnes-tester
     src/common.c
     src/cartdb.c
@@ -70,8 +43,8 @@ if (NOT EMSCRIPTEN)
   find_package(Threads)
   find_package(ALSA)
 
-  add_executable(binjnes-sokol
-    src/binjnes-sokol.c
+  add_executable(binjnes
+    src/binjnes.c
     src/cartdb.c
     src/common.c
     src/emulator.c
@@ -80,9 +53,9 @@ if (NOT EMSCRIPTEN)
     src/rewind.c
     src/sokol.c
   )
-  target_include_directories(binjnes-sokol
+  target_include_directories(binjnes
     PUBLIC ${PROJECT_SOURCE_DIR}/third_party)
-  target_link_libraries(binjnes-sokol
+  target_link_libraries(binjnes
     ${OPENGL_gl_LIBRARY}
     ${X11_X11_LIB}
     ${X11_Xi_LIB}
@@ -90,8 +63,8 @@ if (NOT EMSCRIPTEN)
     ALSA::ALSA
     Threads::Threads
   )
-  install(TARGETS binjnes-sokol DESTINATION bin)
-  target_copy_to_bin(binjnes-sokol)
+  install(TARGETS binjnes DESTINATION bin)
+  target_copy_to_bin(binjnes)
 
 else (EMSCRIPTEN)
 

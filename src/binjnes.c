@@ -1,17 +1,17 @@
-/*
- * Copyright (C) 2021 Ben Smith
- *
- * This software may be modified and distributed under the terms
- * of the MIT license.  See the LICENSE file for details.
- */
-
 #include <assert.h>
 #include <stdarg.h>
+#include <stdatomic.h>
+
+#include "sokol/sokol_app.h"
+#include "sokol/sokol_audio.h"
+#include "sokol/sokol_gfx.h"
+#include "sokol/sokol_glue.h"
 
 #include "common.h"
 #include "emulator.h"
-#include "host.h"
+#include "joypad.h"
 #include "options.h"
+#include "rewind.h"
 
 #define SAVE_EXTENSION ".sav"
 #define SAVE_STATE_EXTENSION ".state"
@@ -27,15 +27,26 @@
 
 // TODO: make these configurable?
 #define AUDIO_FREQUENCY 44100
+#define AUDIO_CHANNELS 1
 #define AUDIO_FRAMES 2048 /* ~46ms of latency at 44.1kHz */
 #define REWIND_FRAMES_PER_BASE_STATE 45
 #define REWIND_BUFFER_CAPACITY MEGABYTES(32)
 #define REWIND_CYCLES_PER_FRAME (89432 * 3 / 2) /* Rewind at 1.5x */
 
-typedef struct Overlay {
-  HostTexture* texture;
-  RGBA data[SCREEN_WIDTH * SCREEN_HEIGHT];
-} Overlay;
+#define KEYCODE_COUNT 400
+
+#define OVERSCAN_TOP 8
+#define OVERSCAN_BOTTOM 8
+#define UL 0
+#define UR (SCREEN_WIDTH / 256.0f)
+#define VT (OVERSCAN_TOP / (f32)(SCREEN_HEIGHT))
+#define VB ((SCREEN_HEIGHT - OVERSCAN_BOTTOM) / (f32)(SCREEN_HEIGHT))
+
+typedef struct {
+  RewindResult result;
+  JoypadPlayback joypad_playback;
+  Bool rewinding;
+} RewindState;
 
 typedef struct StatusText {
   char data[GLYPHS_PER_LINE + 1];
@@ -43,24 +54,37 @@ typedef struct StatusText {
   u32 timeout;
 } StatusText;
 
-static struct Emulator* e;
-static struct Host* host;
-
 static const char *s_rom_filename;
-static const char* s_read_joypad_filename;
-static const char* s_write_joypad_filename;
-static const char* s_save_state_filename;
+static const char *s_read_joypad_filename;
+static const char *s_write_joypad_filename;
+static const char *s_save_filename;
+static const char *s_save_state_filename;
 static Bool s_running = TRUE;
 static Bool s_step_frame;
 static Bool s_paused;
-static f32 s_audio_volume = 0.5f;
-static Bool s_rewinding;
 static Ticks s_rewind_start;
 static u32 s_random_seed = 0xcabba6e5;
 static u32 s_render_scale = 4;
-
-static Overlay s_overlay;
+static Bool s_update_viewport = TRUE;
+static f32 s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h;
+static f32 s_audio_volume = 0.5f;
+static f32 s_audio_buffer[AUDIO_FRAMES * AUDIO_CHANNELS * 5 + 1];
+static atomic_size_t s_audio_buffer_read = 0;
+static atomic_size_t s_audio_buffer_write = 0;
+static Bool s_key_state[KEYCODE_COUNT];
+static JoypadBuffer *s_joypad_buffer;
+static RewindBuffer *s_rewind_buffer;
+static RewindState s_rewind_state;
+static Ticks s_last_ticks;
+RGBA s_overlay_rgba[SCREEN_WIDTH * SCREEN_HEIGHT];
 static StatusText s_status_text;
+
+sg_pass_action s_pass_action;
+sg_pipeline s_pipeline;
+sg_bindings s_bindings[2];
+
+static FileData s_rom;
+static Emulator* e;
 
 /* tom-thumb font: https://robey.lag.net/2010/01/23/tiny-monospace-font.html
  * license: CC0
@@ -80,14 +104,14 @@ static const u16 s_font[] = {
 };
 
 static void clear_overlay(void) {
-  memset(s_overlay.data, 0, sizeof(s_overlay.data));
+  memset(s_overlay_rgba, 0, sizeof(s_overlay_rgba));
 }
 
 static void fill_rect(int l, int t, int r, int b, RGBA color) {
   assert(l <= r && t <= b && l >= 0 && r < SCREEN_WIDTH && t >= 0 &&
          b < SCREEN_HEIGHT);
   int i, j;
-  RGBA* dst = &s_overlay.data[t * SCREEN_WIDTH + l];
+  RGBA* dst = &s_overlay_rgba[t * SCREEN_WIDTH + l];
   for (j = t; j < b; ++j) {
     for (i = l; i < r; ++i) {
       *dst++ = color;
@@ -107,7 +131,7 @@ static void draw_char(int x, int y, RGBA color, char c) {
   data >>= 1;
   if (has_descender) y += 1;
   int i, j;
-  RGBA* dst = &s_overlay.data[y * SCREEN_WIDTH + x];
+  RGBA* dst = &s_overlay_rgba[y * SCREEN_WIDTH + x];
   for (j = 0; j < GLYPH_HEIGHT; ++j) {
     for (i = 0; i < GLYPH_WIDTH; ++i) {
       if (data & 1) *dst = color;
@@ -144,90 +168,6 @@ static void update_overlay(void) {
               STATUS_TEXT_Y + GLYPH_HEIGHT + 1, MAKE_RGBA(224, 224, 224, 255));
     draw_str(STATUS_TEXT_X, STATUS_TEXT_Y, STATUS_TEXT_RGBA,
              s_status_text.data);
-    host_upload_texture(host, s_overlay.texture, SCREEN_WIDTH, SCREEN_HEIGHT,
-                        s_overlay.data);
-    host_render_screen_overlay(host, s_overlay.texture);
-  }
-}
-
-static void save_state(void) {
-  if (SUCCESS(emulator_write_state_to_file(e, s_save_state_filename))) {
-    set_status_text("saved state");
-  } else {
-    set_status_text("unable to save state");
-  }
-}
-
-static void load_state(void) {
-  if (SUCCESS(emulator_read_state_from_file(e, s_save_state_filename))) {
-    set_status_text("loaded state");
-  } else {
-    set_status_text("unable to load state");
-  }
-}
-
-static void begin_rewind(void) {
-  if (!s_rewinding) {
-    host_begin_rewind(host);
-    s_rewinding = TRUE;
-    s_rewind_start = emulator_get_ticks(e);
-  }
-}
-
-static void rewind_by(Ticks delta) {
-  Ticks now = emulator_get_ticks(e);
-  Ticks then = now;
-  if (now >= delta) {
-    then = now - delta;
-    host_rewind_to_ticks(host, then);
-  }
-
-  Ticks oldest = host_get_rewind_oldest_ticks(host);
-  Ticks total = s_rewind_start - oldest;
-  Ticks then_diff = then - oldest;
-  int num_ticks = then_diff * (GLYPHS_PER_LINE - 2) / total;
-
-  char buffer[GLYPHS_PER_LINE + 1];
-  buffer[0] = '|';
-  int i;
-  for (i = 1; i < GLYPHS_PER_LINE - 1; ++i) {
-    buffer[i] = i < num_ticks ? '=' : ' ';
-  }
-  buffer[GLYPHS_PER_LINE - 1] = '|';
-  buffer[GLYPHS_PER_LINE] = 0;
-
-  u32 day, hr, min, sec, ms;
-  emulator_ticks_to_time(then, &day, &hr, &min, &sec, &ms);
-  char time[64];
-  snprintf(time, sizeof(time), "%u:%02u:%02u.%02u", day * 24 + hr, min, sec,
-           ms / 10);
-  size_t len = strlen(time);
-  memcpy(&buffer[(GLYPHS_PER_LINE - len) / 2], time, len);
-
-  set_status_text("%s", buffer);
-}
-
-static void end_rewind(void) {
-  host_end_rewind(host);
-  s_rewinding = FALSE;
-}
-
-static void key_down(HostHookContext *ctx, HostKeycode code) {
-  switch (code) {
-    case HOST_KEYCODE_F6: save_state(); break;
-    case HOST_KEYCODE_F9: load_state(); break;
-    case HOST_KEYCODE_N: s_step_frame = TRUE; s_paused = FALSE; break;
-    case HOST_KEYCODE_SPACE: s_paused ^= 1; break;
-    case HOST_KEYCODE_ESCAPE: s_running = FALSE; break;
-    case HOST_KEYCODE_BACKSPACE: begin_rewind(); break;
-    default: break;
-  }
-}
-
-static void key_up(HostHookContext *ctx, HostKeycode code) {
-  switch (code) {
-    case HOST_KEYCODE_BACKSPACE: end_rewind(); break;
-    default: break;
   }
 }
 
@@ -242,7 +182,7 @@ static void usage(int argc, char** argv) {
       argv[0]);
 }
 
-void parse_arguments(int argc, char** argv) {
+static void parse_arguments(int argc, char** argv) {
   static const Option options[] = {
     {'h', "help", 0},
     {'j', "read-joypad", 1},
@@ -323,79 +263,434 @@ error:
   exit(1);
 }
 
-int main(int argc, char **argv) {
-  int result = 1;
-  parse_arguments(argc, argv);
+static void update_viewport(void) {
+  f32 w = sapp_widthf(), h = sapp_heightf();
+  f32 aspect = w / h;
+  f32 want_aspect = (f32)(SCREEN_WIDTH * 8) /
+                    ((SCREEN_HEIGHT - (OVERSCAN_TOP + OVERSCAN_BOTTOM)) * 7);
+  s_viewport_w = aspect < want_aspect ? w : h * want_aspect;
+  s_viewport_h = aspect < want_aspect ? w / want_aspect : h;
+  s_viewport_x = (w - s_viewport_w) * 0.5f;
+  s_viewport_y = (h - s_viewport_h) * 0.5f;
+}
 
-  FileData rom;
-  CHECK(SUCCESS(file_read(s_rom_filename, &rom)));
+static void init_graphics(void) {
+  sg_setup(&(sg_desc){.context = sapp_sgcontext()});
 
-  EmulatorInit emulator_init;
-  ZERO_MEMORY(emulator_init);
-  emulator_init.rom = rom;
-  emulator_init.audio_frequency = AUDIO_FREQUENCY;
-  emulator_init.audio_frames = AUDIO_FRAMES;
-  emulator_init.random_seed = 0;
-  e = emulator_new(&emulator_init);
+  const float verts[] = {
+      -1, +1, UL, VT, //
+      -1, -1, UL, VB, //
+      +1, +1, UR, VT, //
+      +1, -1, UR, VB, //
+  };
+  const uint16_t inds[] = {0, 1, 2, 1, 2, 3};
+
+  // Screen
+  s_bindings[0].vertex_buffers[0] =
+      sg_make_buffer(&(sg_buffer_desc){.data = SG_RANGE(verts)});
+  s_bindings[0].index_buffer = sg_make_buffer(&(sg_buffer_desc){
+      .type = SG_BUFFERTYPE_INDEXBUFFER,
+      .data = SG_RANGE(inds),
+  });
+  s_bindings[0].fs_images[0] = sg_make_image(&(sg_image_desc){
+      .width = SCREEN_WIDTH,
+      .height = SCREEN_HEIGHT,
+      .usage = SG_USAGE_STREAM,
+  });
+
+  // Overlay
+  s_bindings[1].vertex_buffers[0] = s_bindings[0].vertex_buffers[0];
+  s_bindings[1].index_buffer = s_bindings[0].index_buffer;
+  s_bindings[1].fs_images[0] = sg_make_image(&(sg_image_desc){
+      .width = SCREEN_WIDTH,
+      .height = SCREEN_HEIGHT,
+      .usage = SG_USAGE_STREAM,
+  });
+
+  s_pass_action =
+      (sg_pass_action){.colors[0] = {.action = SG_ACTION_CLEAR,
+                                     .value = {0.1f, 0.1f, 0.1f, 1.0f}}};
+  sg_shader shd = sg_make_shader(&(sg_shader_desc){
+      .fs.images[0] = {.name = "tex", .image_type = SG_IMAGETYPE_2D},
+      .vs.source = "#version 330\n"
+                   "layout(location = 0) in vec2 position;\n"
+                   "layout(location = 1) in vec2 texcoord0;\n"
+                   "out vec2 uv;"
+                   "void main() {\n"
+                   "  gl_Position = vec4(position, 0.0, 1.0);\n"
+                   "  uv = texcoord0;\n"
+                   "}\n",
+      .fs.source = "#version 330\n"
+                   "uniform sampler2D tex;"
+                   "in vec2 uv;\n"
+                   "out vec4 frag_color;\n"
+                   "void main() {\n"
+                   "  frag_color = texture(tex, uv);\n"
+                   "}\n"});
+  s_pipeline = sg_make_pipeline(&(sg_pipeline_desc){
+      .shader = shd,
+      .colors[0].blend =
+          {
+              .enabled = true,
+              .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
+              .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+              .op_rgb = SG_BLENDOP_ADD,
+          },
+      .index_type = SG_INDEXTYPE_UINT16,
+      .layout = {.attrs = {[0] = {.format = SG_VERTEXFORMAT_FLOAT2},
+                           [1] = {.format = SG_VERTEXFORMAT_FLOAT2}}},
+  });
+
+  update_viewport();
+}
+
+static void audio_stream(float* dst_buffer, int num_frames, int num_channels) {
+  size_t read_head = atomic_load(&s_audio_buffer_read);
+  size_t write_head = atomic_load(&s_audio_buffer_write);
+  size_t src_avail = read_head <= write_head
+                         ? write_head - read_head
+                         : ARRAY_SIZE(s_audio_buffer) - read_head + write_head;
+  size_t dst_avail = num_frames;
+  size_t to_read = MIN(src_avail, dst_avail);
+#if 0
+  if (to_read != dst_avail) {
+    fprintf(stderr, "audio underflow... wanted=%zu got %zu\n", dst_avail,
+            src_avail);
+  }
+#endif
+  if (read_head + to_read <= ARRAY_SIZE(s_audio_buffer)) {
+    memcpy(dst_buffer, s_audio_buffer + read_head, to_read * sizeof(f32));
+    read_head += to_read;
+  } else {
+    size_t to_end = ARRAY_SIZE(s_audio_buffer) - read_head;
+    memcpy(dst_buffer, s_audio_buffer + read_head, to_end * sizeof(f32));
+    to_read -= to_end;
+    memcpy(dst_buffer + to_end, s_audio_buffer, to_read * sizeof(f32));
+    read_head = to_read;
+  }
+  atomic_store(&s_audio_buffer_read, read_head);
+}
+
+static void init_audio(void) {
+  saudio_setup(&(saudio_desc){
+      .sample_rate = AUDIO_FREQUENCY,
+      .num_channels = AUDIO_CHANNELS,
+      .buffer_frames = AUDIO_FRAMES,
+      .stream_cb = audio_stream,
+  });
+}
+
+static void joypad_callback(JoypadButtons* joyp, void* user_data) {
+  joyp->up = s_key_state[SAPP_KEYCODE_UP];
+  joyp->down = s_key_state[SAPP_KEYCODE_DOWN];
+  joyp->left = s_key_state[SAPP_KEYCODE_LEFT];
+  joyp->right = s_key_state[SAPP_KEYCODE_RIGHT];
+  joyp->B = s_key_state[SAPP_KEYCODE_Z];
+  joyp->A = s_key_state[SAPP_KEYCODE_X];
+  joyp->start = s_key_state[SAPP_KEYCODE_ENTER];
+  joyp->select = s_key_state[SAPP_KEYCODE_TAB];
+
+  Ticks ticks = emulator_get_ticks(e);
+  joypad_append_if_new(s_joypad_buffer, joyp, ticks);
+}
+
+static void init_emulator(void) {
+  CHECK(SUCCESS(file_read(s_rom_filename, &s_rom)));
+  e = emulator_new(&(EmulatorInit){
+      .rom = s_rom,
+      .audio_frequency = AUDIO_FREQUENCY,
+      .audio_frames = AUDIO_FRAMES,
+      .random_seed = 0,
+  });
   CHECK(e != NULL);
 
-  HostInit host_init;
-  ZERO_MEMORY(host_init);
-  host_init.hooks.key_down = key_down;
-  host_init.hooks.key_up = key_up;
-  host_init.render_scale = s_render_scale;
-  host_init.audio_frequency = AUDIO_FREQUENCY;
-  host_init.audio_frames = AUDIO_FRAMES;
-  host_init.audio_volume = s_audio_volume;
-  host_init.rewind.frames_per_base_state = REWIND_FRAMES_PER_BASE_STATE;
-  host_init.rewind.buffer_capacity = REWIND_BUFFER_CAPACITY;
-  host_init.joypad_filename = s_read_joypad_filename;
-  host = host_new(&host_init, e);
-  CHECK(host != NULL);
+  if (s_read_joypad_filename) {
+    FileData file_data;
+    CHECK(SUCCESS(file_read(s_read_joypad_filename, &file_data)));
+    CHECK(SUCCESS(joypad_read(&file_data, &s_joypad_buffer)));
+    file_data_delete(&file_data);
+  } else {
+    emulator_set_joypad_callback(e, joypad_callback, NULL);
+    s_joypad_buffer = joypad_new();
+  }
 
-  const char* save_filename = replace_extension(s_rom_filename, SAVE_EXTENSION);
+  s_rewind_buffer = rewind_new(
+      &(RewindInit){
+          .buffer_capacity = REWIND_BUFFER_CAPACITY,
+          .frames_per_base_state = REWIND_FRAMES_PER_BASE_STATE,
+      },
+      e);
+  s_last_ticks = emulator_get_ticks(e);
+
+  s_save_filename = replace_extension(s_rom_filename, SAVE_EXTENSION);
   s_save_state_filename =
       replace_extension(s_rom_filename, SAVE_STATE_EXTENSION);
-  emulator_read_prg_ram_from_file(e, save_filename);
+  emulator_read_prg_ram_from_file(e, s_save_filename);
 
-  s_overlay.texture = host_create_texture(host, SCREEN_WIDTH, SCREEN_HEIGHT,
-                                          HOST_TEXTURE_FORMAT_RGBA);
+  return;
 
-  f64 refresh_ms = host_get_monitor_refresh_ms(host);
-  while (s_running && host_poll_events(host)) {
-    if (s_rewinding) {
-      rewind_by(REWIND_CYCLES_PER_FRAME);
-    } else if (!s_paused) {
-      EmulatorEvent event = host_run_ms(host, refresh_ms);
-      if (event & EMULATOR_EVENT_INVALID_OPCODE) {
-        // set_status_text("invalid opcode!");
-        s_paused = TRUE;
-      }
-      if (s_step_frame) {
-        // host_reset_audio(host);
-        s_paused = TRUE;
-        s_step_frame = FALSE;
+error:
+  exit(1);
+}
+
+static void init(void) {
+  init_graphics();
+  init_audio();
+  init_emulator();
+
+  set_status_text("Loaded %s", s_rom_filename);
+}
+
+static void inc_audio_volume(f32 delta) {
+  s_audio_volume = CLAMP(s_audio_volume + delta, 0, 1);
+  set_status_text("Volume: %3.f%%", s_audio_volume * 100);
+}
+
+static void write_audio(f32* src, size_t offset, size_t samples) {
+  for (size_t i = 0; i < samples; ++i) {
+    s_audio_buffer[offset + i] = src[i] * s_audio_volume;
+  }
+}
+
+static void run_until_ticks(Ticks until_ticks) {
+  Bool new_frame = FALSE;
+
+  assert(emulator_get_ticks(e) <= until_ticks);
+  EmulatorEvent event;
+  do {
+    event = emulator_run_until(e, until_ticks);
+
+    if (event & EMULATOR_EVENT_NEW_FRAME) {
+      new_frame = TRUE;
+
+      if (!s_rewind_state.rewinding) {
+        rewind_append(s_rewind_buffer, e);
       }
     }
 
-    host_begin_video(host);
-    update_overlay();
-    host_end_video(host);
+    if (event & EMULATOR_EVENT_AUDIO_BUFFER_FULL) {
+      AudioBuffer *audio_buffer = emulator_get_audio_buffer(e);
+      size_t src_avail =
+          MIN(AUDIO_FRAMES, audio_buffer_get_frames(audio_buffer));
+      size_t read_head = atomic_load(&s_audio_buffer_read);
+      size_t write_head = atomic_load(&s_audio_buffer_write);
+      size_t dst_avail =
+          write_head < read_head
+              ? read_head - write_head - 1
+              : ARRAY_SIZE(s_audio_buffer) - write_head + read_head - 1;
+      size_t to_write = MIN(src_avail, dst_avail);
+#if 0
+      if (to_write != src_avail) {
+        fprintf(stderr, "audio overflow... wanted=%zu got %zu\n", src_avail,
+                dst_avail);
+      }
+#endif
+      if (write_head + to_write <= ARRAY_SIZE(s_audio_buffer)) {
+        write_audio(audio_buffer->data, write_head, to_write);
+        write_head += to_write;
+      } else {
+        size_t to_end = ARRAY_SIZE(s_audio_buffer) - write_head;
+        write_audio(audio_buffer->data, write_head, to_end);
+        write_head = to_write - to_end;
+        write_audio(audio_buffer->data + to_end, 0, write_head);
+      }
+      atomic_store(&s_audio_buffer_write, write_head);
+    }
+  } while (!(event & (EMULATOR_EVENT_UNTIL_TICKS | EMULATOR_EVENT_BREAKPOINT |
+                      EMULATOR_EVENT_INVALID_OPCODE)));
+
+  if (new_frame) {
+    sg_update_image(s_bindings[0].fs_images[0],
+                    &(sg_image_data){.subimage[0][0] = SG_RANGE(
+                                         *emulator_get_frame_buffer(e))});
   }
 
+  if (event & EMULATOR_EVENT_INVALID_OPCODE) {
+    // set_status_text("invalid opcode!");
+    s_paused = TRUE;
+  }
+  if (s_step_frame) {
+    // host_reset_audio(host);
+    s_paused = TRUE;
+    s_step_frame = FALSE;
+  }
+}
+
+static void rewind_begin(void) {
+  s_rewind_state.rewinding = TRUE;
+  s_rewind_start = emulator_get_ticks(e);
+}
+
+static void rewind_by(Ticks delta) {
+  Ticks now = emulator_get_ticks(e);
+  Ticks then = now;
+  if (now >= delta) {
+    then = now - delta;
+
+    CHECK(SUCCESS(
+        rewind_to_ticks(s_rewind_buffer, then, &s_rewind_state.result)));
+
+    CHECK(SUCCESS(emulator_read_state(e, &s_rewind_state.result.file_data)));
+    assert(emulator_get_ticks(e) == s_rewind_state.result.info->ticks);
+
+    if (emulator_get_ticks(e) < then) {
+      JoypadCallbackInfo old_jci = emulator_get_joypad_callback(e);
+      emulator_set_joypad_playback_callback(e, s_joypad_buffer,
+                                            &s_rewind_state.joypad_playback);
+      run_until_ticks(then);
+      emulator_set_joypad_callback(e, old_jci.callback, old_jci.user_data);
+    }
+  }
+
+  Ticks oldest = rewind_get_oldest_ticks(s_rewind_buffer);
+  Ticks total = s_rewind_start - oldest;
+  Ticks then_diff = then - oldest;
+  int num_ticks = then_diff * (GLYPHS_PER_LINE - 2) / total;
+
+  char buffer[GLYPHS_PER_LINE + 1];
+  buffer[0] = '|';
+  int i;
+  for (i = 1; i < GLYPHS_PER_LINE - 1; ++i) {
+    buffer[i] = i < num_ticks ? '=' : ' ';
+  }
+  buffer[GLYPHS_PER_LINE - 1] = '|';
+  buffer[GLYPHS_PER_LINE] = 0;
+
+  u32 day, hr, min, sec, ms;
+  emulator_ticks_to_time(then, &day, &hr, &min, &sec, &ms);
+  char time[64];
+  snprintf(time, sizeof(time), "%u:%02u:%02u.%02u", day * 24 + hr, min, sec,
+           ms / 10);
+  size_t len = strlen(time);
+  memcpy(&buffer[(GLYPHS_PER_LINE - len) / 2], time, len);
+
+  set_status_text("%s", buffer);
+error:;
+}
+
+static void rewind_end(void) {
+  Ticks ticks = emulator_get_ticks(e);
+  assert(s_rewind_state.rewinding);
+
+  if (s_rewind_state.result.info) {
+    rewind_truncate_to(s_rewind_buffer, e, &s_rewind_state.result);
+    if (!s_read_joypad_filename) {
+      joypad_truncate_to(s_joypad_buffer,
+                         s_rewind_state.joypad_playback.current);
+      /* Append the current joypad state. */
+      JoypadButtons buttons;
+      joypad_callback(&buttons, NULL);
+    }
+    s_last_ticks = emulator_get_ticks(e);
+  }
+
+  memset(&s_rewind_state, 0, sizeof(s_rewind_state));
+}
+
+static void frame(void)  {
+  if (s_rewind_state.rewinding) {
+    rewind_by(REWIND_CYCLES_PER_FRAME);
+  } else if (!s_paused) {
+    f64 delta_sec = sapp_frame_duration();
+    Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
+    Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
+    run_until_ticks(until_ticks);
+    s_last_ticks = emulator_get_ticks(e);
+  }
+
+  update_overlay();
+  sg_update_image(s_bindings[1].fs_images[0],
+                  &(sg_image_data){.subimage[0][0] = SG_RANGE(s_overlay_rgba)});
+
+  sg_begin_default_pass(&s_pass_action, sapp_width(), sapp_height());
+  sg_apply_viewportf(s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h, TRUE);
+  sg_apply_pipeline(s_pipeline);
+  // Screen
+  sg_apply_bindings(&s_bindings[0]);
+  sg_draw(0, 6, 1);
+  // Overlay
+  sg_apply_bindings(&s_bindings[1]);
+  sg_draw(0, 6, 1);
+  sg_end_pass();
+  sg_commit();
+}
+
+static void cleanup(void) {
   if (s_write_joypad_filename) {
-    host_write_joypad_to_file(host, s_write_joypad_filename);
+    FileData file_data;
+    joypad_init_file_data(s_joypad_buffer, &file_data);
+    joypad_write(s_joypad_buffer, &file_data);
+    file_write(s_write_joypad_filename, &file_data);
+    file_data_delete(&file_data);
   } else {
-    emulator_write_prg_ram_to_file(e, save_filename);
+    emulator_write_prg_ram_to_file(e, s_save_filename);
   }
 
-  result = 0;
-error:
-  if (host) {
-    host_delete(host);
+  sg_shutdown();
+  saudio_shutdown();
+}
+
+static void save_state(void) {
+  if (SUCCESS(emulator_write_state_to_file(e, s_save_state_filename))) {
+    set_status_text("saved state");
+  } else {
+    set_status_text("unable to save state");
   }
-  if (e) {
-    emulator_delete(e);
+}
+
+static void load_state(void) {
+  if (SUCCESS(emulator_read_state_from_file(e, s_save_state_filename))) {
+    set_status_text("loaded state");
+  } else {
+    set_status_text("unable to load state");
   }
-  return result;
+}
+
+static void event(const sapp_event *event) {
+  switch (event->type) {
+  case SAPP_EVENTTYPE_RESIZED:
+    update_viewport();
+    break;
+
+  case SAPP_EVENTTYPE_KEY_DOWN:
+    switch (event->key_code) {
+      case SAPP_KEYCODE_F6: save_state(); break;
+      case SAPP_KEYCODE_F9: load_state(); break;
+      case SAPP_KEYCODE_N: s_step_frame = TRUE; s_paused = FALSE; break;
+      case SAPP_KEYCODE_SPACE: s_paused ^= 1; break;
+      case SAPP_KEYCODE_MINUS: inc_audio_volume(-0.05f); break;
+      case SAPP_KEYCODE_EQUAL: inc_audio_volume(+0.05f); break;
+      case SAPP_KEYCODE_BACKSPACE: rewind_begin(); break;
+      default: break;
+    }
+    goto key;
+
+  case SAPP_EVENTTYPE_KEY_UP:
+    switch (event->key_code) {
+      case SAPP_KEYCODE_BACKSPACE: rewind_end(); break;
+      default: break;
+    }
+    goto key;
+
+  key:
+    s_key_state[event->key_code] = event->type == SAPP_EVENTTYPE_KEY_DOWN;
+    break;
+
+  default:
+    break;
+  }
+}
+
+sapp_desc sokol_main(int argc, char *argv[]) {
+  parse_arguments(argc, argv);
+
+  return (sapp_desc){
+      .init_cb = init,
+      .frame_cb = frame,
+      .cleanup_cb = cleanup,
+      .event_cb = event,
+      .width = SCREEN_WIDTH * s_render_scale,
+      .height = SCREEN_HEIGHT * s_render_scale,
+      .window_title = "binjnes",
+  };
 }
