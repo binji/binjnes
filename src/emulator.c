@@ -207,7 +207,7 @@ void ppu_write(E *e, u16 addr, u8 val) {
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      e->chr_map_write[(addr >> 10) & 7][addr & 0x3ff] = val;
+      e->chr_map_write[addr >> 10][addr & 0x3ff] = val;
       break;
 
     case 15:
@@ -1333,7 +1333,7 @@ void cpu_write(E *e, u16 addr, u8 val) {
     break;
   }
 
-  case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15:
+  case 5: case 8: case 9: case 10: case 11: case 12: case 13: case 14: case 15:
     e->mapper_write(e, addr, val);
     break;
   }
@@ -1375,8 +1375,7 @@ static void update_chr1k_map(E* e) {
   for (size_t i = 0; i < ARRAY_SIZE(e->s.m.chr1k_bank); ++i) {
     u16 bank = e->s.m.chr1k_bank[i] & (e->ci.chr1k_banks - 1);
     e->chr_map[i] = e->ci.chr_data + (bank << 10);
-    // TODO: chr_data_write always points into chr_ram (which is fixed at 8KiB).
-    e->chr_map_write[i] = e->ci.chr_data_write + ((bank & 7) << 10);
+    e->chr_map_write[i] = e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
   }
 }
 
@@ -1448,7 +1447,7 @@ void mapper0_write(E *e, u16 addr, u8 val) {}
 
 void mapper1_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  assert(addr >= 0x8000);
+  if (addr < 0x8000) return;
   if (val & 0x80) {
     m->mmc1.bits = 5;
     m->mmc1.data = 0;
@@ -1499,21 +1498,21 @@ void mapper1_write(E *e, u16 addr, u8 val) {
 
 void mapper2_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  assert(addr >= 0x8000);
+  if (addr < 0x8000) return;
   m->prg_bank[0] = val & (e->ci.prg16k_banks - 1);
   set_prg16k_map(e, m->prg_bank[0], e->ci.prg16k_banks - 1);
 }
 
 void mapper3_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  assert(addr >= 0x8000);
+  if (addr < 0x8000) return;
   m->chr_bank[0] = val & (e->ci.chr8k_banks - 1);
   set_chr8k_map(e, m->chr_bank[0]);
 }
 
 void mapper206_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  assert(addr >= 0x8000);
+  if (addr < 0x8000) return;
   if ((addr & 0xe001) == 0x8000) { // Bank Select
     m->m206.bank_select = val & 7;
   } else if ((addr & 0xe001) == 0x8001) { // Bank data
@@ -1539,7 +1538,6 @@ void mapper206_write(E *e, u16 addr, u8 val) {
 
 void mapper4_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  assert(addr >= 0x8000);
   switch (addr >> 12) {
     case 8: case 9: { // Bank Select / Bank Data
       if (addr & 1) {
@@ -1625,7 +1623,7 @@ void mapper4_write(E *e, u16 addr, u8 val) {
 
 void mapper7_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  assert(addr >= 0x8000);
+  if (addr < 0x8000) return;
   m->prg_bank[0] = (val & 7) & (e->ci.prg32k_banks - 1);
   set_prg32k_map(e, m->prg_bank[0]);
   set_mirror(e, MIRROR_SINGLE_0 + ((val & 0x10) ? 0 : 1));
@@ -1633,7 +1631,7 @@ void mapper7_write(E *e, u16 addr, u8 val) {
 
 void mapper11_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
-  assert(addr >= 0x8000);
+  if (addr < 0x8000) return;
   set_chr8k_map(e, (m->chr_bank[0] = (val >> 4) & (e->ci.chr8k_banks - 1)));
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
 }
@@ -1914,9 +1912,55 @@ void mapper_vrc6b_write(E *e, u16 addr, u8 val) {
   mapper_vrc6_shared_write(e, VRC_ADDR(addr, 1, 0), val);
 }
 
+void mapper28_write(E* e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr >> 12) {
+    case 5:
+      m->m28.reg_select = val & 0x81;
+      break;
+
+    default:
+      switch (m->m28.reg_select) {
+      case 0x00:
+        set_chr8k_map(e, (m->chr_bank[0] = val & 3 & (e->ci.chr8k_banks - 1)));
+        goto onescreen;
+      case 0x01:
+        m->m28.inner_bank = val & 0xf;
+        // fallthrough
+      onescreen:
+        if (e->s.p.mirror <= MIRROR_SINGLE_1) {
+          set_mirror(e, (val >> 4) & 1);
+        }
+        break;
+
+      case 0x80:
+        m->m28.bank_mode = val >> 2;
+        set_mirror(e, val & 3);
+        break;
+
+      case 0x81:
+        m->m28.outer_bank = val;
+        break;
+      }
+
+      u16 outer_bank = m->m28.outer_bank << 1;
+      u8 bank_mode = m->m28.bank_mode;
+      u16 current_bank = m->m28.inner_bank << (bank_mode & 2 ? 0 : 1);
+      u16 bank_mask = (2 << ((bank_mode >> 2) & 3)) - 1;
+      u16 bank = (current_bank & bank_mask) | (outer_bank & ~bank_mask);
+      set_prg16k_map(
+          e,
+          (m->prg_bank[0] = ((bank_mode & 3) == 2 ? outer_bank : bank) &
+                            (e->ci.prg16k_banks - 1)),
+          (m->prg_bank[1] = (((bank_mode & 3) == 3 ? outer_bank : bank) | 1) &
+                            (e->ci.prg16k_banks - 1)));
+      break;
+  }
+}
+
 void mapper34_bnrom_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
-  assert(addr >= 0x8000);
+  if (addr < 0x8000) return;
   set_prg32k_map(e, (m->prg_bank[0] = val & (e->ci.prg32k_banks - 1)));
 }
 
@@ -2661,6 +2705,9 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     u32 nes2_prg_ram_banks = (64 << (file_data->data[10] & 0xf)) >> 13;
     u32 nes2_prg_ram_bat_banks =
         (64 << ((file_data->data[10] & 0xf0) >> 4)) >> 13;
+    u32 nes2_chr_ram_banks = (64 << (file_data->data[11] & 0xf)) >> 13;
+    u32 nes2_chr_ram_bat_banks =
+        (64 << ((file_data->data[11] & 0xf0) >> 4)) >> 13;
 
     u32 data_size = kHeaderSize + trainer_size;
 
@@ -2713,6 +2760,12 @@ static Result get_cart_info(E *e, const FileData *file_data) {
         ci->prgram8k_banks = nes2_prg_ram_banks;
         ci->has_bat_ram = FALSE;
       }
+      u32 chrram8k_banks = MAX(nes2_chr_ram_bat_banks, nes2_chr_ram_banks);
+      if (chrram8k_banks > 0) {
+        ci->chr_data = e->s.p.chr_ram;
+        ci->chr8k_banks = chrram8k_banks;
+        printf("chrram from nes 2.0 header: %u banks\n", chrram8k_banks);
+      }
     } else if ((flag7 & 0xc) == 0) {
       LOG("Found iNES header\n");
       data_size += ines_data_size;
@@ -2743,15 +2796,17 @@ static Result get_cart_info(E *e, const FileData *file_data) {
               "prg ram size must be <= 8192 (got %u).\n", ci->prgram8k_banks);
 
     ci->prg_data = file_data->data + kHeaderSize + trainer_size;
-    if (ci->chr8k_banks == 0) { // Assume CHR RAM
-      ci->chr_data = e->s.p.chr_ram;
-      // Assume 8KiB of RAM (TODO: how to know?)
-      ci->chr8k_banks = 1;
-      ci->chr4k_banks = 2;
-      ci->chr2k_banks = 4;
-      ci->chr1k_banks = 8;
-    } else { // CHR ROM
-      ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
+    if (!ci->is_nes2_0) {
+      if (ci->chr8k_banks == 0) { // Assume CHR RAM
+        ci->chr_data = e->s.p.chr_ram;
+        // Assume 8KiB of RAM (TODO: how to know?)
+        ci->chr8k_banks = 1;
+        ci->chr4k_banks = 2;
+        ci->chr2k_banks = 4;
+        ci->chr1k_banks = 8;
+      } else { // CHR ROM
+        ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
+      }
     }
     ci->chr_data_write = e->s.p.chr_ram;
   }
@@ -2899,6 +2954,14 @@ Result init_mapper(E *e) {
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
+
+  case BOARD_MAPPER_28:
+    e->mapper_write = mapper28_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
+    break;
+
   case BOARD_MAPPER_34:
   case BOARD_BNROM:
   case BOARD_NINA001:

@@ -21,6 +21,9 @@ extern "C" {
 #define CPU_TICKS_PER_SECOND 1789772
 #define APU_TICKS_PER_SECOND 894886
 
+#define MAX_CHRRAM_SIZE 0x8000
+#define CHRRAM1K_MASK ((MAX_CHRRAM_SIZE >> 10) - 1)
+
 typedef void (*JoypadCallback)(struct JoypadButtons joyp[2], void* user_data);
 
 typedef struct JoypadCallbackInfo {
@@ -109,6 +112,10 @@ typedef struct {
       Bool irq_enable, irq_enable_after_ack, irq_cycle_mode;
       u8 ppu_bank_style; // VRC6 only
     } vrc;
+
+    struct {
+      u8 reg_select, inner_bank, bank_mode, outer_bank;
+    } m28;
   };
   u16 prg_ram_bank_en, prg_ram_write_bank_en; // Bit map of enabled 512b banks.
   Bool prg_ram_en, has_a12_irq, has_vrc_irq, has_vrc_audio;
@@ -135,7 +142,7 @@ typedef struct {
 
 typedef struct {
   RGBA rgbapal[32];
-  u8 ram[0x1000], chr_ram[0x2000], oam[0x100], oam2[0x20];
+  u8 ram[0x1000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
   u32x4 bgatshift, bgatpreshift;
   u16x8 bgsprleftmask;
   u16 cnt1, cnt2, v, t, atb, last_a12;
