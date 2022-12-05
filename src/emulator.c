@@ -651,12 +651,29 @@ static void set_halt(A *a, int chan, u8 val) {
   a->halt[chan] = (val & (chan == 2 ? 0x80 : 0x20)) ? ~0 : 0;
 }
 
+static u16x8 get_sweep_target_or_mute(A* a) {
+  u16x8 diff = {a->period[0] >> a->swshift[0], a->period[1] >> a->swshift[1]},
+        ndiff = ~diff + (u16x8){0, 1};
+  u16x8 target = a->period + blendv_u16x8(diff, ndiff, a->swneg);
+  u16x8 old_mute = a->swmute_mask;
+  u16x8 mute = (a->period < 8) | (target > 0x7ff);
+  a->swmute_mask = ~mute;
+  if (a->swmute_mask[0] != old_mute[0] ||
+      a->swmute_mask[1] != old_mute[1]) {
+    LOG("muting changed: %u->%u, %u->%u (period: %u %u) (target: %u %u)\n",
+        old_mute[0], a->swmute_mask[0], old_mute[1], a->swmute_mask[1],
+        a->period[0], a->period[1], target[0], target[1]);
+  }
+  return target;
+}
+
 static void set_sweep(A *a, int chan, u8 val) {
   a->swshift[chan] = val & 7;
   a->swneg[chan] = (val & 8) ? ~0 : 0;
   a->swperiod[chan] = (val >> 4) & 7;
   a->swen[chan] = (val & 0x80) ? ~0 : 0;
   a->swreload[chan] = ~0;
+  get_sweep_target_or_mute(a);
 }
 
 static Bool is_len_enabled(A *a, int chan) {
@@ -682,12 +699,14 @@ static void start_chan(A* a, int chan, u8 val) {
   if (is_len_enabled(a, chan)) {
     Bool should_start = is_valid_period(chan, a->period[chan]);
     set_len(a, chan, val);
-    a->timer[chan] = a->period[chan];
     if (chan == 2) {
       a->trireload = TRUE;
       should_start = should_start && (a->reg[8] & 0x7f);
     } else {
       a->start[chan] = ~0;
+    }
+    if (chan < 2) {
+      a->seq[chan] = 0;
     }
     a->play_mask[chan] = should_start ? ~0 : 0;
     a->update = TRUE;
@@ -704,15 +723,17 @@ static void set_period(A* a, int chan, u16 val) {
   if (!is_valid_period(chan, a->period[chan] = val)) {
     a->play_mask[chan] = 0;
   }
-  DEBUG("      chan%d: timer=%u len=%u\n", chan, a->period[chan], a->len[chan]);
+  if (chan < 2) {
+    get_sweep_target_or_mute(a);
+  }
 }
 
 static void set_period_lo(A* a, int chan, u8 val) {
-  set_period(a, chan, ((a->reg[3 + chan * 4] & 7) << 8) | val);
+  set_period(a, chan, (a->period[chan] & 0x700) | val);
 }
 
 static void set_period_hi(A* a, int chan, u8 val) {
-  set_period(a, chan, ((val & 7) << 8) | a->reg[2 + chan * 4]);
+  set_period(a, chan, ((val & 7) << 8) | (a->period[chan] & 0xff));
   start_chan(a, chan, val);
 }
 
@@ -731,8 +752,9 @@ static void apu_tick(E *e) {
 
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
   // Reload the timers that are zero.
-  u16x8 timer0 = (a->timer < timer_diff) & a->play_mask;
+  u16x8 timer0 = a->timer < timer_diff;
   a->timer = blendv_u16x8(a->timer - timer_diff, a->period, timer0);
+  timer0 &= a->play_mask;
 
   if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4] | timer0[5] |
       timer0[6] | timer0[7]) {
@@ -743,7 +765,7 @@ static void apu_tick(E *e) {
       a->sample[0] = pduty[a->reg[2] >> 6][a->seq[0]];
     }
     if (timer0[1]) {
-      a->sample[1] = pduty[a->reg[3] >> 6][a->seq[1]];
+      a->sample[1] = pduty[a->reg[6] >> 6][a->seq[1]];
     }
     if (timer0[2]) {
       a->sample[2] = trisamp[a->seq[2]];
@@ -811,8 +833,10 @@ static void apu_tick(E *e) {
 
   if (a->update) {
     typedef s16 s16x4 __attribute__((vector_size(8)));
+    u16x8 play_mask =
+        a->play_mask & (a->swmute_mask | (u16x8){0, 0, ~0, ~0, ~0, ~0, ~0, ~0});
     u32x4 play_mask4 =
-        (u32x4) __builtin_convertvector(*(s16x4 *)&a->play_mask, s32x4) |
+        (u32x4) __builtin_convertvector(*(s16x4 *)&play_mask, s32x4) |
         (s32x4){0, 0, -1, 0};
     f32x4 sampvol = (f32x4)((u32x4)a->sample & play_mask4) * a->vol;
 
@@ -828,7 +852,7 @@ static void apu_tick(E *e) {
 
     if (e->s.m.has_vrc_audio) {
       u32x4 play_mask4 = (u32x4) __builtin_convertvector(
-          (s16x4)__builtin_shufflevector(a->play_mask, (u16x8){}, 5, 6, 7, 8),
+          (s16x4)__builtin_shufflevector(play_mask, (u16x8){}, 5, 6, 7, 8),
           s32x4);
       f32x4 sampvol = (f32x4)((u32x4)a->vrc_sample & play_mask4) * a->vrc_vol;
       a->mixed += (sampvol[0] + sampvol[1] + sampvol[2]) * 0.01f;
@@ -928,17 +952,14 @@ static void apu_half(E *e) {
   a->play_mask &= ~len0;
 
   // sweep unit
-  u16x8 diff = {a->period[0] >> a->swshift[0], a->period[1] >> a->swshift[1]},
-        ndiff = ~diff + (u16x8){0, 1};
-  u16x8 target = a->period + blendv_u16x8(diff, ndiff, a->swneg);
-  u16x8 mute = (a->period < 8) | (target >= 0x7ff);
-  u16x8 swdiv0 = a->swdiv == 0,
-        swshift0 = a->swshift == 0,
-        swupdate = ~swshift0 & swdiv0 & a->swen & ~mute,
+  u16x8 target = get_sweep_target_or_mute(a);
+  u16x8 swdiv0 = a->swdiv == 0, swshift0 = a->swshift == 0,
+        swupdate = ~swshift0 & swdiv0 & a->swen & a->swmute_mask,
         swdec = ~(swdiv0 | a->swreload);
   a->period = blendv_u16x8(a->period, target, swupdate);
   a->swdiv = blendv_u16x8(a->swperiod, a->swdiv - 1, swdec);
   a->swreload = (u16x8){0, 0};
+  get_sweep_target_or_mute(a);
 }
 
 void apu_step(E *e) {
@@ -2998,7 +3019,7 @@ Result init_mapper(E *e) {
     break;
   unsupported:
   default:
-    CHECK_MSG(FALSE, "Unsupported mapper: %d", e->ci.mapper);
+    CHECK_MSG(FALSE, "Unsupported mapper: %d\n", e->ci.mapper);
   }
 
   return OK;
@@ -3024,6 +3045,8 @@ Result init_emulator(E *e, const EInit *init) {
   e->s.a.len[4] = 1;
   e->s.a.halt[4] = ~0;
   e->s.a.play_mask[4] = ~0;
+  // Default to all channels unmuted. Using scalar - vector hack for broadcast.
+  e->s.a.swmute_mask = ~0 - (u16x8){};
 
   return OK;
   ON_ERROR_RETURN;
