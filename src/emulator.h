@@ -145,11 +145,11 @@ typedef struct {
   u8 ram[0x1000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
   u32x4 bgatshift, bgatpreshift;
   u16x8 bgsprleftmask;
-  u16 cnt1, cnt2, v, t, atb, last_a12;
-  u8 state, x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
-  Bool w, oddframe, a12_low;
+  u32 state, fbidx, frame;
+  u16 v, t, atb, last_a12;
+  u8 x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
+  Bool enabled, w, oddframe, a12_low;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
-  u32 fbidx, bits_mask, frame;
   Spr spr;
   u64 read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy, a12_low_count,
       bg_changed_cy;

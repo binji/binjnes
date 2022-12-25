@@ -66,10 +66,10 @@ static void spr_step(E *e);
 
 static const u8 s_spr_consts[], s_opcode_bits[], s_dmc_stall[];
 static const u16 s_cpu_decode, s_callvec, s_oamdma, s_dmc;
-static const u16 s_ppu_consts[], s_apu_consts[], s_apu_bits[], s_opcode_loc[];
-static const u32 s_ppu_bits[], s_spr_bits[], s_ppu_enabled_mask,
-    s_ppu_disabled_mask;
+static const u16 s_apu_consts[], s_apu_bits[], s_opcode_loc[];
+static const u32 s_spr_bits[];
 static const u64 s_cpu_bits[];
+static const u8 s_ppu_steps_en[], s_ppu_steps_dis[];
 
 // PPU stuff ///////////////////////////////////////////////////////////////////
 
@@ -86,41 +86,6 @@ static inline u16 reverse_interleave(u8 h, u8 l) {
             C = 0x200040008001ull;
   return (((l * A & B) * C >> 43) & 0x5555) |
          (((h * A & B) * C >> 42) & 0xAAAA);
-}
-
-typedef struct {
-  int line;
-  int cy;
-} LYCY;
-
-static LYCY ppu_line_cy(P* p) {
-  u8 s = p->state;
-  u16 c1 = p->cnt1, c2 = p->cnt2;
-  switch (s) {
-    default:
-    case 0:         return (LYCY){0, 0};
-    case 1:         return (LYCY){240 - c1, s};
-    case 2 ... 7:   return (LYCY){240 - c1, s + 256 - 8 * c2};
-    case 8 ... 9:   return (LYCY){240 - c1, s + 248 - 8 * c2};
-    case 10 ... 11: return (LYCY){240 - c1, s + 246};
-    case 12 ... 13: return (LYCY){240 - c1, 321 - c2};
-    case 14 ... 21: return (LYCY){240 - c1, s + 324 - 8 * c2};
-    case 22 ... 24: return (LYCY){240 - c1, s + 316};
-    case 25:        return (LYCY){241 - c1, 0};
-    case 26:        return (LYCY){240, 1};
-    case 27:        return (LYCY){240, 341 - c2};
-    case 28 ... 29: return (LYCY){241, s - 28};
-    case 30:        return (LYCY){241 + (6821 - c2) / 341, (6821 - c2) % 341};
-    case 31:        return (LYCY){-1, 1};
-    case 32 ... 37: return (LYCY){-1, s + 226 - 8 * c2};
-    case 38 ... 39: return (LYCY){-1, s + 218 - 8 * c2};
-    case 40 ... 41: return (LYCY){-1, s + 216};
-    case 42 ... 43: return (LYCY){-1, 280 - c2};
-    case 44 ... 45: return (LYCY){-1, 305 - c2};
-    case 46 ... 47: return (LYCY){-1, 321 - c2};
-    case 48 ... 55: return (LYCY){-1, s + 290 - 8 * c2};
-    case 56 ... 58: return (LYCY){-1, 282 + s};
-  }
 }
 
 static void do_a12_access(E* e, u16 addr) {
@@ -332,168 +297,114 @@ static void shift_dis(E *e) {
   e->frame_buffer[p->fbidx++] = p->rgbapal[0];
 }
 
-static void ppu_step(E *e) {
+static inline void reload(E *e) {
+  P* p = &e->s.p;
+  p->bgatshift[0] =
+      (reverse_interleave(p->ptbh, p->ptbl) << 16) | (p->bgatshift[0] >> 16);
+  p->bgatshift[1] = (p->atb << 16) | (p->bgatshift[1] >> 16);
+  p->bgatpreshift = p->bgatshift >> (p->x * 2);
+}
+
+static inline void spreval(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-repeat:
-  if (p->bits_mask == s_ppu_enabled_mask) {
-    LYCY lycy = ppu_line_cy(p);
-    DEBUG("cy:%" PRIu64 " state:%u fbidx:%u v:%04hx (x:%u fy:%u y:%u nt:%u) "
-          "sprstate:%u (s:%u d:%u) (ly:%d cy:%d)\n",
-          e->s.cy, p->state, p->fbidx, p->v, p->v & 0x1f, (p->v >> 12) & 7,
-          (p->v >> 5) & 0x1f, (p->v >> 10) & 3, spr->state, spr->s, spr->d,
-          lycy.line, lycy.cy);
-  }
-  Bool z = FALSE;
-  u16 cnst = s_ppu_consts[p->state];
-  u32 bits = s_ppu_bits[p->state++] & p->bits_mask;
+  spr->state = spr->s = spr->d = 0;
+  spr->cnt = 32;
+  spr->sovf = FALSE;
+  p->bgsprleftmask[0] = (p->ppumask & 2) ? 0xffff : 0;
+  p->bgsprleftmask[1] = (p->ppumask & 4) ? 0xffff : 0;
+}
 
-  while (bits) {
-    int bit = __builtin_ctzll(bits);
-    bits &= bits - 1;
-    switch (bit) {
-      case 0: read_ntb(e); break;
-      case 1: read_atb(e); break;
-      case 2: p->ptbl = read_ptb(e, 0); break;
-      case 3: p->ptbh = read_ptb(e, 8); break;
-      case 4: inch(p); break;
-      case 5: incv(p); break;
-      case 6: shift_en(e); break;
-      case 7: shift_dis(e); break;
-      case 8: shift_bg(e); break;
-      case 9: {
-        p->bgatshift[0] = (reverse_interleave(p->ptbh, p->ptbl) << 16) |
-                          (p->bgatshift[0] >> 16);
-        p->bgatshift[1] = (p->atb << 16) | (p->bgatshift[1] >> 16);
-        p->bgatpreshift = p->bgatshift >> (p->x * 2);
-        break;
-      }
-      case 10:
-        spr->state = spr->s = spr->d = 0;
-        spr->cnt = 32;
-        spr->sovf = FALSE;
-        p->bgsprleftmask[0] = (p->ppumask & 2) ? 0xffff : 0;
-        p->bgsprleftmask[1] = (p->ppumask & 4) ? 0xffff : 0;
-        break;
-      case 11: spr->state = 18; spr->cnt = 8; spr->s = 0; break;
-      case 12: spr_step(e); break;
-      case 13: ppu_t_to_v(p, 0x041f); break;
-      case 14: ppu_t_to_v(p, 0x7be0); break;
-      case 15: p->cnt1 = cnst; break;
-      case 16: p->cnt2 = cnst; break;
-      case 17:
-        DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", e->s.cy,
-              e->s.p.frame, p->oddframe ^ 1);
-        p->fbidx = 0;
-        p->frame++;
-        if ((p->oddframe ^= 1) &&
-            !!(p->ppumask & 8) == (e->s.cy - p->bg_changed_cy >= 2)) {
-          DEBUG("(%" PRIu64 "): skipping cycle\n", e->s.cy);
-          goto repeat;
-        }
-        break;
-      case 18: z = --p->cnt1 == 0; break;
-      case 19: z = --p->cnt2 == 0; break;
-      case 20: if (!z) { p->state = cnst; } break;
-      case 21: if (z) { p->state = cnst; } break;
-      case 22:
-        if (p->ppuctrl & 0x80) {
-          u64 delta_cy = e->s.cy - e->s.c.set_vec_cy;
-          e->s.c.req_nmi = TRUE;
-          p->nmi_cy = e->s.cy;
-          DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
-        }
-        break;
-      case 23:
-        if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
-        e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-        DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
-              p->ppustatus);
-        break;
-      case 24:
-        DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
-        p->ppustatus = 0;
-        if (e->s.cy == p->write_ctrl_cy) { e->s.c.req_nmi = FALSE; }
-        break;
-      case 25: p->state = cnst; break;
-      default:
-        FATAL("NYI: ppu step %d\n", bit);
+static inline void sprfetch(E* e) {
+  Spr* spr = &e->s.p.spr;
+  spr->state = 18;
+  spr->cnt = 8;
+  spr->s = 0;
+}
+
+static void ppu_step(E *e) {
+  P* p = &e->s.p;
+  const u8* steps = p->enabled ? s_ppu_steps_en : s_ppu_steps_dis;
+repeat:
+  switch (steps[p->state++]) {
+  case 0: break;
+  case 1:
+    DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
+    p->ppustatus = 0;
+    if (e->s.cy == p->write_ctrl_cy) { e->s.c.req_nmi = FALSE; }
+    break;
+  case 2:
+    if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
+    e->s.event |= EMULATOR_EVENT_NEW_FRAME;
+    DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
+          p->ppustatus);
+    break;
+  case 3:
+    if (p->ppuctrl & 0x80) {
+      u64 delta_cy = e->s.cy - e->s.c.set_vec_cy;
+      e->s.c.req_nmi = TRUE;
+      p->nmi_cy = e->s.cy;
+      DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
     }
+    break;
+  case 4: inch(p); break;
+  case 5: inch(p); shift_bg(e); break;
+  case 6: inch(p); shift_en(e); spr_step(e); break;
+  case 7: incv(p); break;
+  case 8: incv(p); shift_en(e); spr_step(e); break;
+  case 9: p->ptbh = read_ptb(e, 8); break;
+  case 10: p->ptbh = read_ptb(e, 8); shift_bg(e); break;
+  case 11: p->ptbh = read_ptb(e, 8); shift_en(e); spr_step(e); break;
+  case 12: p->ptbl = read_ptb(e, 0); break;
+  case 13: p->ptbl = read_ptb(e, 0); shift_bg(e); break;
+  case 14: p->ptbl = read_ptb(e, 0); shift_en(e); spr_step(e); break;
+  case 15: p->state = 0; break;
+  case 16: read_atb(e); break;
+  case 17: read_atb(e); shift_bg(e); break;
+  case 18: read_atb(e); shift_en(e); spr_step(e); break;
+  case 19: read_ntb(e); break;
+  case 20: read_ntb(e); shift_bg(e); reload(e); break;
+  case 21: read_ntb(e); shift_en(e); reload(e); spr_step(e); break;
+  case 22: read_ntb(e); spr_step(e); break;
+  case 23: shift_bg(e); break;
+  case 24: shift_dis(e); break;
+  case 25: shift_dis(e); sprfetch(e); break;
+  case 26: shift_en(e); reload(e); sprfetch(e); spr_step(e); ppu_t_to_v(p, 0x041f); break;
+  case 27: shift_en(e); spr_step(e); break;
+  case 28: spr_step(e); break;
+  case 29: spr_step(e); ppu_t_to_v(p, 0x7be0); break;
+  case 30: spreval(e); break;
+  case 31:
+    spreval(e);
+    DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", e->s.cy,
+          e->s.p.frame, p->oddframe ^ 1);
+    p->fbidx = 0;
+    p->frame++;
+    if ((p->oddframe ^= 1) &&
+        !!(p->ppumask & 8) == (e->s.cy - p->bg_changed_cy >= 2)) {
+      DEBUG("(%" PRIu64 "): skipping cycle\n", e->s.cy);
+      goto repeat;
+    }
+    break;
+  case 32: sprfetch(e); break;
+  case 33: sprfetch(e); spr_step(e); ppu_t_to_v(p, 0x041f); break;
   }
 }
 
-static const u32 s_ppu_enabled_mask =  0b11111111111111111101111111;
-static const u32 s_ppu_disabled_mask = 0b11111111111000110010000000;
-static const u16 s_ppu_consts[] = {
-    [0] = 240, [1] = 32,    [7] = 10,  [9] = 2,   [11] = 63,
-    [12] = 12, [13] = 2,    [21] = 14, [25] = 1,  [26] = 340,
-    [27] = 27, [29] = 6818, [30] = 30, [31] = 32, [37] = 40,
-    [39] = 32, [41] = 22,   [42] = 42, [43] = 24, [44] = 44,
-    [45] = 15, [46] = 46,   [47] = 2,  [55] = 48, [58] = 0,
-};
-static const u32 s_ppu_bits[] = {
-//       2         1         0
-//  54321098765432109876543210
-  0b00000000101000010000000000,  //  0: cnt1=240,+spreval,(skip if odd frame + BG)
-  0b00000000010001000000000001,  //  1: ntb=read(nt(v)),cnt2=32,spr
-  0b00000000000001000011000000,  //  2: shift,spr
-  0b00000000000001000011000010,  //  3: atb=read(at(v)),shift,spr
-  0b00000000000001000011000000,  //  4: shift,spr
-  0b00000000000001000011000100,  //  5: ptbl=read(pt(ntb)),shift,spr
-  0b00000000000001000011000000,  //  6: shift,spr
-  0b00001010000001000011001000,  //  7: ptbh=read(pt(ntb)+8),shift,spr,--cnt2,jz #10
-  0b00000000000001000011010000,  //  8: inch(v),shift,spr
-  0b10000000000001001011000001,  //  9: ntb=read(nt(v)),shift,reload,spr,goto #2
-  0b00000000000001000011100000,  // 10: incv(v),shift,spr
-  0b00000000010011101011000000,  // 11: hori(v)=hori(t),shift,reload,+sprfetch,spr,cnt2=63
-  0b00000110000001000000000000,  // 12: spr,--cnt2,jnz #12
-  0b00000000010000000000000001,  // 13: ntb=read(nt(v)),cnt2=2
-  0b00000000000000000100000000,  // 14: shiftN
-  0b00000000000000000100000010,  // 15: atb=read(at(v)),shiftN
-  0b00000000000000000100000000,  // 16: shiftN
-  0b00000000000000000100000100,  // 17: ptbl=read(pt(ntb)),shiftN
-  0b00000000000000000100000000,  // 18: shiftN
-  0b00000000000000000100001000,  // 19: ptbh=read(pt(ntb)+8),shiftN
-  0b00000000000000000100010000,  // 20: inch(v),shiftN
-  0b00000110000000001100000001,  // 21: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #14
-  0b00000000000000000000000000,  // 22:
-  0b00000000000000000000000001,  // 23: ntb=read(nt(v))
-  0b00000000000000000000000000,  // 24:
-  0b00000101000000010000000000,  // 25: --cnt1,+spreval,jnz #1
-  0b00000000010000000000000000,  // 26: cnt2=339
-  0b00000110000000000000000000,  // 27: --cnt2,jnz #27
-  0b00010000000000000000000000,  // 28: set NMI
-  0b00100000010000000000000000,  // 29: set vblank,cnt2=6819
-  0b00000110000000000000000000,  // 30: --cnt2,jnz #30
-  0b00000000010000000000000001,  // 31: ntb=read(nt(v)),cnt2=32
-  0b01000000000000000000000000,  // 32: clear flags
-  0b00000000000000000000000010,  // 33: atb=read(at(v))
-  0b00000000000000000000000000,  // 34:
-  0b00000000000000000000000100,  // 35: ptbl=read(pt(ntb))
-  0b00000000000000000000000000,  // 36:
-  0b00001010000000000000001000,  // 37: ptbh=read(pt(ntb)+8),--cnt2,jz #40
-  0b00000000000000000000010000,  // 38: inch(v)
-  0b10000000000000000000000001,  // 39: ntb=read(nt(v)),goto #32
-  0b00000000000000000000100000,  // 40: incv(v)
-  0b00000000010011100000000000,  // 41: hori(v)=hori(t),+sprfetch,spr,cnt2=22
-  0b00000110000001000000000000,  // 42: spr,--cnt2,jnz #42
-  0b00000000010001000000000000,  // 43: spr,cnt2=24
-  0b00000110000101000000000000,  // 44: spr,vert(v)=vert(t),--cnt2,jnz #44
-  0b00000000010001000000000000,  // 45: spr,cnt2=15
-  0b00000110000001000000000000,  // 46: spr,--cnt2,jnz #46
-  0b00000000010000000000000001,  // 47: ntb=read(nt(v)),cnt2=2
-  0b00000000000000000100000000,  // 48: shiftN
-  0b00000000000000000100000010,  // 49: atb=read(at(v)),shiftN
-  0b00000000000000000100000000,  // 50: shiftN
-  0b00000000000000000100000100,  // 51: ptbl=read(pt(ntb)),shiftN
-  0b00000000000000000100000000,  // 52: shiftN
-  0b00000000000000000100001000,  // 53: ptbh=read(pt(ntb)+8),shiftN
-  0b00000000000000000100010000,  // 54: inch(v),shiftN
-  0b00000110000000001100000001,  // 55: ntb=read(nt(v)),shiftN,reload,--cnt2,jnz #48
-  0b00000000000000000000000000,  // 56:
-  0b00000000000000000000000001,  // 57: read(nt(v))
-  0b10000000000000000000000000,  // 58: goto #0
-};
+#define LINE0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+#define LINE1 0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15
+#define LINE2 0,19,1,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,4,19,0,16,0,12,0,9,7,33,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,29,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,19,23,17,23,13,23,10,5,20,23,17,23,13,23,10,5,20,0,19,15
+#define LINE3 0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+#define LINE4 30,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+#define LINE5 30,0,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+#define LINE6 30,22,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,8,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,19,23,17,23,13,23,10,5,20,23,17,23,13,23,10,5,20,0,19,0
+#define LINE7 31,0,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+#define LINE8 31,22,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,8,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,19,23,17,23,13,23,10,5,20,23,17,23,13,23,10,5,20,0,19,0
+
+static const u8 s_ppu_steps_en[] = {
+LINE8,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE4,LINE3,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE2,};
+static const u8 s_ppu_steps_dis[] = {
+LINE7,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE4,LINE3,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE1,};
 
 static inline Bool y_in_range(P *p, u8 y) {
   return y < 239 && (u8)(scany(p) - y) < ((p->ppuctrl & 0x20) ? 16 : 8);
@@ -1176,7 +1087,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         p->bg_changed_cy = e->s.cy;
       }
       p->ppumask = val;
-      p->bits_mask = val & 0x18 ? s_ppu_enabled_mask : s_ppu_disabled_mask;
+      p->enabled = !!(val & 0x18);
       break;
     case 3: p->oamaddr = val; break;
     case 4:
@@ -3044,7 +2955,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->c.I = TRUE;
   s->c.step = s_callvec;
   s->c.next_step = s_cpu_decode;
-  s->p.bits_mask = s_ppu_disabled_mask;
+  s->p.enabled = FALSE;
   // Triangle volume is always full; disabled by len counter or linear counter.
   e->s.a.vol[2] = 1;
   e->s.a.cvol[2] = ~0;
@@ -3319,13 +3230,12 @@ void disasm(E *e, u16 addr) {
 
 void print_info(E *e) {
   C* c = &e->s.c;
-  LYCY lycy = ppu_line_cy(&e->s.p);
   printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
-         "bus:%c %02x%02x  (ly:%d cy:%d) (cy:%08" PRIu64 ")",
+         "bus:%c %02x%02x  (cy:%08" PRIu64 ")",
          c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
          c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_', c->C ? 'C' : '_',
          get_P(e, FALSE), c->S, c->bus_write ? 'W' : 'R', c->bushi, c->buslo,
-         lycy.line, lycy.cy, e->s.cy);
+         e->s.cy);
 }
 
 static const char* s_opcode_mnemonic[256] = {
