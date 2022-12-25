@@ -153,8 +153,8 @@ static void draw_str(int x, int y, RGBA color, const char* s) {
 static void set_status_text(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
-  s_status_text.len =
-      vsnprintf(s_status_text.data, sizeof(s_status_text.data), fmt, args);
+  size_t len = vsnprintf(s_status_text.data, sizeof(s_status_text.data), fmt, args);
+  s_status_text.len = MIN(len, (int)(sizeof(s_status_text.data) - 1));
   va_end(args);
   s_status_text.timeout = STATUS_TEXT_TIMEOUT;
 }
