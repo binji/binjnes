@@ -2729,6 +2729,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
         (64 << ((file_data->data[11] & 0xf0) >> 4)) >> 13;
 
     u32 data_size = kHeaderSize + trainer_size;
+    ci->prg_data = file_data->data + data_size;
 
     /* Use detection from NESwiki */
     if ((flag7 & 0xc) == 8 &&
@@ -2784,6 +2785,8 @@ static Result get_cart_info(E *e, const FileData *file_data) {
         ci->chr_data = e->s.p.chr_ram;
         ci->chr8k_banks = chrram8k_banks;
         printf("chrram from nes 2.0 header: %u banks\n", chrram8k_banks);
+      } else {
+        ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
       }
     } else if ((flag7 & 0xc) == 0) {
       LOG("Found iNES header\n");
@@ -2814,7 +2817,6 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     CHECK_MSG(ci->prgram8k_banks <= 0x2000,
               "prg ram size must be <= 8192 (got %u).\n", ci->prgram8k_banks);
 
-    ci->prg_data = file_data->data + kHeaderSize + trainer_size;
     if (!ci->is_nes2_0) {
       if (ci->chr8k_banks == 0) { // Assume CHR RAM
         ci->chr_data = e->s.p.chr_ram;
