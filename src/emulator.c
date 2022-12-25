@@ -1994,6 +1994,12 @@ void mapper34_nina001_write(E *e, u16 addr, u8 val) {
   }
 }
 
+void mapper66_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  set_chr8k_map(e, m->chr_bank[0] = val & 3 & (e->ci.chr8k_banks - 1));
+  set_prg32k_map(e, m->prg_bank[0] = (val >> 4) & 3 & (e->ci.prg32k_banks - 1));
+}
+
 static inline u8 get_P(E *e, Bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
          (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
@@ -3003,12 +3009,21 @@ Result init_mapper(E *e) {
       goto unsupported;
     }
     break;
+
+  case BOARD_MAPPER_66:
+    e->mapper_write = mapper66_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg32k_map(e, e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1);
+    break;
+
   case BOARD_MAPPER_206:
     e->mapper_write = mapper206_write;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
+
   unsupported:
   default:
     CHECK_MSG(FALSE, "Unsupported mapper: %d\n", e->ci.mapper);
