@@ -590,7 +590,20 @@ static void rewind_end(void) {
 static void frame(void)  {
   if (s_rewind_state.rewinding) {
     rewind_by(REWIND_CYCLES_PER_FRAME);
-  } else if (!s_paused) {
+  } else if (s_paused) {
+    // Clear audio buffer.
+    size_t read_head = atomic_load(&s_audio_buffer_read);
+    size_t write_head = atomic_load(&s_audio_buffer_write);
+    if (write_head < read_head) {
+      memset(s_audio_buffer + write_head, 0,
+             (read_head - write_head - 1) * sizeof(f32));
+    } else {
+      size_t to_end = ARRAY_SIZE(s_audio_buffer) - write_head;
+      memset(s_audio_buffer + write_head, 0, to_end * sizeof(f32));
+      memset(s_audio_buffer, 0, (read_head - 1) * sizeof(f32));
+    }
+    atomic_store(&s_audio_buffer_write, read_head - 1);
+  } else {
     f64 delta_sec = sapp_frame_duration();
     Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
     Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
