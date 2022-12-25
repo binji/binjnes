@@ -178,7 +178,7 @@ static inline u8 nt_read(E *e, u16 addr) {
   return e->nt_map[(addr >> 10) & 3][addr & 0x3ff];
 }
 
-u8 ppu_read(E *e, u16 addr) {
+static u8 ppu_read(E *e, u16 addr) {
   u8 result = e->s.p.readbuf, buffer = 0xff;
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
@@ -202,7 +202,7 @@ u8 ppu_read(E *e, u16 addr) {
   return result;
 }
 
-void ppu_write(E *e, u16 addr, u8 val) {
+static void ppu_write(E *e, u16 addr, u8 val) {
   do_a12_access(e, addr);
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
@@ -332,7 +332,7 @@ static void shift_dis(E *e) {
   e->frame_buffer[p->fbidx++] = p->rgbapal[0];
 }
 
-void ppu_step(E *e) {
+static void ppu_step(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
 repeat:
@@ -516,7 +516,7 @@ static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
     ((ppuctrl & 8) << 9) | (tile << 4) | (y & 7);
 }
 
-void spr_step(E *e) {
+static void spr_step(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
 repeat:;
@@ -954,7 +954,7 @@ static void apu_half(E *e) {
   get_sweep_target_or_mute(a);
 }
 
-void apu_step(E *e) {
+static void apu_step(E *e) {
   Bool more;
   A* a = &e->s.a;
   do {
@@ -1062,7 +1062,7 @@ static inline void read_joyp(E *e, Bool write) {
 
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
-u8 cpu_read(E *e, u16 addr) {
+static u8 cpu_read(E *e, u16 addr) {
   A* a = &e->s.a;
   C* c = &e->s.c;
   c->bus_write = FALSE;
@@ -1143,7 +1143,7 @@ u8 cpu_read(E *e, u16 addr) {
   return c->open_bus;
 }
 
-void cpu_write(E *e, u16 addr, u8 val) {
+static void cpu_write(E *e, u16 addr, u8 val) {
   P* p = &e->s.p;
   C* c = &e->s.c;
   c->bus_write = TRUE;
@@ -1449,16 +1449,16 @@ static void set_prgram_default_map(E* e) {
   update_prgram512b_map(e);
 }
 
-void set_prgram_mirror(E* e, u16 bank_mask) {
+static void set_prgram_mirror(E* e, u16 bank_mask) {
   for (size_t i = 0; i < ARRAY_SIZE(e->s.m.prgram512b_bank); ++i) {
     e->s.m.prgram512b_bank[i] = i & bank_mask;
   }
   update_prgram512b_map(e);
 }
 
-void mapper0_write(E *e, u16 addr, u8 val) {}
+static void mapper0_write(E *e, u16 addr, u8 val) {}
 
-void mapper1_write(E *e, u16 addr, u8 val) {
+static void mapper1_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
   if (val & 0x80) {
@@ -1509,21 +1509,21 @@ void mapper1_write(E *e, u16 addr, u8 val) {
   }
 }
 
-void mapper2_write(E *e, u16 addr, u8 val) {
+static void mapper2_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
   m->prg_bank[0] = val & (e->ci.prg16k_banks - 1);
   set_prg16k_map(e, m->prg_bank[0], e->ci.prg16k_banks - 1);
 }
 
-void mapper3_write(E *e, u16 addr, u8 val) {
+static void mapper3_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
   m->chr_bank[0] = val & (e->ci.chr8k_banks - 1);
   set_chr8k_map(e, m->chr_bank[0]);
 }
 
-void mapper206_write(E *e, u16 addr, u8 val) {
+static void mapper206_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
   if ((addr & 0xe001) == 0x8000) { // Bank Select
@@ -1549,7 +1549,7 @@ void mapper206_write(E *e, u16 addr, u8 val) {
   }
 }
 
-void mapper4_write(E *e, u16 addr, u8 val) {
+static void mapper4_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   switch (addr >> 12) {
     case 8: case 9: { // Bank Select / Bank Data
@@ -1634,7 +1634,7 @@ void mapper4_write(E *e, u16 addr, u8 val) {
   }
 }
 
-void mapper7_write(E *e, u16 addr, u8 val) {
+static void mapper7_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
   m->prg_bank[0] = (val & 7) & (e->ci.prg32k_banks - 1);
@@ -1642,14 +1642,14 @@ void mapper7_write(E *e, u16 addr, u8 val) {
   set_mirror(e, MIRROR_SINGLE_0 + ((val & 0x10) ? 0 : 1));
 }
 
-void mapper11_write(E *e, u16 addr, u8 val) {
+static void mapper11_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
   set_chr8k_map(e, (m->chr_bank[0] = (val >> 4) & (e->ci.chr8k_banks - 1)));
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
 }
 
-void mapper_vrc_prg_map(E* e) {
+static void mapper_vrc_prg_map(E* e) {
   M *m = &e->s.m;
   if (e->s.m.vrc.prg_mode) {
     set_prg8k_map(e, e->ci.prg8k_banks - 2, m->prg_bank[1], m->prg_bank[0],
@@ -1660,7 +1660,7 @@ void mapper_vrc_prg_map(E* e) {
   }
 }
 
-Bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, Bool chr_shift) {
+static Bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, Bool chr_shift) {
   M *m = &e->s.m;
   u8 chr_select = (((addr >> 12) - 0xb) << 1) | ((addr >> 1) & 1);
 
@@ -1702,7 +1702,7 @@ Bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, Bool chr_shift) {
   return FALSE;
 }
 
-void mapper_vrc2_shared_write(E* e, u16 addr, u8 val) {
+static void mapper_vrc2_shared_write(E* e, u16 addr, u8 val) {
   switch (addr) {
     case 0x9000 ... 0x9003:
       set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
@@ -1710,7 +1710,7 @@ void mapper_vrc2_shared_write(E* e, u16 addr, u8 val) {
   }
 }
 
-void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
+static void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
   switch (addr) {
     case 0x9000: // Mirror control
@@ -1759,7 +1759,7 @@ void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
   (addr & 0xf000) | (((addr >> a1shift) & 1) << 1) | ((addr >> a0shift) & 1)
 
 #define MAPPER_VRC_WRITE(name, board, a0shift, a1shift, chr_shift)             \
-  void name(E *e, u16 addr, u8 val) {                                          \
+  static void name(E *e, u16 addr, u8 val) {                                   \
     addr = VRC_ADDR(addr, a0shift, a1shift);                                   \
     if (!mapper_vrc_shared_write(e, addr, val, chr_shift)) {                   \
       mapper_##board##_shared_write(e, addr, val);                             \
@@ -1776,7 +1776,7 @@ MAPPER_VRC_WRITE(mapper_vrc4d_write, vrc4, 3, 2, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4e_write, vrc4, 2, 3, FALSE)
 MAPPER_VRC_WRITE(mapper_vrc4f_write, vrc4, 0, 1, FALSE)
 
-void mapper21_write(E* e, u16 addr, u8 val) {
+static void mapper21_write(E* e, u16 addr, u8 val) {
   if (addr & 0b110) {
     mapper_vrc4a_write(e, addr, val);
   } else {
@@ -1784,7 +1784,7 @@ void mapper21_write(E* e, u16 addr, u8 val) {
   }
 }
 
-void mapper23_write(E* e, u16 addr, u8 val) {
+static void mapper23_write(E* e, u16 addr, u8 val) {
   if (addr & 0b11) {
     mapper_vrc4f_write(e, addr, val);
   } else {
@@ -1792,7 +1792,7 @@ void mapper23_write(E* e, u16 addr, u8 val) {
   }
 }
 
-void mapper25_write(E* e, u16 addr, u8 val) {
+static void mapper25_write(E* e, u16 addr, u8 val) {
   if (addr & 0b11) {
     mapper_vrc4b_write(e, addr, val);
   } else {
@@ -1800,7 +1800,7 @@ void mapper25_write(E* e, u16 addr, u8 val) {
   }
 }
 
-void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
+static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
   A *a = &e->s.a;
   u8 chan = (addr >> 12) - 4;
@@ -1917,15 +1917,15 @@ void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
   }
 }
 
-void mapper_vrc6a_write(E *e, u16 addr, u8 val) {
+static void mapper_vrc6a_write(E *e, u16 addr, u8 val) {
   mapper_vrc6_shared_write(e, addr, val);
 }
 
-void mapper_vrc6b_write(E *e, u16 addr, u8 val) {
+static void mapper_vrc6b_write(E *e, u16 addr, u8 val) {
   mapper_vrc6_shared_write(e, VRC_ADDR(addr, 1, 0), val);
 }
 
-void mapper28_write(E* e, u16 addr, u8 val) {
+static void mapper28_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
   switch (addr >> 12) {
     case 5:
@@ -1971,13 +1971,13 @@ void mapper28_write(E* e, u16 addr, u8 val) {
   }
 }
 
-void mapper34_bnrom_write(E *e, u16 addr, u8 val) {
+static void mapper34_bnrom_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
   set_prg32k_map(e, (m->prg_bank[0] = val & (e->ci.prg32k_banks - 1)));
 }
 
-void mapper34_nina001_write(E *e, u16 addr, u8 val) {
+static void mapper34_nina001_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   switch (addr) {
   case 0x7ffd:
@@ -1994,7 +1994,7 @@ void mapper34_nina001_write(E *e, u16 addr, u8 val) {
   }
 }
 
-void mapper66_write(E *e, u16 addr, u8 val) {
+static void mapper66_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   set_chr8k_map(e, m->chr_bank[0] = val & 3 & (e->ci.chr8k_banks - 1));
   set_prg32k_map(e, m->prg_bank[0] = (val >> 4) & 3 & (e->ci.prg32k_banks - 1));
@@ -2025,7 +2025,7 @@ static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
   *result = (val >> 1) | (C << 7);
 }
 
-void cpu_step(E *e) {
+static void cpu_step(E *e) {
   u8 busval = 0;
 #if 0
   print_info(e); printf("\n");
@@ -2836,11 +2836,11 @@ static Result get_cart_info(E *e, const FileData *file_data) {
   ON_ERROR_RETURN;
 }
 
-Result set_rom_file_data(E *e, const FileData *rom) {
+static Result set_rom_file_data(E *e, const FileData *rom) {
   return get_cart_info(e, rom);
 }
 
-Result init_mapper(E *e) {
+static Result init_mapper(E *e) {
   e->mapper_prg_ram_write = mapper0_write;
   set_prgram_default_map(e);
 
@@ -3035,7 +3035,7 @@ Result init_mapper(E *e) {
   ON_ERROR_RETURN;
 }
 
-Result init_emulator(E *e, const EInit *init) {
+static Result init_emulator(E *e, const EInit *init) {
   S* s = &e->s;
   ZERO_MEMORY(*s);
   CHECK(SUCCESS(init_mapper(e)));
@@ -3061,7 +3061,7 @@ Result init_emulator(E *e, const EInit *init) {
   ON_ERROR_RETURN;
 }
 
-Result init_audio_buffer(Emulator* e, u32 frequency, u32 frames) {
+static Result init_audio_buffer(Emulator* e, u32 frequency, u32 frames) {
   AudioBuffer* audio_buffer = &e->audio_buffer;
   audio_buffer->frames = frames;
   size_t buffer_size = (frames + AUDIO_BUFFER_EXTRA_FRAMES);
