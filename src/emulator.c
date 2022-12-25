@@ -653,17 +653,12 @@ static void set_halt(A *a, int chan, u8 val) {
 
 static u16x8 get_sweep_target_or_mute(A* a) {
   u16x8 diff = {a->period[0] >> a->swshift[0], a->period[1] >> a->swshift[1]},
-        ndiff = ~diff + (u16x8){0, 1};
-  u16x8 target = a->period + blendv_u16x8(diff, ndiff, a->swneg);
+        ndiff = diff + (u16x8){1, 0};
+  u16x8 target = blendv_u16x8(
+      a->period + diff, (a->period - ndiff) & (a->period > ndiff), a->swneg);
   u16x8 old_mute = a->swmute_mask;
   u16x8 mute = (a->period < 8) | (target > 0x7ff);
   a->swmute_mask = ~mute;
-  if (a->swmute_mask[0] != old_mute[0] ||
-      a->swmute_mask[1] != old_mute[1]) {
-    LOG("muting changed: %u->%u, %u->%u (period: %u %u) (target: %u %u)\n",
-        old_mute[0], a->swmute_mask[0], old_mute[1], a->swmute_mask[1],
-        a->period[0], a->period[1], target[0], target[1]);
-  }
   return target;
 }
 
@@ -680,14 +675,6 @@ static Bool is_len_enabled(A *a, int chan) {
   return a->reg[0x15] & (1 << chan);
 }
 
-static Bool is_valid_period(int chan, u16 val) {
-  switch (chan) {
-    case 0: case 1:   return val >= 8 && val < 0x7ff;
-    case 2:           return val >= 2;
-    default: case 3:  return TRUE;
-  }
-}
-
 static void set_len(A* a, int chan, u8 val) {
   static const u8 lens[] = {10, 254, 20,  2,  40, 4,  80, 6,  160, 8,  60,
                             10, 14,  12,  26, 14, 12, 16, 24, 18,  48, 20,
@@ -695,20 +682,23 @@ static void set_len(A* a, int chan, u8 val) {
   a->len[chan] = lens[val >> 3];
 }
 
+static void update_tri_play_mask(A* a) {
+  a->play_mask[2] = a->len[2] && a->tricnt && a->period[2] >= 2;
+}
+
 static void start_chan(A* a, int chan, u8 val) {
   if (is_len_enabled(a, chan)) {
-    Bool should_start = is_valid_period(chan, a->period[chan]);
     set_len(a, chan, val);
     if (chan == 2) {
       a->trireload = TRUE;
-      should_start = should_start && (a->reg[8] & 0x7f);
+      update_tri_play_mask(a);
     } else {
       a->start[chan] = ~0;
+      a->play_mask[chan] = ~0;
     }
     if (chan < 2) {
       a->seq[chan] = 0;
     }
-    a->play_mask[chan] = should_start ? ~0 : 0;
     a->update = TRUE;
   }
 }
@@ -720,11 +710,11 @@ static void start_dmc(A* a) {
 }
 
 static void set_period(A* a, int chan, u16 val) {
-  if (!is_valid_period(chan, a->period[chan] = val)) {
-    a->play_mask[chan] = 0;
-  }
+  a->period[chan] = val;
   if (chan < 2) {
     get_sweep_target_or_mute(a);
+  } else if (chan == 2) {
+    update_tri_play_mask(a);
   }
 }
 
@@ -928,12 +918,14 @@ static void apu_quarter(E *e) {
   if (a->trireload) {
     // ... the linear counter is reloaded with the counter reload value.
     a->tricnt = a->reg[8] & 0x7f;
+    update_tri_play_mask(a);
+    a->update = TRUE;
   } else if (a->tricnt) {
     // ... otherwise if the linear counter is non-zero, it is decremented.
     --a->tricnt;
   }
   if (a->play_mask[2] && a->tricnt == 0) {
-    a->play_mask[2] = 0;
+    update_tri_play_mask(a);
     a->update = TRUE;
   }
   // If the control flag is clear, the linear counter reload flag is cleared.
