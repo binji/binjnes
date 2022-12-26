@@ -136,8 +136,9 @@ typedef struct {
 typedef struct {
   u8x16 counter, shift, pal;
   u64 pri, spr0mask;
-  u8 state, cnt, s, d, y, t, at, tile, ptbl;
-  Bool sovf, spr0;
+  u16 s;
+  u8 state, d, y, t, at, tile, ptbl;
+  Bool spr0;
 } Spr;
 
 typedef struct {

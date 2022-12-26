@@ -261,11 +261,11 @@
   "sprite_overflow_tests": {
     "dir": "nes-test-roms/sprite_overflow_tests/",
     "tests": [
-      ["1.Basics.nes", 100, "c7d687553be621b31b7fe6adcf9ceb9e96a3acbe"],
-      ["2.Details.nes", 100, "!c7a7b4205e8ff9e51a6412194f7a33682c59c9dc"],
-      ["3.Timing.nes", 100, "!12c89e67d2e227284e3381bfb3f5145175b41b5d"],
-      ["4.Obscure.nes", 100, "!a7ca2a50e519c3acef9f216339224e1b38886bbe"],
-      ["5.Emulator.nes", 100, "0c0519016f27fb72caea6d66167ceda64b7f5440"]
+      ["1.Basics.nes", 15, "c7d687553be621b31b7fe6adcf9ceb9e96a3acbe"],
+      ["2.Details.nes", 25, "5d62202ee66b1faefee24fb039a9ca793d09c8a5"],
+      ["3.Timing.nes", 110, "b7814ed232fd5eeb946f2291267d3341e808da36"],
+      ["4.Obscure.nes", 20, "d4318c5b26432e035db5f3b8ea0ee5d97124c934"],
+      ["5.Emulator.nes", 15, "0c0519016f27fb72caea6d66167ceda64b7f5440"]
     ]
   },
 
