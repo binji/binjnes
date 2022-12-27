@@ -67,7 +67,6 @@ static void spr_step(E *e);
 static const u8 s_opcode_bits[], s_dmc_stall[];
 static const u16 s_cpu_decode, s_callvec, s_oamdma, s_dmc;
 static const u16 s_apu_consts[], s_apu_bits[], s_opcode_loc[];
-static const u64 s_cpu_bits[];
 static const u8 s_ppu_steps_en[], s_ppu_steps_dis[];
 
 // PPU stuff ///////////////////////////////////////////////////////////////////
@@ -697,7 +696,7 @@ static void apu_tick(E *e) {
       e->s.c.dmc_step = step; // TODO: Should finish writes first?
       u8 stall = s_dmc_stall[s_opcode_bits[step]];
       e->s.c.step = s_dmc + (4 - stall);
-      e->s.c.bits = s_cpu_bits[s_opcode_bits[e->s.c.step++]];
+      e->s.c.bits = s_opcode_bits[e->s.c.step++];
       DEBUG(" QUEUE dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
             e->s.cy, stall, step, a->seq[4]);
     } else {
@@ -1910,6 +1909,71 @@ static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
   *result = (val >> 1) | (C << 7);
 }
 
+static inline void set_next_step(E* e) {
+  C* c = &e->s.c;
+  if (c->has_nmi) {
+    c->next_step = s_callvec;
+    DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
+  } else if (c->has_irq) {
+    c->next_step = s_callvec;
+    DEBUG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy);
+  }
+}
+
+static inline void check_irq(E* e) {
+  C* c = &e->s.c;
+  c->has_nmi = c->req_nmi;
+  c->has_irq = c->irq && !c->I;
+  if (c->has_nmi || c->has_irq) {
+    DEBUG("     [%" PRIu64 "] NMI or IRQ requested\n", e->s.cy);
+  }
+}
+
+static u8 rare_opcode(E* e, u8 busval) {
+  C* c = &e->s.c;
+  switch (c->opcode) {
+    case 0x0b: case 0x2b:                               // ANC
+      c->TL = (c->A &= busval);
+      c->C = !!(c->TL & 0x80);
+      break;
+    case 0x58: c->I = 0; break;                         // CLI
+    case 0x6b:                                          // ARR
+      c->TL = c->A = (c->C << 7) | ((c->A & busval) >> 1);
+      c->C = !!(c->TL & 0x40);
+      c->V = c->C ^ ((c->TL >> 5) & 1);
+      break;
+    case 0x78: c->I = 1; break;                         // SEI
+    case 0x83: case 0x87: case 0x8f: case 0x97:         // SAX
+      busval = c->A & c->X; break;
+    case 0x8b: c->TL = (c->A &= c->X & busval); break;  // ANE
+    case 0x93: case 0x9f:                               // SHA
+      busval = c->A & c->X & (c->TH + 1); break;
+    case 0x9a: c->S = c->X; break;                      // TXS
+    case 0x9b:                                          // SHS
+      c->S = c->A & c->X;
+      busval = c->S & (c->TH + 1); break;
+    case 0x9c:
+      busval = c->Y & (c->TH + 1);
+      if (c->fixhi) { c->bushi = busval; }
+      break;                                            // SHY
+    case 0x9e:
+      busval = c->X & (c->TH + 1);
+      if (c->fixhi) { c->bushi = busval; }
+      break;                                            // SHX
+    case 0xb8: c->V = 0; break;                         // CLV
+    case 0xba: c->TL = c->X = c->S; break;              // TSX
+    case 0xbb: c->A = c->X = c->S &= busval; break;     // TSX
+    case 0xcb:                                          // AXS
+      c->C = (c->A & c->X) >= busval;
+      c->TL = (c->X = (c->A & c->X) - busval);
+      break;
+    case 0xd8: c->D = 0; break;                         // CLD
+    case 0xf8: c->D = 1; break;                         // SED
+    default: FATAL("NYI: opcode %02x\n", c->opcode); break;
+  }
+  return busval;
+}
+
 static void cpu_step(E *e) {
   u8 busval = 0;
 #if 0
@@ -1941,328 +2005,940 @@ static void cpu_step(E *e) {
     }
   }
 
-  u64 bits = c->bits;
-  while (bits) {
-    int bit = __builtin_ctzll(bits);
-    bits &= bits - 1;
-    switch (bit) {
-      case 0:
-        if (c->has_nmi) {
-          c->next_step = s_callvec;
-          DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
-        } else if (c->has_irq) {
-          c->next_step = s_callvec;
-          DEBUG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy);
-        }
-        break;
-      case 1:
-        c->has_nmi = c->req_nmi;
-        c->has_irq = c->irq && !c->I;
-        if (c->has_nmi || c->has_irq) {
-          DEBUG("     [%" PRIu64 "] NMI or IRQ requested\n", e->s.cy);
-        }
-        break;
-      case 2: c->bushi = c->PCH; c->buslo = c->PCL; break;
-      case 3: c->bushi = 1; c->buslo = c->S; break;
-      case 4: c->bushi = c->TH; c->buslo = c->TL; break;
-      case 5: c->bushi = 0xff; c->buslo = c->veclo; c->I = 1; break;
-      case 6: c->bushi = c->oamhi; c->buslo = 0; c->oamlo = e->s.p.oamaddr; break;
-      case 7: e->s.p.oam[c->oamlo++] = c->TL; break;
-      case 8: ++c->buslo; break;
-      case 9: c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo)); break;
-      case 10: c->TL = 0; break;
-      case 11: c->TL = busval; c->TH = 0; break;
-      case 12: c->TL = c->A; break;
-      case 13: c->TL = c->X; break;
-      case 14: c->TL = c->Y; break;
-      case 15: c->TL = c->Z; break;
-      case 16: c->TL = c->C; break;
-      case 17: c->TL = c->V; break;
-      case 18: c->TL = c->N; break;
-      case 19: c->TL = !c->TL; break;
-      case 20: c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL); break;
-      case 21: c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL); break;
-      case 22: c->TH = busval; break;
-      case 23: c->TH += c->fixhi; break;
-      case 24: busval = c->PCL; break;
-      case 25: busval = c->PCH; break;
-      case 26: busval = get_P(e, FALSE); break;
-      case 27: busval = get_P(e, TRUE); break;
-      case 28: busval = c->TL; break;
-      case 29:  // Rarely used operations.
-        switch (c->opcode) {
-          case 0x0b: case 0x2b:                               // ANC
-            c->TL = (c->A &= busval);
-            c->C = !!(c->TL & 0x80);
-            break;
-          case 0x58: c->I = 0; break;                         // CLI
-          case 0x6b:                                          // ARR
-            c->TL = c->A = (c->C << 7) | ((c->A & busval) >> 1);
-            c->C = !!(c->TL & 0x40);
-            c->V = c->C ^ ((c->TL >> 5) & 1);
-            break;
-          case 0x78: c->I = 1; break;                         // SEI
-          case 0x83: case 0x87: case 0x8f: case 0x97:         // SAX
-            busval = c->A & c->X; break;
-          case 0x8b: c->TL = (c->A &= c->X & busval); break;  // ANE
-          case 0x93: case 0x9f:                               // SHA
-            busval = c->A & c->X & (c->TH + 1); break;
-          case 0x9a: c->S = c->X; break;                      // TXS
-          case 0x9b:                                          // SHS
-            c->S = c->A & c->X;
-            busval = c->S & (c->TH + 1); break;
-          case 0x9c:
-            busval = c->Y & (c->TH + 1);
-            if (c->fixhi) { c->bushi = busval; }
-            break;                                            // SHY
-          case 0x9e:
-            busval = c->X & (c->TH + 1);
-            if (c->fixhi) { c->bushi = busval; }
-            break;                                            // SHX
-          case 0xb8: c->V = 0; break;                         // CLV
-          case 0xba: c->TL = c->X = c->S; break;              // TSX
-          case 0xbb: c->A = c->X = c->S &= busval; break;     // TSX
-          case 0xcb:                                          // AXS
-            c->C = (c->A & c->X) >= busval;
-            c->TL = (c->X = (c->A & c->X) - busval);
-            break;
-          case 0xd8: c->D = 0; break;                         // CLD
-          case 0xf8: c->D = 1; break;                         // SED
-          default: FATAL("NYI: opcode %02x\n", c->opcode); break;
-        }
-        break;
-      case 30: cpu_write(e, get_u16(c->bushi, c->buslo), busval); break;
-      case 31: --c->TL; break;
-      case 32: ++c->TL; break;
-      case 33: c->TL = (c->A &= busval); break;
-      case 34: c->C = !!(c->TL & 0x80); c->TL <<= 1; break;
-      case 35: c->C = !!(c->TL & 0x01); c->TL >>= 1; break;
-      case 36: rol(c->TL, c->C, &c->TL, &c->C); break;
-      case 37: ror(c->TL, c->C, &c->TL, &c->C); break;
-      case 38: c->C = c->TL >= busval; c->TL -= busval; break;
-      case 39: c->C = c->A >= busval; c->TL = (c->A - busval); break;
-      case 40:
-        c->N = !!(busval & 0x80);
-        c->V = !!(busval & 0x40);
-        c->Z = (c->A & busval) == 0;
-        break;
-      case 41: c->TL = (c->A ^= busval); break;
-      case 42: c->TL = (c->A |= busval); break;
-      case 44: busval = ~busval; // Fallthrough.
-      case 43: {
-        u16 sum = c->A + busval + c->C;
-        c->C = sum >= 0x100;
-        c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
-        c->TL = c->A = sum;
-        break;
-      }
-      case 45: c->A = c->TL; break;
-      case 46: c->X = c->TL; break;
-      case 47: c->Y = c->TL; break;
-      case 48: set_P(e, c->TL); break;
-      case 49: c->C = c->TL; break;
-      case 50: --c->S; break;
-      case 51: ++c->S; break;
-      case 52:
-        if (c->req_nmi) {
-          c->veclo = 0xfa;
-          DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
-        } else if (c->opcode == 0 || c->irq) {
-          c->veclo = 0xfe;
-          DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
-        } else {
-          c->veclo = 0xfc;
-          DEBUG("     [%" PRIu64 "] using reset vec\n", e->s.cy);
-        }
-        c->set_vec_cy = e->s.cy;
-        c->has_irq = FALSE;
-        c->has_nmi = FALSE;
-        c->req_nmi = FALSE;
-        break;
-      case 53: c->PCL = c->TL; break;
-      case 54: {
-        u16 result = c->PCL + (s8)c->TL;
-        c->fixhi = result >> 8;
-        c->PCL = result;
-        if (!c->fixhi) { goto done; }
-        break;
-      }
-      case 55: c->PCH = busval; break;
-      case 56: c->PCH += c->fixhi; break;
-      case 57: c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL); break;
-      case 58: c->Z = c->TL == 0; c->N = !!(c->TL & 0x80); break;
-      case 59: if (!c->fixhi) { ++c->step; } break;
-      case 60: if (c->TL) { goto done; } c->TL = busval; break;
-      case 61:
-      done:
-        c->step = c->next_step;
-        c->next_step = s_cpu_decode;
-        break;
-      case 62:
-#if DISASM
+  switch (c->bits) {
+    case 0:
+      check_irq(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
+      #if DISASM
         disasm(e, get_u16(c->PCH, c->PCL) - 1);
-#endif
-        c->step = s_opcode_loc[c->opcode = busval];
-        break;
-      case 63:
-        e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
-        c->step = c->dmc_step;
-        e->s.a.dmcaddr = (e->s.a.dmcaddr + 1) | 0x8000;
-        if (e->s.a.dmcbytes) {
-          --e->s.a.dmcbytes;
+      #endif
+      c->step = s_opcode_loc[c->opcode = busval];
+      break;
+
+    case 1:
+      check_irq(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+    _0:
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      break;
+
+    case 2:
+      check_irq(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+    _1:
+      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
+      break;
+
+    case 3:
+      check_irq(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _2:
+      c->TH = busval;
+      goto _1;
+
+    case 4:
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL);
+    _3:
+      c->TH = busval;
+      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
+    _4:
+      if (!c->fixhi) { ++c->step; }
+      break;
+
+    case 5:
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL);
+      goto _2;
+
+    case 6:
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
+      goto _3;
+
+    case 7:
+      check_irq(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TH += c->fixhi;
+      break;
+
+    case 8:
+      check_irq(e);
+      c->bushi = 1; c->buslo = c->S;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _5:
+      ++c->S;
+      break;
+
+    case 9:
+      check_irq(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      u16 result = c->PCL + (s8)c->TL;
+      c->fixhi = result >> 8;
+      c->PCL = result;
+      if (!c->fixhi) { goto done; }
+      break;
+
+    case 10:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->PCH += c->fixhi;
+    _6:
+      done: c->step = c->next_step;
+      c->next_step = s_cpu_decode;
+      break;
+
+    case 11:
+      check_irq(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL);
+      break;
+
+    case 12:
+      check_irq(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
+      break;
+
+    case 13:
+      ++c->buslo;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
+      c->TH = busval;
+      goto _4;
+
+    case 14:
+      check_irq(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+    _7:
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      break;
+
+    case 15:
+      check_irq(e);
+      ++c->buslo;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _8:
+      c->TH = busval;
+      break;
+
+    case 16:
+      set_next_step(e);
+    _9:
+      busval = c->TL;
+    _10:
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      goto _6;
+
+    case 17:
+      check_irq(e);
+      c->bushi = 1; c->buslo = c->S;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      ++c->S;
+    _11:
+      c->PCL = c->TL;
+      break;
+
+    case 18:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _12:
+      {/*adc*/ u16 sum = c->A + busval + c->C;
+      c->C = sum >= 0x100;
+      c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
+      c->TL = c->A = sum;}
+    _13:
+      c->Z = c->TL == 0; c->N = !!(c->TL & 0x80);
+      goto _6;
+
+    case 19:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _14:
+      c->TL = (c->A &= busval);
+      goto _13;
+
+    case 20:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      c->C = !!(c->TL & 0x80); c->TL <<= 1;
+    _15:
+      c->Z = c->TL == 0; c->N = !!(c->TL & 0x80);
+      break;
+
+    case 21:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->N = !!(busval & 0x80);
+      c->V = !!(busval & 0x40);
+      c->Z = (c->A & busval) == 0;
+      goto _6;
+
+    case 22:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _16:
+      c->C = c->A >= busval; c->TL = (c->A - busval);
+      goto _13;
+
+    case 23:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->X;
+    _17:
+      c->C = c->TL >= busval; c->TL -= busval;
+      goto _13;
+
+    case 24:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->Y;
+      goto _17;
+
+    case 25:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      --c->TL;
+      goto _15;
+
+    case 26:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _18:
+      c->TL = (c->A ^= busval);
+      goto _13;
+
+    case 27:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      ++c->TL;
+      goto _15;
+
+    case 28:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      c->A = c->TL;
+    _19:
+      c->X = c->TL;
+      goto _13;
+
+    case 29:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+    _20:
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+    _21:
+      c->A = c->TL;
+      goto _13;
+
+    case 30:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      goto _19;
+
+    case 31:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+    _22:
+      c->Y = c->TL;
+      goto _13;
+
+    case 32:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      c->C = !!(c->TL & 0x01); c->TL >>= 1;
+      goto _15;
+
+    case 33:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+    _23:
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      goto _6;
+
+    case 34:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      goto _23;
+
+    case 35:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _24:
+      c->TL = (c->A |= busval);
+      goto _13;
+
+    case 36:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      rol(c->TL, c->C, &c->TL, &c->C);
+      goto _15;
+
+    case 37:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      ror(c->TL, c->C, &c->TL, &c->C);
+      goto _15;
+
+    case 38:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _25:
+      busval = ~busval; /*sbc*/
+      goto _12;
+
+    case 39:
+    _26:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      busval = rare_opcode(e, busval);
+      goto _10;
+
+    case 40:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->TL = c->A;
+      goto _9;
+
+    case 41:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->TL = c->X;
+      goto _9;
+
+    case 42:
+      set_next_step(e);
+      c->bushi = c->TH; c->buslo = c->TL;
+      c->TL = c->Y;
+      goto _9;
+
+    case 43:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      --c->TL;
+      break;
+
+    case 44:
+      set_next_step(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      goto _16;
+
+    case 45:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      ++c->TL;
+      break;
+
+    case 46:
+      set_next_step(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      goto _25;
+
+    case 47:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      c->C = !!(c->TL & 0x80); c->TL <<= 1;
+      break;
+
+    case 48:
+      set_next_step(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      goto _24;
+
+    case 49:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      rol(c->TL, c->C, &c->TL, &c->C);
+      break;
+
+    case 50:
+      set_next_step(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      goto _14;
+
+    case 51:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      c->C = !!(c->TL & 0x01); c->TL >>= 1;
+      break;
+
+    case 52:
+      set_next_step(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      goto _18;
+
+    case 53:
+      check_irq(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      ror(c->TL, c->C, &c->TL, &c->C);
+      break;
+
+    case 54:
+      set_next_step(e);
+      busval = c->TL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      goto _12;
+
+    case 55:
+      set_next_step(e);
+      c->bushi = 1; c->buslo = c->S;
+      busval = get_P(e, TRUE);
+    _27:
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      --c->S;
+      goto _6;
+
+    case 56:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = (c->A |= busval);
+    _28:
+      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
+      goto _13;
+
+    case 57:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->A;
+      c->C = !!(c->TL & 0x80); c->TL <<= 1;
+      goto _21;
+
+    case 58:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->N;
+    _29:
+      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
+      if (c->TL) { goto done; } c->TL = busval;
+      break;
+
+    case 59:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = 0;
+    _30:
+      c->C = c->TL;
+      goto _6;
+
+    case 60:
+      c->bushi = 1; c->buslo = c->S;
+      goto _0;
+
+    case 61:
+      c->bushi = 1; c->buslo = c->S;
+      busval = c->PCH;
+    _31:
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      --c->S;
+      break;
+
+    case 62:
+      check_irq(e);
+      c->bushi = 1; c->buslo = c->S;
+      busval = c->PCL;
+      goto _31;
+
+    case 63:
+      c->bushi = 1; c->buslo = c->S;
+      busval = c->PCL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      --c->S;
+      if (c->req_nmi) {
+        c->veclo = 0xfa;
+        DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
+      } else if (c->opcode == 0 || c->irq) {
+        c->veclo = 0xfe;
+        DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
+      } else {
+        c->veclo = 0xfc;
+        DEBUG("     [%" PRIu64 "] using reset vec\n", e->s.cy);
+      }
+      c->set_vec_cy = e->s.cy;
+      c->has_irq = FALSE;
+      c->has_nmi = FALSE;
+      c->req_nmi = FALSE;
+      break;
+
+    case 64:
+      c->bushi = 1; c->buslo = c->S;
+      busval = get_P(e, FALSE);
+      goto _31;
+
+    case 65:
+      c->bushi = 1; c->buslo = c->S;
+      busval = get_P(e, TRUE);
+      goto _31;
+
+    case 66:
+      set_next_step(e);
+      c->bushi = 1; c->buslo = c->S;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      set_P(e, c->TL);
+      goto _6;
+
+    case 67:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = (c->A &= busval);
+      goto _28;
+
+    case 68:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->A;
+      rol(c->TL, c->C, &c->TL, &c->C);
+      goto _21;
+
+    case 69:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->N;
+    _32:
+      c->TL = !c->TL;
+      goto _29;
+
+    case 70:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = 0;
+      c->TL = !c->TL;
+      goto _30;
+
+    case 71:
+      c->bushi = 1; c->buslo = c->S;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      set_P(e, c->TL);
+      goto _5;
+
+    case 72:
+      set_next_step(e);
+      c->bushi = 1; c->buslo = c->S;
+    _33:
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _34:
+      c->PCH = busval;
+      goto _6;
+
+    case 73:
+      set_next_step(e);
+      c->bushi = 1; c->buslo = c->S;
+      c->TL = c->A;
+      busval = c->TL;
+      goto _27;
+
+    case 74:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = (c->A ^= busval);
+      goto _28;
+
+    case 75:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->A;
+      c->C = !!(c->TL & 0x01); c->TL >>= 1;
+      goto _21;
+
+    case 76:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+    _35:
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->PCL = c->TL;
+      goto _34;
+
+    case 77:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->V;
+      goto _29;
+
+    case 78:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      busval = rare_opcode(e, busval);
+      goto _6;
+
+    case 79:
+      check_irq(e);
+      c->bushi = 1; c->buslo = c->S;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->PCH = busval;
+      break;
+
+    case 80:
+      set_next_step(e);
+    _36:
+      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
+      goto _6;
+
+    case 81:
+      set_next_step(e);
+      c->bushi = 1; c->buslo = c->S;
+      goto _20;
+
+    case 82:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _37:
+      {/*adc*/ u16 sum = c->A + busval + c->C;
+      c->C = sum >= 0x100;
+      c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
+      c->TL = c->A = sum;}
+      goto _28;
+
+    case 83:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->A;
+      ror(c->TL, c->C, &c->TL, &c->C);
+      goto _21;
+
+    case 84:
+      set_next_step(e);
+      ++c->buslo;
+      goto _35;
+
+    case 85:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->V;
+      goto _32;
+
+    case 86:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      goto _36;
+
+    case 87:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->Y;
+      --c->TL;
+      goto _22;
+
+    case 88:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->X;
+      goto _21;
+
+    case 89:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->C;
+      goto _29;
+
+    case 90:
+      ++c->buslo;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
+      goto _8;
+
+    case 91:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->Y;
+      goto _21;
+
+    case 92:
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
+      goto _2;
+
+    case 93:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      c->Y = c->TL;
+      goto _28;
+
+    case 94:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+    _38:
+      c->X = c->TL;
+      goto _28;
+
+    case 95:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->A;
+      goto _22;
+
+    case 96:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+    _39:
+      c->A = c->TL;
+      goto _28;
+
+    case 97:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->A;
+      goto _19;
+
+    case 98:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->C;
+      goto _32;
+
+    case 99:
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+    _40:
+      busval = rare_opcode(e, busval);
+      goto _13;
+
+    case 100:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->Y;
+    _41:
+      c->C = c->TL >= busval; c->TL -= busval;
+      goto _28;
+
+    case 101:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->Y;
+      ++c->TL;
+      goto _22;
+
+    case 102:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->C = c->A >= busval; c->TL = (c->A - busval);
+      goto _28;
+
+    case 103:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->X;
+      --c->TL;
+      goto _19;
+
+    case 104:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->Z;
+      goto _29;
+
+    case 105:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->X;
+      goto _41;
+
+    case 106:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      busval = ~busval; /*sbc*/
+      goto _37;
+
+    case 107:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->X;
+      ++c->TL;
+      goto _19;
+
+    case 108:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = c->Z;
+      goto _32;
+
+    case 109:
+    _42:
+      c->bushi = 0xff; c->buslo = c->veclo; c->I = 1;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      goto _11;
+
+    case 110:
+      goto _42;
+
+    case 111:
+      ++c->buslo;
+      goto _33;
+
+    case 112:
+      set_next_step(e);
+      c->bushi = c->oamhi; c->buslo = 0; c->oamlo = e->s.p.oamaddr;
+      break;
+
+    case 113:
+      goto _7;
+
+    case 114:
+      e->s.p.oam[c->oamlo++] = c->TL;
+      ++c->buslo;
+      break;
+
+    case 115:
+      goto _7;
+
+    case 116:
+      e->s.p.oam[c->oamlo++] = c->TL;
+      ++c->buslo;
+      goto _6;
+
+    case 117:
+      break;
+
+    case 118:
+      e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
+      c->step = c->dmc_step;
+      e->s.a.dmcaddr = (e->s.a.dmcaddr + 1) | 0x8000;
+      if (e->s.a.dmcbytes) {
+        --e->s.a.dmcbytes;
+      } else {
+        start_dmc(&e->s.a);
+        if (e->s.a.reg[0x10] & 0x40) {
+          e->s.a.dmcen = TRUE;
         } else {
-          start_dmc(&e->s.a);
-          if (e->s.a.reg[0x10] & 0x40) {
-            e->s.a.dmcen = TRUE;
-          } else {
-            DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
-            e->s.a.dmcen = FALSE;
-            if (e->s.a.reg[0x10] & 0x80) {
-              c->irq |= IRQ_DMC;
-              DEBUG("  dmc irq!\n");
-            }
+          DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
+          e->s.a.dmcen = FALSE;
+          if (e->s.a.reg[0x10] & 0x80) {
+            c->irq |= IRQ_DMC;
+            DEBUG("  dmc irq!\n");
           }
         }
-        DEBUG(" DO dmcfetch=%u (cy: %" PRIu64
-              ") (addr=>%04hx, bytes=>%u) (bufstate=%u=>2)\n",
-              e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes,
-              e->s.a.dmcbufstate);
-        e->s.a.dmcbufstate = 2;
-        break;
-    }
-  }
-  c->bits = s_cpu_bits[s_opcode_bits[c->step++]];
-}
+      }
+      DEBUG(" DO dmcfetch=%u (cy: %" PRIu64
+            ") (addr=>%04hx, bytes=>%u) (bufstate=%u=>2)\n",
+            e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes,
+            e->s.a.dmcbufstate);
+      e->s.a.dmcbufstate = 2;
+      break;
 
-static const u64 s_cpu_bits[] = {
-//    6         5         4         3         2         1         0
-// 3210987654321098765432109876543210987654321098765432109876543210
- 0b0100001000000000000000000000000000000000000000000000001000000110, // 0 cpu_decode
- 0b0000000000000000000000000000000000000000000000000000001000000110, // 1 imp
- 0b0000001000000000000000000000000000000000000000000000101000000110, // 2 immlo
- 0b0000001000000000000000000000000000000000010000000000001000000110, // 3 immhi
- 0b0000101000000000000000000000000000000000010100000000001000000100, // 4 immhix
- 0b0000001000000000000000000000000000000000010100000000001000000100, // 5 immhix2
- 0b0000101000000000000000000000000000000000011000000000001000000100, // 6 immhiy
- 0b0000000000000000000000000000000000000000100000000000001000010010, // 7 fixhi
- 0b0000000000001000000000000000000000000000000000000000001000001010, // 8 inc_s
- 0b0000000001000000000000000000000000000000000000000000001000000110, // 9 br
- 0b0010000100000000000000000000000000000000000000000000001000000101, // 10 fixpc
- 0b0000000000000000000000000000000000000000000100000000001000010010, // 11 zerox
- 0b0000000000000000000000000000000000000000001000000000001000010010, // 12 zeroy
- 0b0000100000000000000000000000000000000000011000000000001100000000, // 13 zeroy_indir
- 0b0000000000000000000000000000000000000000000000000000101000010010, // 14 readlo
- 0b0000000000000000000000000000000000000000010000000000001100000010, // 15 readhi
- 0b0010000000000000000000000000000001010000000000000000000000000001, // 16 write
- 0b0000000000101000000000000000000000000000000000000000101000001010, // 17 pop_pcl
- 0b0010010000000000000010000000000000000000000000000000001000010001, // 18 adc
- 0b0010010000000000000000000000001000000000000000000000001000010001, // 19 and
- 0b0000010000000000000000000000010001010000000000000000000000000010, // 20 asl
- 0b0010000000000000000000010000000000000000000000000000001000010001, // 21 bit
- 0b0010010000000000000000001000000000000000000000000000001000010001, // 22 cmp
- 0b0010010000000000000000000100000000000000000000000010001000010001, // 23 cpx
- 0b0010010000000000000000000100000000000000000000000100001000010001, // 24 cpy
- 0b0000010000000000000000000000000011010000000000000000000000000010, // 25 dec
- 0b0010010000000000000000100000000000000000000000000000001000010001, // 26 eor
- 0b0000010000000000000000000000000101010000000000000000000000000010, // 27 inc
- 0b0010010000000000011000000000000000000000000000000000101000010001, // 28 lax
- 0b0010010000000000001000000000000000000000000000000000101000010001, // 29 lda
- 0b0010010000000000010000000000000000000000000000000000101000010001, // 30 ldx
- 0b0010010000000000100000000000000000000000000000000000101000010001, // 31 ldy
- 0b0000010000000000000000000000100001010000000000000000000000000010, // 32 lsr
- 0b0010000000000000000000000000000000000000000000000000001000010001, // 33 nopm
- 0b0010000000000000000000000000000000000000000000000000001000000101, // 34 nop
- 0b0010010000000000000001000000000000000000000000000000001000010001, // 35 ora
- 0b0000010000000000000000000001000001010000000000000000000000000010, // 36 rol
- 0b0000010000000000000000000010000001010000000000000000000000000010, // 37 ror
- 0b0010010000000000000100000000000000000000000000000000001000010001, // 38 sbc
- 0b0010000000000000000000000000000001100000000000000000000000010001, // 39 sax
- 0b0010000000000000000000000000000001010000000000000001000000010001, // 40 sta
- 0b0010000000000000000000000000000001010000000000000010000000010001, // 41 stx
- 0b0010000000000000000000000000000001010000000000000100000000010001, // 42 sty
- 0b0000000000000000000000000000000011010000000000000000000000000010, // 43 dcp1
- 0b0010010000000000000000001000000001010000000000000000000000000001, // 44 dcp2
- 0b0000000000000000000000000000000101010000000000000000000000000010, // 45 isb1
- 0b0010010000000000000100000000000001010000000000000000000000000001, // 46 isb2
- 0b0000000000000000000000000000010001010000000000000000000000000010, // 47 slo1
- 0b0010010000000000000001000000000001010000000000000000000000000001, // 48 slo2
- 0b0000000000000000000000000001000001010000000000000000000000000010, // 49 rla1
- 0b0010010000000000000000000000001001010000000000000000000000000001, // 50 rla2
- 0b0000000000000000000000000000100001010000000000000000000000000010, // 51 sre1
- 0b0010010000000000000000100000000001010000000000000000000000000001, // 52 sre2
- 0b0000000000000000000000000010000001010000000000000000000000000010, // 53 rra1
- 0b0010010000000000000010000000000001010000000000000000000000000001, // 54 rra2
- 0b0010000000000100000000000000000001001000000000000000000000001001, // 55 php
- 0b0010011000000000000001000000000000000000000000000000001000000101, // 56 ora_imm
- 0b0010010000000000001000000000010000000000000000000001001000000101, // 57 asl_a
- 0b0001001000000000000000000000000000000000000001000000001000000101, // 58 bpl
- 0b0010000000000010000000000000000000000000000000000000011000000101, // 59 clc
- 0b0000000000000000000000000000000000000000000000000000001000001000, // 60 jsr1
- 0b0000000000000100000000000000000001000010000000000000000000001000, // 61 push_pch
- 0b0000000000000100000000000000000001000001000000000000000000001010, // 62 push_pcl
- 0b0000000000010100000000000000000001000001000000000000000000001000, // 63 push_pcl_i
- 0b0000000000000100000000000000000001000100000000000000000000001000, // 64 push_p
- 0b0000000000000100000000000000000001001000000000000000000000001000, // 65 push_pb
- 0b0010000000000001000000000000000000000000000000000000101000001001, // 66 plp
- 0b0010011000000000000000000000001000000000000000000000001000000101, // 67 and_imm
- 0b0010010000000000001000000001000000000000000000000001001000000101, // 68 rol_a
- 0b0001001000000000000000000000000000000000000011000000001000000101, // 69 bmi
- 0b0010000000000010000000000000000000000000000010000000011000000101, // 70 sec
- 0b0000000000001001000000000000000000000000000000000000101000001000, // 71 rti1
- 0b0010000010000000000000000000000000000000000000000000001000001001, // 72 rti2
- 0b0010000000000100000000000000000001010000000000000001000000001001, // 73 pha
- 0b0010011000000000000000100000000000000000000000000000001000000101, // 74 eor_imm
- 0b0010010000000000001000000000100000000000000000000001001000000101, // 75 lsr_a
- 0b0010000010100000000000000000000000000000000000000000001000000101, // 76 jmp
- 0b0001001000000000000000000000000000000000000000100000001000000101, // 77 bvc
- 0b0010000000000000000000000000000000100000000000000000001000000101, // 78 cli
- 0b0000000010000000000000000000000000000000000000000000001000001010, // 79 rts1
- 0b0010001000000000000000000000000000000000000000000000000000000001, // 80 rts2
- 0b0010010000000000001000000000000000000000000000000000101000001001, // 81 pla
- 0b0010011000000000000010000000000000000000000000000000001000000101, // 82 adc_imm
- 0b0010010000000000001000000010000000000000000000000001001000000101, // 83 ror_a
- 0b0010000010100000000000000000000000000000000000000000001100000001, // 84 jmp_ind
- 0b0001001000000000000000000000000000000000000010100000001000000101, // 85 bvs
- 0b0010001000000000000000000000000000000000000000000000001000000101, // 86 nop_imm
- 0b0010010000000000100000000000000010000000000000000100001000000101, // 87 dey
- 0b0010010000000000001000000000000000000000000000000010001000000101, // 88 txa
- 0b0001001000000000000000000000000000000000000000010000001000000101, // 89 bcc
- 0b0000000000000000000000000000000000000000011000000000001100000000, // 90 sta_ind_idx
- 0b0010010000000000001000000000000000000000000000000100001000000101, // 91 tya
- 0b0000001000000000000000000000000000000000011000000000001000000100, // 92 sta_absy
- 0b0010011000000000100000000000000000000000000000000000101000000101, // 93 ldy_imm
- 0b0010011000000000010000000000000000000000000000000000101000000101, // 94 ldx_imm
- 0b0010010000000000100000000000000000000000000000000001001000000101, // 95 tay
- 0b0010011000000000001000000000000000000000000000000000101000000101, // 96 lda_imm
- 0b0010010000000000010000000000000000000000000000000001001000000101, // 97 tax
- 0b0001001000000000000000000000000000000000000010010000001000000101, // 98 bcs
- 0b0010010000000000000000000000000000100000000000000000001000000100, // 99 tsx
- 0b0010011000000000000000000100000000000000000000000100001000000101, // 100 cpy_imm
- 0b0010010000000000100000000000000100000000000000000100001000000101, // 101 iny
- 0b0010011000000000000000001000000000000000000000000000001000000101, // 102 cmp_imm
- 0b0010010000000000010000000000000010000000000000000010001000000101, // 103 dex
- 0b0001001000000000000000000000000000000000000000001000001000000101, // 104 bne
- 0b0010011000000000000000000100000000000000000000000010001000000101, // 105 cpx_imm
- 0b0010011000000000000100000000000000000000000000000000001000000101, // 106 sbc_imm
- 0b0010010000000000010000000000000100000000000000000010001000000101, // 107 inx
- 0b0001001000000000000000000000000000000000000010001000001000000101, // 108 beq
- 0b0000000000100000000000000000000000000000000000000000101000100000, // 109 veclo
- 0b0000000000100000000000000000000000000000000000000000101000100000, // 110 veclo_i
- 0b0010000010000000000000000000000000000000000000000000001100000000, // 111 vechi
- 0b0000000000000000000000000000000000000000000000000000000001000001, // 112 oam
- 0b0000000000000000000000000000000000000000000000000000101000000000, // 113 oamr
- 0b0000000000000000000000000000000000000000000000000000000110000000, // 114 oamw
- 0b0000000000000000000000000000000000000000000000000000101000000000, // 115 oamrd XXX
- 0b0010000000000000000000000000000000000000000000000000000110000000, // 116 oamwd
- 0b0000000000000000000000000000000000000000000000000000000000000000, // 117 dmcnop
- 0b1000000000000000000000000000000000000000000000000000000000000000, // 118 dmc
- 0b0000000000000000000000000000000000100000000000000000000000000000, // 119 halt
- 0b0010011000000000001000000000101000000000000000000000001000000101, // 120 asr_imm
- 0b0010011000000000000000000000000000100000000000000000001000000101, // 121 arr_imm
- 0b0010011000000000011000000000000000000000000000000000101000000101, // 122 lxa_imm
- 0b0010010000000000000000000000000000100000000000000000000000000001, // 123 las
- 0b0010000000000000000000000000000001100000000000000000000000010001, // 124 special write
-};
+    case 119:
+      busval = rare_opcode(e, busval);
+      break;
+
+    case 120:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = (c->A &= busval);
+      c->C = !!(c->TL & 0x01); c->TL >>= 1;
+      goto _39;
+
+    case 121:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      busval = rare_opcode(e, busval);
+      goto _28;
+
+    case 122:
+      set_next_step(e);
+      c->bushi = c->PCH; c->buslo = c->PCL;
+      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
+      c->TL = busval; c->TH = 0;
+      c->A = c->TL;
+      goto _38;
+
+    case 123:
+      set_next_step(e);
+      goto _40;
+
+    case 124:
+      goto _26;
+  }
+  c->bits = s_opcode_bits[c->step++];
+}
 
 // Determine how many cycles to stall:
 // * 4 cycles if it falls on a CPU read cycle.
@@ -2925,10 +3601,10 @@ static Result init_emulator(E *e, const EInit *init) {
   ZERO_MEMORY(*s);
   CHECK(SUCCESS(init_mapper(e)));
   s->c.opcode = 1; // anything but 0, so it isn't interpreted as BRK.
-  s->c.bits = 0;
   s->c.I = TRUE;
   s->c.step = s_callvec;
   s->c.next_step = s_cpu_decode;
+  s->c.bits = s_opcode_bits[s->c.step++];
   s->p.enabled = FALSE;
   // Triangle volume is always full; disabled by len counter or linear counter.
   e->s.a.vol[2] = 1;

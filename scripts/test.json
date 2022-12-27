@@ -54,7 +54,7 @@
     "tests": [
       ["1.Branch_Basics.nes", 15, "5fc146b530ac463a1889e3bde071f1542b647344"],
       ["2.Backward_Branch.nes", 15, "6f37715c211de29b54f8ac427ba7c265820f7261"],
-      ["3.Forward_Branch.nes", 15, "ba50649aefeae2c749b3c3bd9fa592c01fbc4575"]
+      ["3.Forward_Branch.nes", 16, "ba50649aefeae2c749b3c3bd9fa592c01fbc4575"]
     ]
   },
 
@@ -163,7 +163,7 @@
   "mmc3_test": {
     "dir": "nes-test-roms/mmc3_test_2/rom_singles/",
     "tests": [
-      ["1-clocking.nes", 23, "cf1677f942b5361ed051fb31b3deca43028af9d7"],
+      ["1-clocking.nes", 25, "cf1677f942b5361ed051fb31b3deca43028af9d7"],
       ["2-details.nes", 50, "33845b458e0a20d6fee382a01a29b152afe13982"],
       ["3-A12_clocking.nes", 24, "9311c847f820aaf14537edc2e727667aa460b1ef"],
       ["4-scanline_timing.nes", 320, "4730a1e06a8e0cb67cee862796ac5208bffb2d24"],
@@ -229,7 +229,7 @@
       ["07-nmi_on_timing.nes", 200, "fa297771d4ba5eb10f04d43119cc216fb2cd3c21"],
       ["08-nmi_off_timing.nes", 300, "1006b1d0bbaffb32a3238d8bf1b8529770c280e4"],
       ["09-even_odd_frames.nes", 100, "5a0d80b027a66c0a443cafa2ec7c04a180c725ff"],
-      ["10-even_odd_timing.nes", 140, "02422d09a845cd9850cb468048f665d1249e6759"]
+      ["10-even_odd_timing.nes", 142, "02422d09a845cd9850cb468048f665d1249e6759"]
     ]
   },
 
@@ -254,17 +254,17 @@
       ["08.double_height.nes", 20, "63a9bb4c3d7c53cc7feaafba0a388e0b15373082"],
       ["09.timing_basics.nes", 100, "5a29023afe464c6cd66dc4bad1c832e82d46f2df"],
       ["10.timing_order.nes", 100, "5377031883e4be2c64d1165cba994e9d7f39f121"],
-      ["11.edge_timing.nes", 50, "443fd271bb1f43c9f257ba8c03daf25b72238f55"]
+      ["11.edge_timing.nes", 55, "443fd271bb1f43c9f257ba8c03daf25b72238f55"]
     ]
   },
 
   "sprite_overflow_tests": {
     "dir": "nes-test-roms/sprite_overflow_tests/",
     "tests": [
-      ["1.Basics.nes", 15, "c7d687553be621b31b7fe6adcf9ceb9e96a3acbe"],
+      ["1.Basics.nes", 16, "c7d687553be621b31b7fe6adcf9ceb9e96a3acbe"],
       ["2.Details.nes", 25, "5d62202ee66b1faefee24fb039a9ca793d09c8a5"],
-      ["3.Timing.nes", 110, "b7814ed232fd5eeb946f2291267d3341e808da36"],
-      ["4.Obscure.nes", 20, "d4318c5b26432e035db5f3b8ea0ee5d97124c934"],
+      ["3.Timing.nes", 135, "b7814ed232fd5eeb946f2291267d3341e808da36"],
+      ["4.Obscure.nes", 21, "d4318c5b26432e035db5f3b8ea0ee5d97124c934"],
       ["5.Emulator.nes", 15, "0c0519016f27fb72caea6d66167ceda64b7f5440"]
     ]
   },
