@@ -31,7 +31,7 @@ static inline u8x16 blendv_u8x16(u8x16 a, u8x16 b, u8x16 mask) {
   return (u8x16)_mm_or_si128(_mm_andnot_si128((__m128i)mask, (__m128i)a),
                              _mm_and_si128((__m128i)b, (__m128i)mask));
 #elif __wasm_simd128__
-  return wasm_v128_or(wasm_v128_andnot(a, mask), wasm_v128_and(b, mask));
+  return wasm_v128_bitselect(b, a, mask);
 #else
   return (a & ~mask) | (b & mask);
 #endif
