@@ -349,30 +349,30 @@ repeat:
     }
     break;
   case 4: inch(p); break;
-  case 5: inch(p); shift_bg(e); break;
-  case 6: inch(p); shift_en(e); spr_step(e); break;
+  case 5: inch(p); goto _23;
+  case 6: inch(p); goto _27;
   case 7: incv(p); break;
-  case 8: incv(p); shift_en(e); spr_step(e); break;
+  case 8: incv(p); goto _27;
   case 9: p->ptbh = read_ptb(e, 8); break;
-  case 10: p->ptbh = read_ptb(e, 8); shift_bg(e); break;
-  case 11: p->ptbh = read_ptb(e, 8); shift_en(e); spr_step(e); break;
+  case 10: p->ptbh = read_ptb(e, 8); goto _23;
+  case 11: p->ptbh = read_ptb(e, 8); goto _27;
   case 12: p->ptbl = read_ptb(e, 0); break;
-  case 13: p->ptbl = read_ptb(e, 0); shift_bg(e); break;
-  case 14: p->ptbl = read_ptb(e, 0); shift_en(e); spr_step(e); break;
+  case 13: p->ptbl = read_ptb(e, 0); goto _23;
+  case 14: p->ptbl = read_ptb(e, 0); goto _27;
   case 15: p->state = 0; break;
   case 16: read_atb(e); break;
-  case 17: read_atb(e); shift_bg(e); break;
-  case 18: read_atb(e); shift_en(e); spr_step(e); break;
+  case 17: read_atb(e); goto _23;
+  case 18: read_atb(e); goto _27;
   case 19: read_ntb(e); break;
   case 20: read_ntb(e); shift_bg(e); reload(e); break;
-  case 21: read_ntb(e); shift_en(e); reload(e); spr_step(e); break;
-  case 22: read_ntb(e); spr_step(e); break;
-  case 23: shift_bg(e); break;
-  case 24: shift_dis(e); break;
-  case 25: shift_dis(e); sprfetch(e); break;
-  case 26: shift_en(e); reload(e); sprfetch(e); spr_step(e); ppu_t_to_v(p, 0x041f); break;
-  case 27: shift_en(e); spr_step(e); break;
-  case 28: spr_step(e); break;
+  case 21: read_ntb(e); shift_en(e); reload(e); goto _28;
+  case 22: read_ntb(e); goto _28;
+  case 23: _23: shift_bg(e); break;
+  case 24: _24: shift_dis(e); break;
+  case 25: shift_dis(e); goto _32;
+  case 26: shift_en(e); reload(e); goto _33;
+  case 27: _27: shift_en(e); goto _28;
+  case 28: _28: spr_step(e); break;
   case 29: spr_step(e); ppu_t_to_v(p, 0x7be0); break;
   case 30: sprclear(e); break;
   case 31:
@@ -388,10 +388,10 @@ repeat:
       goto repeat;
     }
     break;
-  case 32: sprfetch(e); break;
-  case 33: sprfetch(e); spr_step(e); ppu_t_to_v(p, 0x041f); break;
-  case 34: spreval(e); inch(p); shift_en(e); spr_step(e); break;
-  case 35: spreval(e); shift_dis(e); break;
+  case 32: _32: sprfetch(e); break;
+  case 33: _33: sprfetch(e); spr_step(e); ppu_t_to_v(p, 0x041f); break;
+  case 34: spreval(e); inch(p); shift_en(e); goto _28;
+  case 35: spreval(e); goto _24;
   }
 }
 
