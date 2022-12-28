@@ -37,7 +37,7 @@
 #define AUDIO_BUFFER_EXTRA_FRAMES 256
 #define DIV_CEIL(numer, denom) (((numer) + (denom) - 1) / (denom))
 #define VALUE_WRAPPED(X, MAX) \
-  (UNLIKELY((X) >= (MAX) ? ((X) -= (MAX), TRUE) : FALSE))
+  (UNLIKELY((X) >= (MAX) ? ((X) -= (MAX), true) : false))
 
 typedef Emulator E;
 typedef EmulatorConfig EConfig;
@@ -90,7 +90,7 @@ static void do_a12_access(E* e, u16 addr) {
   P* p = &e->s.p;
   if (!m->has_a12_irq) return;
 
-  Bool low = (addr & 0x1000) == 0;
+  bool low = (addr & 0x1000) == 0;
   if (p->a12_low) {
     p->a12_low_count += e->s.cy - p->last_vram_access_cy;
   }
@@ -101,20 +101,20 @@ static void do_a12_access(E* e, u16 addr) {
 
   if (!low) {
     if (p->a12_low_count >= 10) {
-      Bool trigger_irq = FALSE;
+      bool trigger_irq = false;
       if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
         DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) (scany=%u)\n",
               e->s.cy, p->frame, p->fbidx >> 8);
         p->a12_irq_counter = m->mmc3.irq_latch;
-        m->mmc3.irq_reload = FALSE;
+        m->mmc3.irq_reload = false;
         if (e->ci.board != BOARD_TXROM_MMC3A && p->a12_irq_counter == 0) {
-          trigger_irq = TRUE;
+          trigger_irq = true;
         }
       } else {
         DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) (scany=%u)\n",
               e->s.cy, p->frame, p->fbidx >> 8);
         if (--p->a12_irq_counter == 0) {
-          trigger_irq = TRUE;
+          trigger_irq = true;
         }
       }
 
@@ -308,7 +308,7 @@ static inline void sprclear(E *e) {
   p->bgsprleftmask[0] = (p->ppumask & 2) ? 0xffff : 0;
   p->bgsprleftmask[1] = (p->ppumask & 4) ? 0xffff : 0;
   memset(p->oam2, 0xff, sizeof(p->oam2));
-  spr->spr0 = FALSE;
+  spr->spr0 = false;
 }
 
 static inline void spreval(E *e) {
@@ -329,7 +329,7 @@ static void ppu1(E *e) {
   DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
   e->s.p.ppustatus = 0;
   if (e->s.cy == e->s.p.write_ctrl_cy) {
-    e->s.c.req_nmi = FALSE;
+    e->s.c.req_nmi = false;
   }
 }
 static void ppu2(E *e) {
@@ -343,7 +343,7 @@ static void ppu2(E *e) {
 static void ppu3(E *e) {
   if (e->s.p.ppuctrl & 0x80) {
     u64 delta_cy = e->s.cy - e->s.c.set_vec_cy;
-    e->s.c.req_nmi = TRUE;
+    e->s.c.req_nmi = true;
     e->s.p.nmi_cy = e->s.cy;
     DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
   }
@@ -482,7 +482,7 @@ static void ppu_step(E *e) {
   if (f) f(e);
 }
 
-static inline Bool y_in_range(P *p, u8 y) {
+static inline bool y_in_range(P *p, u8 y) {
   return y <= 239 && (u8)(scany(p) - y) < ((p->ppuctrl & 0x20) ? 16 : 8);
 }
 
@@ -504,7 +504,7 @@ static void spr7(E* e);
 static void spr1(E *e) { e->s.p.spr.t = e->s.p.oam[e->s.p.spr.s++]; }
 static void spr2(E *e) {
   if (!y_in_range(&e->s.p, e->s.p.spr.t)) { e->s.p.spr.s += 3; spr4(e); return; }
-  if (e->s.p.spr.s == 1) e->s.p.spr.spr0 = TRUE;
+  if (e->s.p.spr.s == 1) e->s.p.spr.spr0 = true;
   if (e->s.p.spr.d <= 32 - 3) { e->s.p.oam2[e->s.p.spr.d++] = e->s.p.spr.t; }
 }
 static void spr3(E *e) { e->s.p.oam2[e->s.p.spr.d++] = e->s.p.oam[e->s.p.spr.s++]; }
@@ -593,14 +593,14 @@ static void spr_step(E *e) {
 
 // APU stuff ///////////////////////////////////////////////////////////////////
 
-static inline Bool is_power_of_two(u32 x) {
+static inline bool is_power_of_two(u32 x) {
   return x == 0 || (x & (x - 1)) == 0;
 }
 
 static void set_vol(A* a, int chan, u8 val) {
   if (val & 0x10) {
     a->vol[chan] = val & 0xf;
-    a->update = TRUE;
+    a->update = true;
   }
   a->envreload[chan] = val & 0xf;
   a->cvol[chan] = (val & 0x10) ? ~0 : 0;
@@ -631,7 +631,7 @@ static void set_sweep(A *a, int chan, u8 val) {
   get_sweep_target_or_mute(a);
 }
 
-static Bool is_len_enabled(A *a, int chan) {
+static bool is_len_enabled(A *a, int chan) {
   return a->reg[0x15] & (1 << chan);
 }
 
@@ -650,7 +650,7 @@ static void start_chan(A* a, int chan, u8 val) {
   if (is_len_enabled(a, chan)) {
     set_len(a, chan, val);
     if (chan == 2) {
-      a->trireload = TRUE;
+      a->trireload = true;
       update_tri_play_mask(a);
     } else {
       a->start[chan] = ~0;
@@ -659,14 +659,14 @@ static void start_chan(A* a, int chan, u8 val) {
     if (chan < 2) {
       a->seq[chan] = 0;
     }
-    a->update = TRUE;
+    a->update = true;
   }
 }
 
 static void start_dmc(A* a) {
   a->dmcaddr = 0xc000 + (a->reg[0x12] << 6);
   a->dmcbytes = a->reg[0x13] << 4;
-  a->dmcen = TRUE;
+  a->dmcen = true;
 }
 
 static void set_period(A* a, int chan, u16 val) {
@@ -738,7 +738,7 @@ static void apu_tick(E *e) {
       if (a->seq[4] == 0) {
         if (a->dmcen) {
           DEBUG("  dmc output finished, fetch (cy: %" PRIu64 ")\n", e->s.cy);
-          a->dmcfetch = TRUE;
+          a->dmcfetch = true;
         }
         if (a->dmcbufstate) {
           DEBUG("  copy buf -> sr (cy: %" PRIu64 ") (bufstate=%u=>%u)\n",
@@ -763,7 +763,7 @@ static void apu_tick(E *e) {
         a->seq[7] = 0;
       }
     }
-    a->update = TRUE;
+    a->update = true;
   }
 
   if (a->dmcfetch) {
@@ -778,7 +778,7 @@ static void apu_tick(E *e) {
     } else {
       DEBUG(" dmcfetch skipped (cy: %" PRIu64 "):\n", e->s.cy);
     }
-    a->dmcfetch = FALSE;
+    a->dmcfetch = false;
   }
 
   if (a->update) {
@@ -807,7 +807,7 @@ static void apu_tick(E *e) {
       f32x4 sampvol = (f32x4)((u32x4)a->vrc_sample & play_mask4) * a->vrc_vol;
       a->mixed += (sampvol[0] + sampvol[1] + sampvol[2]) * 0.01f;
     }
-    a->update = FALSE;
+    a->update = false;
   }
 
   // Store twice so we don't have to wrap when filtering.
@@ -879,14 +879,14 @@ static void apu_quarter(E *e) {
     // ... the linear counter is reloaded with the counter reload value.
     a->tricnt = a->reg[8] & 0x7f;
     update_tri_play_mask(a);
-    a->update = TRUE;
+    a->update = true;
   } else if (a->tricnt) {
     // ... otherwise if the linear counter is non-zero, it is decremented.
     --a->tricnt;
   }
   if (a->play_mask[2] && a->tricnt == 0) {
     update_tri_play_mask(a);
-    a->update = TRUE;
+    a->update = true;
   }
   // If the control flag is clear, the linear counter reload flag is cleared.
   if (!(a->reg[8] & 0x80)) {
@@ -915,17 +915,17 @@ static void apu_half(E *e) {
 }
 
 static void apu_step(E *e) {
-  Bool more;
+  bool more;
   A* a = &e->s.a;
   do {
-    more = FALSE;
+    more = false;
     u16 cnst = s_apu_consts[a->state];
     u16 bits = s_apu_bits[a->state++];
     while (bits) {
       int bit = __builtin_ctzl(bits);
       bits &= bits - 1;
       switch (bit) {
-        case 0: more = TRUE; break;
+        case 0: more = true; break;
         case 1: apu_tick(e); break;
         case 2: apu_quarter(e); break;
         case 3: apu_half(e); break;
@@ -983,7 +983,7 @@ static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
   u8 cval[256] = {0};
   char new_chrs[9] = {0};
   for (int i = 0; i < 8; ++i) {
-    Bool set = !!(val & (0x80 >> i));
+    bool set = !!(val & (0x80 >> i));
     new_chrs[i] = set ? chrs[i] : (chrs[i] | 32);
     cval[(int)chrs[i]] = (cval[(int)chrs[i]] << 1) | set;
   }
@@ -1003,7 +1003,7 @@ static inline void inc_ppu_addr(P* p) {
   p->v = (p->v + ((p->ppuctrl & 4) ? 32 : 1)) & 0x3fff;
 }
 
-static inline void read_joyp(E *e, Bool write) {
+static inline void read_joyp(E *e, bool write) {
   if (e->joypad_info.callback && (write || e->s.j.S)) {
     JoypadButtons btns[2];
     ZERO_MEMORY(btns);
@@ -1025,7 +1025,7 @@ static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 static u8 cpu_read(E *e, u16 addr) {
   A* a = &e->s.a;
   C* c = &e->s.c;
-  c->bus_write = FALSE;
+  c->bus_write = false;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
     return c->ram[addr & 0x7ff];
@@ -1041,7 +1041,7 @@ static u8 cpu_read(E *e, u16 addr) {
         p->ppustatus &= ~0x80;  // Clear NMI flag.
         p->w = 0;
         p->read_status_cy = e->s.cy;
-        if (e->s.cy - p->nmi_cy <= 3) { e->s.c.req_nmi = FALSE; }
+        if (e->s.cy - p->nmi_cy <= 3) { e->s.c.req_nmi = false; }
         DEBUG("     [%" PRIu64 "] ppu:status=%02hhx w=0 fbx=%d fby=%d\n",
               e->s.cy, result, scanx(p), scany(p));
         return result;
@@ -1070,13 +1070,13 @@ static u8 cpu_read(E *e, u16 addr) {
         return result;
       }
       case 0x16: { // JOY1
-        read_joyp(e, FALSE);
+        read_joyp(e, false);
         u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[0] & 1);
         e->s.j.joyp[0] >>= 1;
         return result;
       }
       case 0x17: { // JOY2
-        read_joyp(e, FALSE);
+        read_joyp(e, false);
         u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[1] & 1);
         e->s.j.joyp[1] >>= 1;
         return result;
@@ -1106,7 +1106,7 @@ static u8 cpu_read(E *e, u16 addr) {
 static void cpu_write(E *e, u16 addr, u8 val) {
   P* p = &e->s.p;
   C* c = &e->s.c;
-  c->bus_write = TRUE;
+  c->bus_write = true;
   DEBUG("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
@@ -1118,11 +1118,11 @@ static void cpu_write(E *e, u16 addr, u8 val) {
     switch (addr & 0x7) {
     case 0:
       if (p->ppustatus & val & (p->ppuctrl ^ val) & 0x80) {
-        c->req_nmi = TRUE;
+        c->req_nmi = true;
         DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy);
       }
       if ((val & 0x80) == 0 && e->s.cy - p->nmi_cy <= 3) {
-        c->req_nmi = FALSE;
+        c->req_nmi = false;
       }
       p->write_ctrl_cy = e->s.cy;
       p->ppuctrl = val;
@@ -1230,7 +1230,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
               DEBUG("STARTing DMC with fetch (cy: %" PRIu64
                     ") (bufstate=%u) (seq=%u)\n",
                     e->s.cy, a->dmcbufstate, a->seq[4]);
-              a->dmcfetch = TRUE;
+              a->dmcfetch = true;
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
                     e->s.cy, a->seq[4]);
@@ -1238,7 +1238,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
             start_dmc(a);
           }
         } else {
-          a->dmcen = FALSE;
+          a->dmcen = false;
         }
         for (int i = 0; i < 4; ++i) {
           if (!(val & (1 << i))) { a->len[i] = 0; }
@@ -1285,7 +1285,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         break;
       }
       case 0x16: {  // JOY1
-        read_joyp(e, TRUE);
+        read_joyp(e, true);
         e->s.j.S = val & 1;
         break;
       }
@@ -1573,7 +1573,7 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       break;
     case 12: case 13: // IRQ latch / IRQ reload
       if (addr & 1) {
-        m->mmc3.irq_reload = TRUE;
+        m->mmc3.irq_reload = true;
         e->s.p.a12_irq_counter = 0;
         DEBUG("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
       } else {
@@ -1583,10 +1583,10 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       break;
     case 14: case 15: // IRQ disable / IRQ enable
       if (addr & 1) {
-        m->mmc3.irq_enable = TRUE;
+        m->mmc3.irq_enable = true;
         DEBUG("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
       } else {
-        m->mmc3.irq_enable = FALSE;
+        m->mmc3.irq_enable = false;
         e->s.c.irq &= ~IRQ_MAPPER;
         DEBUG("     [%" PRIu64 "] mmc3 irq disable\n", e->s.cy);
       }
@@ -1620,7 +1620,7 @@ static void mapper_vrc_prg_map(E* e) {
   }
 }
 
-static Bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, Bool chr_shift) {
+static bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, bool chr_shift) {
   M *m = &e->s.m;
   u8 chr_select = (((addr >> 12) - 0xb) << 1) | ((addr >> 1) & 1);
 
@@ -1628,12 +1628,12 @@ static Bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, Bool chr_shift) {
     case 0x8000 ... 0x8003: // PRG select 0
       m->prg_bank[0] = val & 0x1f;
       mapper_vrc_prg_map(e);
-      return TRUE;
+      return true;
 
     case 0xa000 ... 0xa003: // PRG select 1
       m->prg_bank[1] = val & 0x1f;
       mapper_vrc_prg_map(e);
-      return TRUE;
+      return true;
 
     case 0xb000: case 0xc000: case 0xd000: case 0xe000:  // CHR select X low
     case 0xb002: case 0xc002: case 0xd002: case 0xe002:
@@ -1657,9 +1657,9 @@ static Bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, Bool chr_shift) {
                       m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
                       m->chr_bank[6], m->chr_bank[7]);
       }
-      return TRUE;
+      return true;
   }
-  return FALSE;
+  return false;
 }
 
 static void mapper_vrc2_shared_write(E* e, u16 addr, u8 val) {
@@ -1726,15 +1726,15 @@ static void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
     }                                                                          \
   }
 
-MAPPER_VRC_WRITE(mapper_vrc2a_write, vrc2, 1, 0, TRUE)
-MAPPER_VRC_WRITE(mapper_vrc2b_write, vrc2, 0, 1, FALSE)
-MAPPER_VRC_WRITE(mapper_vrc2c_write, vrc2, 1, 0, FALSE)
-MAPPER_VRC_WRITE(mapper_vrc4a_write, vrc4, 1, 2, FALSE)
-MAPPER_VRC_WRITE(mapper_vrc4b_write, vrc4, 1, 0, FALSE)
-MAPPER_VRC_WRITE(mapper_vrc4c_write, vrc4, 6, 7, FALSE)
-MAPPER_VRC_WRITE(mapper_vrc4d_write, vrc4, 3, 2, FALSE)
-MAPPER_VRC_WRITE(mapper_vrc4e_write, vrc4, 2, 3, FALSE)
-MAPPER_VRC_WRITE(mapper_vrc4f_write, vrc4, 0, 1, FALSE)
+MAPPER_VRC_WRITE(mapper_vrc2a_write, vrc2, 1, 0, true)
+MAPPER_VRC_WRITE(mapper_vrc2b_write, vrc2, 0, 1, false)
+MAPPER_VRC_WRITE(mapper_vrc2c_write, vrc2, 1, 0, false)
+MAPPER_VRC_WRITE(mapper_vrc4a_write, vrc4, 1, 2, false)
+MAPPER_VRC_WRITE(mapper_vrc4b_write, vrc4, 1, 0, false)
+MAPPER_VRC_WRITE(mapper_vrc4c_write, vrc4, 6, 7, false)
+MAPPER_VRC_WRITE(mapper_vrc4d_write, vrc4, 3, 2, false)
+MAPPER_VRC_WRITE(mapper_vrc4e_write, vrc4, 2, 3, false)
+MAPPER_VRC_WRITE(mapper_vrc4f_write, vrc4, 0, 1, false)
 
 static void mapper21_write(E* e, u16 addr, u8 val) {
   if (addr & 0b110) {
@@ -1795,7 +1795,7 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
         a->vrc_sample[chan - 5] = a->seq[chan] = 0;
         a->play_mask[chan] = 0;
       }
-      a->update = TRUE;
+      a->update = true;
       print_byte(addr, val, chan + 1, "EXXXHHHH");
       break;
 
@@ -1960,7 +1960,7 @@ static void mapper66_write(E *e, u16 addr, u8 val) {
   set_prg32k_map(e, m->prg_bank[0] = (val >> 4) & 3 & (e->ci.prg32k_banks - 1));
 }
 
-static inline u8 get_P(E *e, Bool B) {
+static inline u8 get_P(E *e, bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
          (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
 }
@@ -1974,13 +1974,13 @@ static inline void set_P(E *e, u8 val) {
   e->s.c.C = !!(val & 0x01);
 }
 
-static inline void rol(u8 val, Bool C, u8 *result, Bool *out_c) {
+static inline void rol(u8 val, bool C, u8 *result, bool *out_c) {
   *out_c = !!(val & 0x80);
   *result = (val << 1) | C;
 }
 
 
-static inline void ror(u8 val, Bool C, u8 *result, Bool *out_c) {
+static inline void ror(u8 val, bool C, u8 *result, bool *out_c) {
   *out_c = !!(val & 0x01);
   *result = (val >> 1) | (C << 7);
 }
@@ -2059,14 +2059,14 @@ static void cpu_step(E *e) {
 
   if (e->s.m.has_vrc_irq && e->s.m.vrc.irq_enable) {
     M* m = &e->s.m;
-    Bool clock = FALSE;
+    bool clock = false;
     if (m->vrc.irq_cycle_mode) { // cycle mode
-      clock = TRUE;
+      clock = true;
     } else { // scanline mode
       m->vrc.prescaler += 3;
       if (m->vrc.prescaler >= 341) {
         m->vrc.prescaler -= 341;
-        clock = TRUE;
+        clock = true;
       }
     }
     if (clock) {
@@ -2506,7 +2506,7 @@ static void cpu_step(E *e) {
     case 55:
       set_next_step(e);
       c->bushi = 1; c->buslo = c->S;
-      busval = get_P(e, TRUE);
+      busval = get_P(e, true);
     _27:
       cpu_write(e, get_u16(c->bushi, c->buslo), busval);
       --c->S;
@@ -2582,19 +2582,19 @@ static void cpu_step(E *e) {
         DEBUG("     [%" PRIu64 "] using reset vec\n", e->s.cy);
       }
       c->set_vec_cy = e->s.cy;
-      c->has_irq = FALSE;
-      c->has_nmi = FALSE;
-      c->req_nmi = FALSE;
+      c->has_irq = false;
+      c->has_nmi = false;
+      c->req_nmi = false;
       break;
 
     case 64:
       c->bushi = 1; c->buslo = c->S;
-      busval = get_P(e, FALSE);
+      busval = get_P(e, false);
       goto _31;
 
     case 65:
       c->bushi = 1; c->buslo = c->S;
-      busval = get_P(e, TRUE);
+      busval = get_P(e, true);
       goto _31;
 
     case 66:
@@ -2962,10 +2962,10 @@ static void cpu_step(E *e) {
       } else {
         start_dmc(&e->s.a);
         if (e->s.a.reg[0x10] & 0x40) {
-          e->s.a.dmcen = TRUE;
+          e->s.a.dmcen = true;
         } else {
           DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
-          e->s.a.dmcen = FALSE;
+          e->s.a.dmcen = false;
           if (e->s.a.reg[0x10] & 0x80) {
             c->irq |= IRQ_DMC;
             DEBUG("  dmc irq!\n");
@@ -3302,10 +3302,10 @@ static Result get_cart_info(E *e, const FileData *file_data) {
   const CartDbInfo* cart_db_info = cartdb_info_from_file(file_data);
   if (cart_db_info) {
     LOG("Found in cartdb\n");
-    ci->is_nes2_0 = FALSE;
-    ci->has_trainer = FALSE;
-    ci->ignore_mirror = FALSE;
-    ci->fourscreen = FALSE;
+    ci->is_nes2_0 = false;
+    ci->has_trainer = false;
+    ci->ignore_mirror = false;
+    ci->fourscreen = false;
     ci->mapper = cart_db_info->mapper;
     ci->mirror = cart_db_info->mirror;
     ci->has_bat_ram = cart_db_info->battery;
@@ -3333,7 +3333,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->chr1k_banks = ci->chr4k_banks * 4;
       if (cart_db_info->vram == 2) {
         // Assume it is used for four screen mode.
-        ci->ignore_mirror = ci->fourscreen = TRUE;
+        ci->ignore_mirror = ci->fourscreen = true;
       }
     }
     ci->chr_data_write = e->s.p.chr_ram;
@@ -3348,7 +3348,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->has_bat_ram = (flag6 & 4) != 0;
     ci->has_trainer = (flag6 & 8) != 0;
     ci->ignore_mirror = (flag6 & 0x10) != 0;
-    ci->fourscreen = FALSE;
+    ci->fourscreen = false;
 
     u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
     u32 ines_prg16k_banks = file_data->data[4];
@@ -3373,7 +3373,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
         file_data->size >= kHeaderSize + trainer_size + nes2_data_size) {
       LOG("Found NES 2.0 header\n");
       data_size += nes2_data_size;
-      ci->is_nes2_0 = TRUE;
+      ci->is_nes2_0 = true;
       ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
                    ((flag6 & 0xf0) >> 4);
       u8 submapper = file_data->data[8] >> 4;
@@ -3412,10 +3412,10 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->chr8k_banks = nes2_chr8k_banks;
       if (nes2_prg_ram_bat_banks > nes2_prg_ram_banks) {
         ci->prgram8k_banks = nes2_prg_ram_bat_banks;
-        ci->has_bat_ram = TRUE;
+        ci->has_bat_ram = true;
       } else {
         ci->prgram8k_banks = nes2_prg_ram_banks;
-        ci->has_bat_ram = FALSE;
+        ci->has_bat_ram = false;
       }
       u32 chrram8k_banks = MAX(nes2_chr_ram_bat_banks, nes2_chr_ram_banks);
       if (chrram8k_banks > 0) {
@@ -3428,7 +3428,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     } else if ((flag7 & 0xc) == 0) {
       LOG("Found iNES header\n");
       data_size += ines_data_size;
-      ci->is_nes2_0 = FALSE;
+      ci->is_nes2_0 = false;
       ci->mapper = (flag7 & 0xf0) | ((flag6 & 0xf0) >> 4);
       ci->prg16k_banks = ines_prg16k_banks;
       ci->chr8k_banks = ines_chr8k_banks;
@@ -3494,14 +3494,14 @@ static Result init_mapper(E *e) {
     e->s.m.chr_bank[0] = 0;
     e->s.m.chr_bank[1] = e->ci.chr4k_banks - 1;
     e->s.m.prg_bank[0] = 0;
-    e->s.m.prg_ram_en = TRUE;
+    e->s.m.prg_ram_en = true;
     e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     e->mapper_write = mapper1_write;
     goto shared;
   case BOARD_MAPPER_2:
     e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper2_write;
-    e->s.m.prg_ram_en = TRUE;
+    e->s.m.prg_ram_en = true;
     e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     goto shared;
   case BOARD_MAPPER_3:
@@ -3522,10 +3522,10 @@ static Result init_mapper(E *e) {
     e->ci.fourscreen = e->ci.ignore_mirror;
     e->s.m.mmc3.bank_select = 0;
     e->s.m.mmc3.irq_latch = 0;
-    e->s.m.mmc3.irq_reload = TRUE;
-    e->s.m.mmc3.irq_enable = FALSE;
-    e->s.m.prg_ram_en = TRUE;
-    e->s.m.has_a12_irq = TRUE;
+    e->s.m.mmc3.irq_reload = true;
+    e->s.m.mmc3.irq_enable = false;
+    e->s.m.prg_ram_en = true;
+    e->s.m.has_a12_irq = true;
     e->s.m.chr_bank[0] = e->s.m.chr_bank[2] = e->s.m.chr_bank[4] =
         e->s.m.chr_bank[5] = 0;
     e->s.m.chr_bank[1] = e->s.m.chr_bank[3] = 1;
@@ -3599,14 +3599,14 @@ static Result init_mapper(E *e) {
     goto vrc6_shared;
 
   vrc6_shared:
-    e->s.m.has_vrc_audio = TRUE;
+    e->s.m.has_vrc_audio = true;
     // fallthrough
   vrc4_shared:
     DEBUG("setting has VRC irq\n");
-    e->s.m.has_vrc_irq = TRUE;
+    e->s.m.has_vrc_irq = true;
     // fallthrough
   vrc_shared:
-    e->s.m.prg_ram_en = TRUE;
+    e->s.m.prg_ram_en = true;
     e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
@@ -3642,7 +3642,7 @@ static Result init_mapper(E *e) {
       set_mirror(e, MIRROR_VERTICAL);
       set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
       set_prg32k_map(e, 0);
-      e->s.m.prg_ram_en = TRUE;
+      e->s.m.prg_ram_en = true;
       e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     } else {
       goto unsupported;
@@ -3665,7 +3665,7 @@ static Result init_mapper(E *e) {
 
   unsupported:
   default:
-    CHECK_MSG(FALSE, "Unsupported mapper: %d\n", e->ci.mapper);
+    CHECK_MSG(false, "Unsupported mapper: %d\n", e->ci.mapper);
   }
 
   return OK;
@@ -3677,11 +3677,11 @@ static Result init_emulator(E *e, const EInit *init) {
   ZERO_MEMORY(*s);
   CHECK(SUCCESS(init_mapper(e)));
   s->c.opcode = 1; // anything but 0, so it isn't interpreted as BRK.
-  s->c.I = TRUE;
+  s->c.I = true;
   s->c.step = s_callvec;
   s->c.next_step = s_cpu_decode;
   s->c.bits = s_opcode_bits[s->c.step++];
-  s->p.enabled = FALSE;
+  s->p.enabled = false;
   // Triangle volume is always full; disabled by len counter or linear counter.
   e->s.a.vol[2] = 1;
   e->s.a.cvol[2] = ~0;
@@ -3960,7 +3960,7 @@ void print_info(E *e) {
          "bus:%c %02x%02x  (cy:%08" PRIu64 ")",
          c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
          c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_', c->C ? 'C' : '_',
-         get_P(e, FALSE), c->S, c->bus_write ? 'W' : 'R', c->bushi, c->buslo,
+         get_P(e, false), c->S, c->bus_write ? 'W' : 'R', c->bushi, c->buslo,
          e->s.cy);
 }
 

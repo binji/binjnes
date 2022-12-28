@@ -54,7 +54,7 @@ typedef struct EmulatorInit {
 } EmulatorInit;
 
 typedef struct EmulatorConfig {
-  Bool allow_simulataneous_dpad_opposites;
+  bool allow_simulataneous_dpad_opposites;
 } EmulatorConfig;
 
 typedef u32 EmulatorEvent;
@@ -76,11 +76,11 @@ typedef struct {
   u8 *prg_data;
   u8 *chr_data, *chr_data_write;
   Mirror mirror;
-  Bool has_bat_ram;
-  Bool has_trainer;
-  Bool ignore_mirror;
-  Bool fourscreen;
-  Bool is_nes2_0;
+  bool has_bat_ram;
+  bool has_trainer;
+  bool ignore_mirror;
+  bool fourscreen;
+  bool is_nes2_0;
   u16 prg8k_banks, prg16k_banks, prg32k_banks;
   u16 chr1k_banks, chr2k_banks, chr4k_banks, chr8k_banks;
   u16 prgram512b_banks, prgram8k_banks;
@@ -99,7 +99,7 @@ typedef struct {
 
     struct {
       u8 bank_select, irq_latch;
-      Bool irq_enable, irq_reload;
+      bool irq_enable, irq_reload;
     } mmc3;
 
     struct {
@@ -109,7 +109,7 @@ typedef struct {
     struct {
       u8 prg_mode, irq_latch, irq_counter;
       u16 prescaler;
-      Bool irq_enable, irq_enable_after_ack, irq_cycle_mode;
+      bool irq_enable, irq_enable_after_ack, irq_cycle_mode;
       u8 ppu_bank_style; // VRC6 only
     } vrc;
 
@@ -118,7 +118,7 @@ typedef struct {
     } m28;
   };
   u16 prg_ram_bank_en, prg_ram_write_bank_en; // Bit map of enabled 512b banks.
-  Bool prg_ram_en, has_a12_irq, has_vrc_irq, has_vrc_audio;
+  bool prg_ram_en, has_a12_irq, has_vrc_irq, has_vrc_audio;
 } M;
 
 typedef struct {
@@ -128,8 +128,8 @@ typedef struct {
   u8 A, X, Y, S;
   u8 ram[0x800], prg_ram[0x2000];
   u8 opcode, open_bus, irq;
-  Bool C, Z, I, D, V, N; // Flags.
-  Bool bus_write, req_nmi, has_nmi, has_irq;
+  bool C, Z, I, D, V, N; // Flags.
+  bool bus_write, req_nmi, has_nmi, has_irq;
   u64 set_vec_cy;
 } C;
 
@@ -138,7 +138,7 @@ typedef struct {
   u64 pri, spr0mask;
   u16 s;
   u8 state, d, y, t, at, tile, ptbl;
-  Bool spr0;
+  bool spr0;
 } Spr;
 
 typedef struct {
@@ -149,7 +149,7 @@ typedef struct {
   u32 state, fbidx, frame;
   u16 v, t, atb, last_a12;
   u8 x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
-  Bool enabled, w, oddframe, a12_low;
+  bool enabled, w, oddframe, a12_low;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   Spr spr;
   u64 read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy, a12_low_count,
@@ -167,13 +167,13 @@ typedef struct {
   u16 cnt, noise, dmcbytes, dmcaddr;
   u8 state, reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate,
       vrc_duty[2], vrc_sawadd, vrc_sawaccum;
-  Bool update, trireload, dmcen, dmcfetch;
+  bool update, trireload, dmcen, dmcfetch;
   u64 resetcy; // XXX
 } A;
 
 typedef struct {
   u8 joyp[2];
-  Bool S;
+  bool S;
 } J;
 
 typedef struct {

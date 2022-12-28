@@ -73,7 +73,7 @@ typedef struct {
   u16 chr;
   u16 vram;
   u16 wram;
-  Bool battery;
+  bool battery;
   Mirror mirror;
 } CartDbInfo;
 

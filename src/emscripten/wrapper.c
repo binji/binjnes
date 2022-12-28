@@ -50,7 +50,7 @@ void emulator_set_default_joypad_callback(Emulator* e,
 }
 
 #define DEFINE_JOYP_SET(name) \
-  void set_joyp_##name(Emulator* e, Bool set) { s_buttons.name = set; }
+  void set_joyp_##name(Emulator* e, bool set) { s_buttons.name = set; }
 
 DEFINE_JOYP_SET(up)
 DEFINE_JOYP_SET(down)

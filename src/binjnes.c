@@ -45,7 +45,7 @@
 typedef struct {
   RewindResult result;
   JoypadPlayback joypad_playback;
-  Bool rewinding;
+  bool rewinding;
 } RewindState;
 
 typedef struct StatusText {
@@ -59,19 +59,19 @@ static const char *s_read_joypad_filename;
 static const char *s_write_joypad_filename;
 static const char *s_save_filename;
 static const char *s_save_state_filename;
-static Bool s_running = TRUE;
-static Bool s_step_frame;
-static Bool s_paused;
+static bool s_running = true;
+static bool s_step_frame;
+static bool s_paused;
 static Ticks s_rewind_start;
 static u32 s_random_seed = 0xcabba6e5;
 static u32 s_render_scale = 4;
-static Bool s_update_viewport = TRUE;
+static bool s_update_viewport = true;
 static f32 s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h;
 static f32 s_audio_volume = 0.5f;
 static f32 s_audio_buffer[AUDIO_FRAMES * AUDIO_CHANNELS * 5 + 1];
 static atomic_size_t s_audio_buffer_read = 0;
 static atomic_size_t s_audio_buffer_write = 0;
-static Bool s_key_state[KEYCODE_COUNT];
+static bool s_key_state[KEYCODE_COUNT];
 static JoypadBuffer *s_joypad_buffer;
 static RewindBuffer *s_rewind_buffer;
 static RewindState s_rewind_state;
@@ -127,7 +127,7 @@ static void draw_char(int x, int y, RGBA color, char c) {
          y + GLYPH_HEIGHT <= SCREEN_HEIGHT);
   if (uc < 32 || uc >= 128) return;
   u16 data = s_font[uc - 32];
-  Bool has_descender = data & 1;
+  bool has_descender = data & 1;
   data >>= 1;
   if (has_descender) y += 1;
   int i, j;
@@ -453,7 +453,7 @@ static void write_audio(f32* src, size_t offset, size_t samples) {
 }
 
 static void run_until_ticks(Ticks until_ticks) {
-  Bool new_frame = FALSE;
+  bool new_frame = false;
 
   assert(emulator_get_ticks(e) <= until_ticks);
   EmulatorEvent event;
@@ -461,7 +461,7 @@ static void run_until_ticks(Ticks until_ticks) {
     event = emulator_run_until(e, until_ticks);
 
     if (event & EMULATOR_EVENT_NEW_FRAME) {
-      new_frame = TRUE;
+      new_frame = true;
 
       if (!s_rewind_state.rewinding) {
         rewind_append(s_rewind_buffer, e);
@@ -507,17 +507,17 @@ static void run_until_ticks(Ticks until_ticks) {
 
   if (event & EMULATOR_EVENT_INVALID_OPCODE) {
     // set_status_text("invalid opcode!");
-    s_paused = TRUE;
+    s_paused = true;
   }
   if (s_step_frame) {
     // host_reset_audio(host);
-    s_paused = TRUE;
-    s_step_frame = FALSE;
+    s_paused = true;
+    s_step_frame = false;
   }
 }
 
 static void rewind_begin(void) {
-  s_rewind_state.rewinding = TRUE;
+  s_rewind_state.rewinding = true;
   s_rewind_start = emulator_get_ticks(e);
 }
 
@@ -616,7 +616,7 @@ static void frame(void)  {
                   &(sg_image_data){.subimage[0][0] = SG_RANGE(s_overlay_rgba)});
 
   sg_begin_default_pass(&s_pass_action, sapp_width(), sapp_height());
-  sg_apply_viewportf(s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h, TRUE);
+  sg_apply_viewportf(s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h, true);
   sg_apply_pipeline(s_pipeline);
   // Screen
   sg_apply_bindings(&s_bindings[0]);
@@ -669,7 +669,7 @@ static void event(const sapp_event *event) {
     switch (event->key_code) {
       case SAPP_KEYCODE_F6: save_state(); break;
       case SAPP_KEYCODE_F9: load_state(); break;
-      case SAPP_KEYCODE_N: s_step_frame = TRUE; s_paused = FALSE; break;
+      case SAPP_KEYCODE_N: s_step_frame = true; s_paused = false; break;
       case SAPP_KEYCODE_SPACE: s_paused ^= 1; break;
       case SAPP_KEYCODE_MINUS: inc_audio_volume(-0.05f); break;
       case SAPP_KEYCODE_EQUAL: inc_audio_volume(+0.05f); break;

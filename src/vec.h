@@ -50,7 +50,7 @@ static inline u32x4 blendv_u32x4(u32x4 a, u32x4 b, u32x4 mask) {
   return (u32x4)blendv_u8x16((u8x16)a, (u8x16)b, (u8x16)mask);
 }
 
-static inline Bool any_true_u8x16(u8x16 a) {
+static inline bool any_true_u8x16(u8x16 a) {
 #if __SSE4_1__
   return !_mm_testz_si128((__m128i)a, (__m128i)a);
 #elif __SSE2__
@@ -63,8 +63,8 @@ static inline Bool any_true_u8x16(u8x16 a) {
 #endif
 }
 
-static inline Bool any_true_u16x8(u16x8 a) { return any_true_u8x16((u8x16)a); }
+static inline bool any_true_u16x8(u16x8 a) { return any_true_u8x16((u8x16)a); }
 
-static inline Bool any_true_u32x4(u32x4 a) { return any_true_u8x16((u8x16)a); }
+static inline bool any_true_u32x4(u32x4 a) { return any_true_u8x16((u8x16)a); }
 
 #endif /*  BINJNES_VEC_H_ */

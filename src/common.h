@@ -7,6 +7,7 @@
 #ifndef BINJGB_COMMON_H_
 #define BINJGB_COMMON_H_
 
+#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -94,7 +95,6 @@ typedef float f32;
 typedef double f64;
 typedef u32 RGBA;
 typedef u64 Ticks;
-typedef enum Bool { FALSE = 0, TRUE = 1 } Bool;
 typedef enum Result { OK = 0, ERROR = 1 } Result;
 
 typedef struct FileData {
@@ -103,8 +103,8 @@ typedef struct FileData {
 } FileData;
 
 typedef struct JoypadButtons {
-  Bool down, up, left, right;
-  Bool start, select, B, A;
+  bool down, up, left, right;
+  bool start, select, B, A;
 } JoypadButtons;
 
 const char* replace_extension(const char* filename, const char* extension);

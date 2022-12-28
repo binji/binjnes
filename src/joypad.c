@@ -68,7 +68,7 @@ void joypad_append(JoypadBuffer* buffer, JoypadButtons* buttons, Ticks ticks) {
   buffer->last_buttons = *buttons;
 }
 
-static Bool buttons_are_equal(JoypadButtons* lhs, JoypadButtons* rhs) {
+static bool buttons_are_equal(JoypadButtons* lhs, JoypadButtons* rhs) {
   return lhs->down == rhs->down && lhs->up == rhs->up &&
          lhs->left == rhs->left && lhs->right == rhs->right &&
          lhs->start == rhs->start && lhs->select == rhs->select &&
@@ -259,13 +259,13 @@ Result joypad_read(const FileData* file_data, JoypadBuffer** out_buffer) {
 
 static void joypad_playback_callback(struct JoypadButtons* joyp,
                                      void* user_data) {
-  Bool changed = FALSE;
+  bool changed = false;
   JoypadPlayback* playback = user_data;
   Ticks ticks = emulator_get_ticks(playback->e);
   if (ticks < playback->current.state->ticks) {
     playback->current = joypad_find_state(playback->buffer, ticks);
     playback->next = joypad_get_next_state(playback->current);
-    changed = TRUE;
+    changed = true;
   }
 
   assert(ticks >= playback->current.state->ticks);
@@ -274,7 +274,7 @@ static void joypad_playback_callback(struct JoypadButtons* joyp,
     assert(playback->next.state->ticks >= playback->current.state->ticks);
     playback->current = playback->next;
     playback->next = joypad_get_next_state(playback->next);
-    changed = TRUE;
+    changed = true;
   }
 
 #if DEBUG_JOYPAD_BUTTONS
