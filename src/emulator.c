@@ -66,7 +66,7 @@ static void spr_step(E *e);
 
 static const u8 s_opcode_bits[], s_dmc_stall[];
 static const u16 s_cpu_decode, s_callvec, s_oamdma, s_dmc;
-static const u16 s_apu_consts[], s_apu_bits[], s_opcode_loc[];
+static const u16 s_opcode_loc[];
 
 // PPU stuff ///////////////////////////////////////////////////////////////////
 
@@ -915,63 +915,27 @@ static void apu_half(E *e) {
 }
 
 static void apu_step(E *e) {
-  bool more;
   A* a = &e->s.a;
-  do {
-    more = false;
-    u16 cnst = s_apu_consts[a->state];
-    u16 bits = s_apu_bits[a->state++];
-    while (bits) {
-      int bit = __builtin_ctzl(bits);
-      bits &= bits - 1;
-      switch (bit) {
-        case 0: more = true; break;
-        case 1: apu_tick(e); break;
-        case 2: apu_quarter(e); break;
-        case 3: apu_half(e); break;
-        case 4: if (--a->cnt != 0) { a->state = cnst; bits = 0; } break;
-        case 5:
-          if (!(a->reg[0x17] & 0xc0)) {
-            DEBUG("     [%" PRIu64 "] frame irq\n", e->s.cy);
-            e->s.c.irq |= IRQ_FRAME;
-          }
-          break;
-        case 6: a->cnt = cnst; break;
-        case 7: a->cnt = (a->reg[0x17] & 0x80) ? 7455 : 3729; break;
-        case 8: if (a->reg[0x17] & 0x80) { apu_quarter(e); apu_half(e); } break;
-        case 9: a->state = cnst; break;
-        default:
-          FATAL("NYI: apu step %d\n", bit);
+  if (a->state & 1) { apu_tick(e); }
+  switch (a->state++) {
+    case 3: if (a->reg[0x17] & 0x80) { apu_quarter(e); apu_half(e); } break;
+    case 7460: apu_quarter(e); break;
+    case 14916: apu_quarter(e); apu_half(e); break;
+    case 22374:
+      apu_quarter(e);
+      if (!(a->reg[0x17] & 0x80)) { a->state += (7455 - 3729)*2; }
+      break;
+    case 37283:
+    irq:
+      if (!(a->reg[0x17] & 0xc0)) {
+        DEBUG("     [%" PRIu64 "] frame irq\n", e->s.cy);
+        e->s.c.irq |= IRQ_FRAME;
       }
-    }
-  } while (more);
+      break;
+    case 37284: apu_quarter(e); apu_half(e); goto irq;
+    case 37285: a->state = 4; goto irq;
+  }
 }
-
-static const u16 s_apu_consts[] = {
-    [0] = 3728, [2] = 1,   [3] = 3728, [5] = 4,  [6] = 3729,
-    [8] = 7,    [11] = 10, [15] = 0,   [17] = 0,
-};
-static const u16 s_apu_bits[] = {
- // 9876543210
-  0b0001000001,  //  0: more=T,cnt=3728               0.5
-  0b0000000000,  //  1:                               0.5
-  0b0000010010,  //  2: tick,--cnt,jnz 1              3728
-  0b0001000101,  //  3: more=T,quarter,cnt=3728       3728.5
-  0b0000000000,  //  4:                               0.5
-  0b0000010010,  //  5: tick,--cnt,jnz 4              7456
-  0b0001001101,  //  6: more=T,quarter,half,cnt=3729  7456.5
-  0b0000000000,  //  7:                               0.5
-  0b0000010010,  //  8: tick,--cnt,jnz 7              11185
-  0b0010000101,  //  9: more=T,quarter,cnt=3729/7455  11185.5
-  0b0000000000,  // 10:                               0.5
-  0b0000110010,  // 11: tick,--cnt,jnz 10,irq         14914
-  0b0000101100,  // 12: quarter,half,irq              14914.5
-  0b1000100010,  // 13: tick,irq,goto 0               14915
-  0b0000000000,  // 14:        (even reset sequence)
-  0b0000000010,  // 15: tick   (odd reset sequence)
-  0b0000000000,  // 16:
-  0b1100000010,  // 17: tick,maybe quarter+half,goto 0
-};
 
 // CPU stuff ///////////////////////////////////////////////////////////////////
 
@@ -1251,7 +1215,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
               (u32)((e->s.cy / 3) & 1));
         if (val & 0x40) { c->irq &= ~IRQ_FRAME; }
-        a->state = 15 - ((e->s.cy / 3) & 1); // 3/4 cycles
+        a->state = !((e->s.cy / 3) & 1); // 3/4 cycles
         goto apu;
 
       apu: {
@@ -3693,6 +3657,7 @@ static Result init_emulator(E *e, const EInit *init) {
   e->s.a.play_mask[4] = ~0;
   // Default to all channels unmuted. Using scalar - vector hack for broadcast.
   e->s.a.swmute_mask = ~0 - (u16x8){};
+  e->s.a.state = 4;
 
   return OK;
   ON_ERROR_RETURN;

@@ -164,8 +164,8 @@ typedef struct {
   f32x4 sample, vol, decay, vrc_sample, vrc_vol;
   f32 mixed;
 
-  u16 cnt, noise, dmcbytes, dmcaddr;
-  u8 state, reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate,
+  u16 state, noise, dmcbytes, dmcaddr;
+  u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate,
       vrc_duty[2], vrc_sawadd, vrc_sawaccum;
   bool update, trireload, dmcen, dmcfetch;
   u64 resetcy; // XXX
