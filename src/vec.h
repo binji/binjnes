@@ -17,7 +17,12 @@
 #include <wasm_simd128.h>
 #endif
 
-typedef u8 u8x16 __attribute__((vector_size(16)));
+typedef u16 u16x2 __attribute__((vector_size(4)));
+
+typedef u8  u8x8  __attribute__((vector_size(8)));
+typedef u32 u32x2 __attribute__((vector_size(8)));
+
+typedef u8  u8x16 __attribute__((vector_size(16)));
 typedef u16 u16x8 __attribute__((vector_size(16)));
 typedef u32 u32x4 __attribute__((vector_size(16)));
 typedef s32 s32x4 __attribute__((vector_size(16)));

@@ -67,7 +67,6 @@ static void spr_step(E *e);
 static const u8 s_opcode_bits[], s_dmc_stall[];
 static const u16 s_cpu_decode, s_callvec, s_oamdma, s_dmc;
 static const u16 s_apu_consts[], s_apu_bits[], s_opcode_loc[];
-static const u8 s_ppu_steps_en[], s_ppu_steps_dis[];
 
 // PPU stuff ///////////////////////////////////////////////////////////////////
 
@@ -306,94 +305,101 @@ static inline void reload(E *e) {
 static inline void sprclear(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-  spr->state = 0;
   p->bgsprleftmask[0] = (p->ppumask & 2) ? 0xffff : 0;
   p->bgsprleftmask[1] = (p->ppumask & 4) ? 0xffff : 0;
+  memset(p->oam2, 0xff, sizeof(p->oam2));
+  spr->spr0 = FALSE;
 }
 
 static inline void spreval(E *e) {
   Spr* spr = &e->s.p.spr;
-  spr->state = 3;
+  spr->state = 1;
   spr->s = spr->d = 0;
 }
 
 static inline void sprfetch(E* e) {
   Spr* spr = &e->s.p.spr;
-  spr->state = 20;
+  spr->state = 18;
   spr->s = 0;
 }
 
-static void ppu_step(E *e) {
-  P* p = &e->s.p;
-  const u8* steps = p->enabled ? s_ppu_steps_en : s_ppu_steps_dis;
-repeat:
-  switch (steps[p->state++]) {
-  case 0: break;
-  case 1:
-    DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
-    p->ppustatus = 0;
-    if (e->s.cy == p->write_ctrl_cy) { e->s.c.req_nmi = FALSE; }
-    break;
-  case 2:
-    if (e->s.cy != p->read_status_cy) { p->ppustatus |= 0x80; }
-    e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-    DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
-          p->ppustatus);
-    break;
-  case 3:
-    if (p->ppuctrl & 0x80) {
-      u64 delta_cy = e->s.cy - e->s.c.set_vec_cy;
-      e->s.c.req_nmi = TRUE;
-      p->nmi_cy = e->s.cy;
-      DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
-    }
-    break;
-  case 4: inch(p); break;
-  case 5: inch(p); goto _23;
-  case 6: inch(p); goto _27;
-  case 7: incv(p); break;
-  case 8: incv(p); goto _27;
-  case 9: p->ptbh = read_ptb(e, 8); break;
-  case 10: p->ptbh = read_ptb(e, 8); goto _23;
-  case 11: p->ptbh = read_ptb(e, 8); goto _27;
-  case 12: p->ptbl = read_ptb(e, 0); break;
-  case 13: p->ptbl = read_ptb(e, 0); goto _23;
-  case 14: p->ptbl = read_ptb(e, 0); goto _27;
-  case 15: p->state = 0; break;
-  case 16: read_atb(e); break;
-  case 17: read_atb(e); goto _23;
-  case 18: read_atb(e); goto _27;
-  case 19: read_ntb(e); break;
-  case 20: read_ntb(e); shift_bg(e); reload(e); break;
-  case 21: read_ntb(e); shift_en(e); reload(e); goto _28;
-  case 22: read_ntb(e); goto _28;
-  case 23: _23: shift_bg(e); break;
-  case 24: _24: shift_dis(e); break;
-  case 25: shift_dis(e); goto _32;
-  case 26: shift_en(e); reload(e); goto _33;
-  case 27: _27: shift_en(e); goto _28;
-  case 28: _28: spr_step(e); break;
-  case 29: spr_step(e); ppu_t_to_v(p, 0x7be0); break;
-  case 30: sprclear(e); break;
-  case 31:
-    sprclear(e);
-    DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", e->s.cy,
-          e->s.p.frame, p->oddframe ^ 1);
-    p->fbidx = 0;
-    p->frame++;
+static void ppu_step(E *);
 
-    if ((p->oddframe ^= 1) &&
-        !!(p->ppumask & 8) == (e->s.cy - p->bg_changed_cy >= 2)) {
-      DEBUG("(%" PRIu64 "): skipping cycle\n", e->s.cy);
-      goto repeat;
-    }
-    break;
-  case 32: _32: sprfetch(e); break;
-  case 33: _33: sprfetch(e); spr_step(e); ppu_t_to_v(p, 0x041f); break;
-  case 34: spreval(e); inch(p); shift_en(e); goto _28;
-  case 35: spreval(e); goto _24;
+static void ppu1(E *e) {
+  DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
+  e->s.p.ppustatus = 0;
+  if (e->s.cy == e->s.p.write_ctrl_cy) {
+    e->s.c.req_nmi = FALSE;
   }
 }
+static void ppu2(E *e) {
+  if (e->s.cy != e->s.p.read_status_cy) {
+    e->s.p.ppustatus |= 0x80;
+  }
+  e->s.event |= EMULATOR_EVENT_NEW_FRAME;
+  DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
+        e->s.p.ppustatus);
+}
+static void ppu3(E *e) {
+  if (e->s.p.ppuctrl & 0x80) {
+    u64 delta_cy = e->s.cy - e->s.c.set_vec_cy;
+    e->s.c.req_nmi = TRUE;
+    e->s.p.nmi_cy = e->s.cy;
+    DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
+  }
+}
+static void ppu4(E *e) { inch(&e->s.p); }
+static void ppu5(E *e) { inch(&e->s.p); shift_bg(e); }
+static void ppu6(E *e) { inch(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu7(E *e) { incv(&e->s.p); }
+static void ppu8(E *e) { incv(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu9(E *e) { e->s.p.ptbh = read_ptb(e, 8); }
+static void ppu10(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_bg(e); }
+static void ppu11(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); spr_step(e); }
+static void ppu12(E *e) { e->s.p.ptbl = read_ptb(e, 0); }
+static void ppu13(E *e) { e->s.p.ptbl = read_ptb(e, 0); shift_bg(e); }
+static void ppu14(E *e) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); spr_step(e); }
+static void ppu15(E *e) { e->s.p.state = 0; }
+static void ppu16(E *e) { read_atb(e); }
+static void ppu17(E *e) { read_atb(e); shift_bg(e); }
+static void ppu18(E *e) { read_atb(e); shift_en(e); spr_step(e); }
+static void ppu19(E *e) { read_ntb(e); }
+static void ppu20(E *e) { read_ntb(e); shift_bg(e); reload(e); }
+static void ppu21(E *e) { read_ntb(e); shift_en(e); reload(e); spr_step(e); }
+static void ppu22(E *e) { read_ntb(e); spr_step(e); }
+static void ppu23(E *e) { shift_bg(e); }
+static void ppu24(E *e) { shift_dis(e); }
+static void ppu25(E *e) { shift_dis(e); sprfetch(e); }
+static void ppu26(E *e) { shift_en(e); reload(e); sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu27(E *e) { shift_en(e); spr_step(e); }
+static void ppu28(E *e) { spr_step(e); }
+static void ppu29(E *e) { spr_step(e); ppu_t_to_v(&e->s.p, 0x7be0); }
+static void ppu30(E *e) { sprclear(e); }
+static void ppu31(E *e) {
+  sprclear(e);
+  DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", e->s.cy, e->s.p.frame,
+        e->s.p.oddframe ^ 1);
+  e->s.p.fbidx = 0;
+  e->s.p.frame++;
+
+  if ((e->s.p.oddframe ^= 1) &&
+      !!(e->s.p.ppumask & 8) == (e->s.cy - e->s.p.bg_changed_cy >= 2)) {
+    DEBUG("(%" PRIu64 "): skipping cycle\n", e->s.cy);
+    ppu_step(e);
+  }
+}
+static void ppu32(E *e) { sprfetch(e); }
+static void ppu33(E *e) { sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu34(E *e) { spreval(e); inch(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu35(E *e) { spreval(e); shift_dis(e); }
+
+static void ppu36(E *e) { read_ntb(e); }
+static void ppu37(E *e) { shift_en(e); }
+static void ppu38(E *e) { read_atb(e); shift_en(e); }
+static void ppu39(E *e) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); }
+static void ppu40(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); }
+static void ppu41(E *e) { inch(&e->s.p); shift_en(e); }
+static void ppu42(E *e) { read_ntb(e); shift_en(e); reload(e); }
 
 #define LINE0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 #define LINE1 0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15
@@ -401,14 +407,80 @@ repeat:
 #define LINE3 0,3,2,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 #define LINE4 30,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0 // TODO: this should just be LINE0
 #define LINE5 30,0,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,35,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-#define LINE6 30,22,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,34,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,8,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,19,23,17,23,13,23,10,5,20,23,17,23,13,23,10,5,20,0,19,0
+#define LINE6 30,36,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,34,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,8,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,19,23,17,23,13,23,10,5,20,23,17,23,13,23,10,5,20,0,19,0
 #define LINE7 31,0,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,35,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,24,25,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-#define LINE8 31,22,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,34,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,8,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,19,23,17,23,13,23,10,5,20,23,17,23,13,23,10,5,20,0,19,0
+#define LINE8 31,36,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,41,42,37,38,37,39,37,40,34,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,6,21,27,18,27,14,27,11,8,26,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,28,19,23,17,23,13,23,10,5,20,23,17,23,13,23,10,5,20,0,19,0
 
-static const u8 s_ppu_steps_en[] = {
-LINE8,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE6,LINE4,LINE3,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE2,};
-static const u8 s_ppu_steps_dis[] = {
-LINE7,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE5,LINE4,LINE3,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE0,LINE1,};
+static void ppu_step(E *e) {
+  static const u8 s_ppu_steps_en[] = {
+      LINE8, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6, LINE6,
+      LINE4, LINE3, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0,
+      LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0,
+      LINE0, LINE2,
+  };
+  static const u8 s_ppu_steps_dis[] = {
+      LINE7, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5, LINE5,
+      LINE4, LINE3, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0,
+      LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0, LINE0,
+      LINE0, LINE1,
+  };
+  static void (*const s_ppu_funcs[])(E * e) = {
+      NULL,  &ppu1,  &ppu2,  &ppu3,  &ppu4,  &ppu5,  &ppu6,  &ppu7,  &ppu8,
+      &ppu9,  &ppu10, &ppu11, &ppu12, &ppu13, &ppu14, &ppu15, &ppu16, &ppu17,
+      &ppu18, &ppu19, &ppu20, &ppu21, &ppu22, &ppu23, &ppu24, &ppu25, &ppu26,
+      &ppu27, &ppu28, &ppu29, &ppu30, &ppu31, &ppu32, &ppu33, &ppu34, &ppu35,
+      &ppu36, &ppu37, &ppu38, &ppu39, &ppu40, &ppu41, &ppu42,
+  };
+  const u8 *steps = e->s.p.enabled ? s_ppu_steps_en : s_ppu_steps_dis;
+  void (*const f)(E* e) = s_ppu_funcs[steps[e->s.p.state++]];
+  if (f) f(e);
+}
 
 static inline Bool y_in_range(P *p, u8 y) {
   return y <= 239 && (u8)(scany(p) - y) < ((p->ppuctrl & 0x20) ? 16 : 8);
@@ -426,94 +498,98 @@ static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
     ((ppuctrl & 8) << 9) | (tile << 4) | (y & 7);
 }
 
-static const u8 s_spr_steps[];
+static void spr4(E* e);
+static void spr7(E* e);
 
-static void spr_step(E *e) {
+static void spr1(E *e) { e->s.p.spr.t = e->s.p.oam[e->s.p.spr.s++]; }
+static void spr2(E *e) {
+  if (!y_in_range(&e->s.p, e->s.p.spr.t)) { e->s.p.spr.s += 3; spr4(e); return; }
+  if (e->s.p.spr.s == 1) e->s.p.spr.spr0 = TRUE;
+  if (e->s.p.spr.d <= 32 - 3) { e->s.p.oam2[e->s.p.spr.d++] = e->s.p.spr.t; }
+}
+static void spr3(E *e) { e->s.p.oam2[e->s.p.spr.d++] = e->s.p.oam[e->s.p.spr.s++]; }
+static void spr4(E *e) { e->s.p.spr.state = e->s.p.spr.s >= 256 ? 17 : e->s.p.spr.d >= 32 ? 9 : 1; }
+static void spr5(E *e) {
+  if (!y_in_range(&e->s.p, e->s.p.spr.t)) {
+    if (e->s.p.spr.s & 3) e->s.p.spr.s += 4;
+    spr7(e);
+    return;
+  }
+  e->s.p.ppustatus |= 0x20;
+}
+static void spr6(E *e) { ++e->s.p.spr.s; }
+static void spr7(E *e) { e->s.p.spr.state = e->s.p.spr.s >= 256 ? 17 : 9; }
+static void spr8(E *e) { e->s.p.spr.state = 17; }
+static void spr9(E *e) { read_ntb(e); }  // garbage read}
+static void spr10(E *e) { read_atb(e); } // garbage read
+static void spr11(E *e) {
   P* p = &e->s.p;
-  Spr* spr = &p->spr;
-  switch (s_spr_steps[spr->state++]) {
-    case 0: break;
-    case 1: memset(p->oam2, 0xff, sizeof(p->oam2)); spr->spr0 = FALSE; break;
-    case 2: spr->state = 2; break;
-    case 3: spr->t = p->oam[spr->s++]; break;
-    case 4:
-      if (!y_in_range(p, spr->t)) { spr->s += 3; goto next; }
-      if (spr->s == 1) spr->spr0 = TRUE;
-      if (spr->d <= 32 - 3) { p->oam2[spr->d++] = spr->t; }
-      break;
-    case 5: p->oam2[spr->d++] = p->oam[spr->s++]; break;
-    next: case 6: spr->state = spr->s >= 256 ? 19 : spr->d >= 32 ? 11 : 3; break;
-    case 7:
-      if (!y_in_range(p, spr->t)) {
-        if (spr->s & 3) spr->s += 4;
-        goto nextbug;
-      }
-      p->ppustatus |= 0x20;
-      break;
-    case 8: ++spr->s; break;
-    nextbug: case 9: spr->state = spr->s >= 256 ? 19 : 11; break;
-    case 10: spr->state = 19; break;
-    case 11: read_ntb(e); break; // garbage read
-    case 12: read_atb(e); break; // garbage read
-    case 13:
-      spr->y = (scany(p) - 1) - p->oam2[spr->s];
-      spr->tile = p->oam2[spr->s + 1];
-      spr->at = p->oam2[spr->s + 2];
-      if (spr->s + 4 <= spr->d) {
-        if (spr->at & 0x80) {
-          spr->y = ~spr->y;
-        } // Flip Y.
-        spr->ptbl = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y));
-      } else {
-        // Dummy read for MMC3 IRQ
-        chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0));
-      }
-      break;
-    case 14: {
-      int idx = spr->s >> 2;
-      u8 x = p->oam2[spr->s + 3];
-
-      if (spr->s + 4 <= spr->d) {
-        u8 ptbh = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y) + 8);
-        if (!(spr->at & 0x40)) {
-          spr->ptbl = reverse(spr->ptbl);
-          ptbh = reverse(ptbh);
-        }
-        spr->shift[idx] = spr->ptbl;
-        spr->shift[idx + 8] = ptbh;
-        spr->pal[idx] = ((spr->at & 3) + 4) << 2;
-        shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
-        shift_in(&spr->spr0mask, (spr->s == 0 && spr->spr0) ? 0xff : 0);
-        spr->counter[idx] = spr->counter[idx + 8] = x;
-      } else {
-        // Dummy read for MMC3 IRQ
-        chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0) + 8);
-        // empty sprite.
-        spr->shift[idx] = spr->shift[idx + 8] = 0;
-        spr->pal[idx] = 4 << 2;
-        spr->pri >>= 8;
-        spr->spr0mask >>= 8;
-        spr->counter[idx] = spr->counter[idx + 8] = 0xff;
-      }
-      spr->s += 4;
-      break;
-    }
-    case 15: spr->state = 20; break;
+  Spr* spr = &e->s.p.spr;
+  spr->y = (scany(p) - 1) - p->oam2[spr->s];
+  spr->tile = p->oam2[spr->s + 1];
+  spr->at = p->oam2[spr->s + 2];
+  if (spr->s + 4 <= spr->d) {
+    if (spr->at & 0x80) {
+      spr->y = ~spr->y;
+    } // Flip Y.
+    spr->ptbl = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y));
+  } else {
+    // Dummy read for MMC3 IRQ
+    chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0));
   }
 }
+static void spr12(E *e) {
+  P* p = &e->s.p;
+  Spr* spr = &e->s.p.spr;
+  int idx = spr->s >> 2;
+  u8 x = p->oam2[spr->s + 3];
 
-static const u8 s_spr_steps[] = {
-    // OAM2 clear
-    0, 1, 2, // 0 .. 64
-    // Sprite eval
-    3, 4, 5, 0, 5, 0, 5, 6,      // 65 .. 256
-    // Sprite eval (d == 32)
-    3, 7, 8, 0, 8, 0, 8, 9,      // 65 .. 256
-    // Sprite eval (s == 64)
-    10,                          // 65 .. 256
-    // Sprite fetch
-    11, 0, 12, 0, 13, 0, 14, 15, // 257 .. 320
-};
+  if (spr->s + 4 <= spr->d) {
+    u8 ptbh = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y) + 8);
+    if (!(spr->at & 0x40)) {
+      spr->ptbl = reverse(spr->ptbl);
+      ptbh = reverse(ptbh);
+    }
+    spr->shift[idx] = spr->ptbl;
+    spr->shift[idx + 8] = ptbh;
+    spr->pal[idx] = ((spr->at & 3) + 4) << 2;
+    shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
+    shift_in(&spr->spr0mask, (spr->s == 0 && spr->spr0) ? 0xff : 0);
+    spr->counter[idx] = spr->counter[idx + 8] = x;
+  } else {
+    // Dummy read for MMC3 IRQ
+    chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0) + 8);
+    // empty sprite.
+    spr->shift[idx] = spr->shift[idx + 8] = 0;
+    spr->pal[idx] = 4 << 2;
+    spr->pri >>= 8;
+    spr->spr0mask >>= 8;
+    spr->counter[idx] = spr->counter[idx + 8] = 0xff;
+  }
+  spr->s += 4;
+}
+static void spr13(E *e) { e->s.p.spr.state = 18; }
+
+static void spr_step(E *e) {
+  static const u8 steps[] = {
+      0,
+      // Sprite eval
+      1, 2, 3, 0, 3, 0, 3, 4, // 65 .. 256
+      // Sprite eval (d == 32)
+      1, 5, 6, 0, 6, 0, 6, 7, // 65 .. 256
+      // Sprite eval (s == 256)
+      8, // 65 .. 256
+      // Sprite fetch
+      9, 0, 10, 0, 11, 0, 12, 13, // 257 .. 320
+  };
+
+  static void (*const s_spr_funcs[])(E * e) = {
+      NULL, &spr1, &spr2, &spr3,  &spr4,  &spr5,  &spr6,
+      &spr7, &spr8, &spr9, &spr10, &spr11, &spr12, &spr13,
+  };
+  void (*const f)(E* e) = s_spr_funcs[steps[e->s.p.spr.state++]];
+  if (f) f(e);
+}
 
 // APU stuff ///////////////////////////////////////////////////////////////////
 
