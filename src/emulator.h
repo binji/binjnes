@@ -95,6 +95,7 @@ typedef struct {
   union {
     struct {
       u8 bits, data, ctrl;
+      u8 prg256k;
     } mmc1;
 
     struct {

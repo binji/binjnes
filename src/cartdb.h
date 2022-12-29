@@ -38,6 +38,12 @@ typedef enum {
 
   BOARD_LAST_MAPPER = 1000,
 
+  // Mapper 1
+  BOARD_SNROM,
+  BOARD_SOROM,
+  BOARD_SUROM,
+  BOARD_SXROM,
+
   // Mapper 4
   BOARD_TXROM_MMC3A,
   BOARD_TXROM_MMC3B,

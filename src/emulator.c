@@ -1392,10 +1392,6 @@ static void set_prgram8k_map(E* e, u16 bank) {
   update_prgram_map(e);
 }
 
-static u8 mapper_dummy_prg_ram_read(E *e, u16 addr) { return e->s.c.open_bus; }
-
-static void mapper_dummy_prg_ram_write(E *e, u16 addr, u8 val) {}
-
 static u8 mapper_prg_ram_read(E *e, u16 addr) {
   return e->s.m.prg_ram_en ? e->prg_ram_map[addr & 0x1fff] : e->s.c.open_bus;
 }
@@ -1408,9 +1404,9 @@ static void mapper_prg_ram_write(E *e, u16 addr, u8 val) {
 
 static void mapper0_write(E *e, u16 addr, u8 val) {}
 
-static void mapper1_write(E *e, u16 addr, u8 val) {
+static bool mapper_mmc1_shared_pre_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  if (addr < 0x8000) return;
+  if (addr < 0x8000) return false;
   if (val & 0x80) {
     m->mmc1.bits = 5;
     m->mmc1.data = 0;
@@ -1420,42 +1416,128 @@ static void mapper1_write(E *e, u16 addr, u8 val) {
     if (--m->mmc1.bits == 0) {
       m->mmc1.bits = 5;
       m->mmc1.data >>= 3;
-      switch (addr >> 12) {
-        case 0x8: case 0x9:  // Control.
-          m->mmc1.ctrl = m->mmc1.data;
-          set_mirror(e, m->mmc1.data & 3);
-          break;
-        case 0xa: case 0xb:  // CHR bank 0.
-          m->chr_bank[0] = m->mmc1.data;
-          break;
-        case 0xc: case 0xd:  // CHR bank 1.
-          m->chr_bank[1] = m->mmc1.data;
-          break;
-        case 0xe: case 0xf:  // PRG bank.
-          assert(is_power_of_two(e->ci.prg16k_banks));
-          m->prg_bank[0] = m->mmc1.data & (e->ci.prg16k_banks - 1);
-          m->prg_ram_en = !(m->mmc1.data & 0x10);
-          break;
-      }
-      if (m->mmc1.ctrl & 0x10) { // CHR 4KiB banks
-        set_chr4k_map(e, m->chr_bank[0], m->chr_bank[1]);
-      } else { // CHR 8KiB banks
-        set_chr8k_map(e, m->chr_bank[0] >> 1);
-      }
-
-      switch (m->mmc1.ctrl & 0xc) {
-      case 0:
-      case 4: // PRG 32KiB banks
-        set_prg32k_map(e, m->prg_bank[0] >> 1);
-        break;
-      case 8: // bank0 is first, bank1 switches
-        set_prg16k_map(e, 0, m->prg_bank[0]);
-        break;
-      case 12: // bank0 switches, bank1 is last
-        set_prg16k_map(e, m->prg_bank[0], e->ci.prg16k_banks - 1);
-        break;
-      }
+      return true;
     }
+  }
+  return false;
+}
+
+static void mapper_mmc1_shared_post_write(E *e, u16 addr) {
+  M* m = &e->s.m;
+  u8 chr4k = !!(m->mmc1.ctrl & 0x10);
+  switch (addr >> 13) {
+    case 4:
+      m->mmc1.ctrl = m->mmc1.data;
+      set_mirror(e, m->mmc1.data & 3);
+      break;
+    case 5:
+      m->chr_bank[0] =
+          m->mmc1.data & ~(chr4k ? 0 : 1) & (e->ci.chr4k_banks - 1);
+      break;
+    case 6:
+      if (chr4k) {
+        m->chr_bank[1] = m->mmc1.data & (e->ci.chr4k_banks - 1);
+      }
+      break;
+    case 7:
+      assert(is_power_of_two(e->ci.prg16k_banks));
+      m->prg_bank[0] = m->mmc1.data & 0xf & (e->ci.prg16k_banks - 1);
+      m->prg_ram_en = !(m->mmc1.data & 0x10);
+      break;
+  }
+  if (m->mmc1.ctrl & 0x10) { // CHR 4KiB banks
+    set_chr4k_map(e, m->chr_bank[0], m->chr_bank[1]);
+  } else { // CHR 8KiB banks
+    set_chr8k_map(e, m->chr_bank[0] >> 1);
+  }
+
+  switch (m->mmc1.ctrl & 0xc) {
+  case 0: case 4: // PRG 32KiB banks
+    set_prg32k_map(e, (m->mmc1.prg256k | m->prg_bank[0]) >> 1);
+    break;
+  case 8: // bank0 is first, bank1 switches
+    set_prg16k_map(e, m->mmc1.prg256k, m->mmc1.prg256k | m->prg_bank[0]);
+    break;
+  case 12: // bank0 switches, bank1 is last
+    set_prg16k_map(e, m->mmc1.prg256k | m->prg_bank[0],
+                   m->mmc1.prg256k | ((e->ci.prg16k_banks - 1) & 0xf));
+    break;
+  }
+}
+
+static void mapper1_write(E *e, u16 addr, u8 val) {
+  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
+    mapper_mmc1_shared_post_write(e, addr);
+  }
+}
+
+static void mapper_snrom_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
+    switch (addr >> 13) {
+    case 5:
+      m->prg_ram_en = !(m->mmc1.data & 0x80);
+      break;
+    case 6:
+      if (m->mmc1.ctrl & 0x10) {
+        m->prg_ram_en = !(m->mmc1.data & 0x80);
+      }
+      break;
+    }
+    mapper_mmc1_shared_post_write(e, addr);
+  }
+}
+
+static void mapper_surom_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
+    switch (addr >> 13) {
+    case 5:
+      m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
+      break;
+    case 6:
+      if (m->mmc1.ctrl & 0x10) {
+        m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
+      }
+      break;
+    }
+    mapper_mmc1_shared_post_write(e, addr);
+  }
+}
+
+static void mapper_sorom_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
+    switch (addr >> 13) {
+    case 5:
+      set_prgram8k_map(e, (e->s.m.mmc1.data >> 3) & 1);
+      break;
+    case 6:
+      if (m->mmc1.ctrl & 0x10) {
+        set_prgram8k_map(e, (e->s.m.mmc1.data >> 3) & 1);
+      }
+      break;
+    }
+    mapper_mmc1_shared_post_write(e, addr);
+  }
+}
+
+static void mapper_sxrom_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
+    switch (addr >> 13) {
+    case 5:
+      m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
+      set_prgram8k_map(e, (e->s.m.mmc1.data >> 2) & 3);
+      break;
+    case 6:
+      if (m->mmc1.ctrl & 0x10) {
+        m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
+        set_prgram8k_map(e, (e->s.m.mmc1.data >> 2) & 3);
+      }
+      break;
+    }
+    mapper_mmc1_shared_post_write(e, addr);
   }
 }
 
@@ -3538,30 +3620,39 @@ static Result set_rom_file_data(E *e, const FileData *rom) {
 
 static Result init_mapper(E *e) {
   set_prgram8k_map(e, 0);
-  if (e->ci.prgram8k_banks) {
-    e->s.m.prg_ram_en = true;
-    e->s.m.prg_ram_write_en = true;
-    e->mapper_prg_ram_read = mapper_prg_ram_read;
-    e->mapper_prg_ram_write = mapper_prg_ram_write;
-  } else {
-    e->mapper_prg_ram_read = mapper_dummy_prg_ram_read;
-    e->mapper_prg_ram_write = mapper_dummy_prg_ram_write;
-  }
+  e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = true;
+  e->mapper_prg_ram_read = mapper_prg_ram_read;
+  e->mapper_prg_ram_write = mapper_prg_ram_write;
 
   switch (e->ci.board) {
   case BOARD_MAPPER_0:
     CHECK_MSG(e->ci.prg8k_banks <= 4, "Too many PRG banks.\n");
     e->mapper_write = mapper0_write;
     goto shared;
+
   case BOARD_MAPPER_1:
-    CHECK_MSG(is_power_of_two(e->ci.chr4k_banks), "Expected POT CHR banks.\n");
-    CHECK_MSG(is_power_of_two(e->ci.prg16k_banks), "Expected POT PRG banks.\n");
+    e->mapper_write = mapper1_write;
+    goto shared_mmc1;
+  case BOARD_SNROM:
+    e->mapper_write = mapper_snrom_write;
+    goto shared_mmc1;
+  case BOARD_SUROM:
+    e->mapper_write = mapper_surom_write;
+    goto shared_mmc1;
+  case BOARD_SOROM:
+    e->mapper_write = mapper_sorom_write;
+    goto shared_mmc1;
+  case BOARD_SXROM:
+    e->mapper_write = mapper_sxrom_write;
+    goto shared_mmc1;
+  shared_mmc1:
     e->s.m.mmc1.ctrl = 0xc | e->ci.mirror;
     e->s.m.mmc1.bits = 5;
     e->s.m.chr_bank[0] = 0;
     e->s.m.chr_bank[1] = e->ci.chr4k_banks - 1;
     e->s.m.prg_bank[0] = 0;
     goto shared;
+
   case BOARD_MAPPER_2:
     e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper2_write;
