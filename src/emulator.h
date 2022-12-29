@@ -90,8 +90,8 @@ typedef struct {
 
 typedef struct {
   u16 chr1k_bank[8], prg8k_bank[4],
-      prgram512b_bank[16];          // Actual mapped bank indexes.
-  u16 chr_bank[8], prg_bank[2];     // Mapper's selected bank indexes.
+      prgram8k_bank;                         // Actual mapped bank indexes.
+  u16 chr_bank[8], prg_bank[2], prgram_bank; // Mapper's selected bank indexes.
   union {
     struct {
       u8 bits, data, ctrl;
@@ -104,6 +104,7 @@ typedef struct {
     struct {
       u8 bank_select, irq_latch;
       bool irq_enable, irq_reload;
+      bool prgram512b_en[2], prgram512b_write_en[2]; // MMC6 only
     } mmc3;
 
     struct {
@@ -121,8 +122,8 @@ typedef struct {
       u8 reg_select, inner_bank, bank_mode, outer_bank;
     } m28;
   };
-  u16 prg_ram_bank_en, prg_ram_write_bank_en; // Bit map of enabled 512b banks.
-  bool prg_ram_en, has_a12_irq, has_vrc_irq, has_vrc_audio, has_mmc2_latch;
+  bool prg_ram_en, prg_ram_write_en, has_a12_irq, has_vrc_irq, has_vrc_audio,
+      has_mmc2_latch;
 } M;
 
 typedef struct {
@@ -195,10 +196,10 @@ typedef struct Emulator {
   EmulatorConfig config;
   S s;
   CartInfo ci;
-  u8 *prg_rom_map[4], *prg_ram_map[16], *nt_map[4], *chr_map[8],
-      *chr_map_write[8];
+  u8 *prg_rom_map[4], *prg_ram_map, *nt_map[4], *chr_map[8], *chr_map_write[8];
   void (*mapper_write)(struct Emulator*, u16, u8);
   void (*mapper_prg_ram_write)(struct Emulator*, u16, u8);
+  u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
