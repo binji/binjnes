@@ -130,9 +130,36 @@ static void do_a12_access(E* e, u16 addr) {
   p->last_vram_access_cy = e->s.cy;
 }
 
+static void set_chr4k_map(E *, u16, u16);
+
+static void do_mmc2_access(E* e, u16 addr) {
+  M* m = &e->s.m;
+  if (!m->has_mmc2_latch) return;
+  switch (addr & 0x1ff8) {
+    default: break;
+    case 0xfd8:
+      if (e->ci.mapper == 9 && addr != 0xfd8) break;
+      m->mmc2_4.latch[0] = 0;
+      goto update_chr;
+    case 0xfe8:
+      if (e->ci.mapper == 9 && addr != 0xfe8) break;
+      m->mmc2_4.latch[0] = 1;
+      goto update_chr;
+    case 0x1fd8: m->mmc2_4.latch[1] = 0; goto update_chr;
+    case 0x1fe8: m->mmc2_4.latch[1] = 1; goto update_chr;
+    update_chr: {
+      set_chr4k_map(
+          e, m->mmc2_4.latch[0] == 0 ? m->chr_bank[0] : m->chr_bank[1],
+          m->mmc2_4.latch[1] == 0 ? m->chr_bank[2] : m->chr_bank[3]);
+    }
+  }
+}
+
 static inline u8 chr_read(E *e, u16 addr) {
   do_a12_access(e, addr);
-  return e->chr_map[(addr >> 10) & 7][addr & 0x3ff];
+  u8 result = e->chr_map[(addr >> 10) & 7][addr & 0x3ff];
+  do_mmc2_access(e, addr);
+  return result;
 }
 
 static inline u8 nt_read(E *e, u16 addr) {
@@ -194,7 +221,8 @@ static void ppu_write(E *e, u16 addr, u8 val) {
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
       e->nt_map[(addr >> 10) & 3][addr & 0x3ff] = val;
-      DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x\n", e->s.cy, addr, val);
+      DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%u:%u)\n", e->s.cy,
+             addr, val, e->s.p.state % 341, e->s.p.state / 341);
       break;
   }
 }
@@ -213,7 +241,8 @@ static inline void read_atb(E *e) {
 
 static inline u8 read_ptb(E *e, u8 addend) {
   return chr_read(e, (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
-                      (e->s.p.v >> 12)) + addend);
+                      (e->s.p.v >> 12)) +
+                         addend);
 }
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
@@ -498,6 +527,10 @@ static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
     ((ppuctrl & 8) << 9) | (tile << 4) | (y & 7);
 }
 
+static inline u8 spr_ptb(E* e, u8 tile, u8 addend) {
+  return chr_read(e, spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend);
+}
+
 static void spr4(E* e);
 static void spr7(E* e);
 
@@ -532,10 +565,10 @@ static void spr11(E *e) {
     if (spr->at & 0x80) {
       spr->y = ~spr->y;
     } // Flip Y.
-    spr->ptbl = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y));
+    spr->ptbl = spr_ptb(e, spr->tile, 0);
   } else {
     // Dummy read for MMC3 IRQ
-    chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0));
+    spr_ptb(e, 0xff, 0);
   }
 }
 static void spr12(E *e) {
@@ -545,7 +578,7 @@ static void spr12(E *e) {
   u8 x = p->oam2[spr->s + 3];
 
   if (spr->s + 4 <= spr->d) {
-    u8 ptbh = chr_read(e, spr_chr_addr(p->ppuctrl, spr->tile, spr->y) + 8);
+    u8 ptbh = spr_ptb(e, spr->tile, 8);
     if (!(spr->at & 0x40)) {
       spr->ptbl = reverse(spr->ptbl);
       ptbh = reverse(ptbh);
@@ -558,7 +591,7 @@ static void spr12(E *e) {
     spr->counter[idx] = spr->counter[idx + 8] = x;
   } else {
     // Dummy read for MMC3 IRQ
-    chr_read(e, spr_chr_addr(p->ppuctrl, 0xff, 0) + 8);
+    spr_ptb(e, 0xff, 8);
     // empty sprite.
     spr->shift[idx] = spr->shift[idx + 8] = 0;
     spr->pal[idx] = 4 << 2;
@@ -1564,6 +1597,60 @@ static void mapper7_write(E *e, u16 addr, u8 val) {
   m->prg_bank[0] = (val & 7) & (e->ci.prg32k_banks - 1);
   set_prg32k_map(e, m->prg_bank[0]);
   set_mirror(e, MIRROR_SINGLE_0 + ((val & 0x10) ? 0 : 1));
+}
+
+static void mapper_mmc2_shared_write(E* e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr >> 12) {
+    case 11:
+      m->chr_bank[0] = val & 0x1f & (e->ci.chr4k_banks - 1);
+      goto update_chr;
+    case 12:
+      m->chr_bank[1] = val & 0x1f & (e->ci.chr4k_banks - 1);
+      goto update_chr;
+    case 13:
+      m->chr_bank[2] = val & 0x1f & (e->ci.chr4k_banks - 1);
+      goto update_chr;
+    case 14:
+      m->chr_bank[3] = val & 0x1f & (e->ci.chr4k_banks - 1);
+      goto update_chr;
+    case 15:
+      set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
+      break;
+
+    update_chr:
+      set_chr4k_map(e,
+                    m->mmc2_4.latch[0] == 0 ? m->chr_bank[0] : m->chr_bank[1],
+                    m->mmc2_4.latch[1] == 0 ? m->chr_bank[2] : m->chr_bank[3]);
+      break;
+  }
+}
+
+static void mapper9_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr >> 12) {
+    case 10:
+      set_prg8k_map(e, m->prg_bank[0] = val & 0xf & (e->ci.prg8k_banks - 1),
+                    e->ci.prg8k_banks - 3, e->ci.prg8k_banks - 2,
+                    e->ci.prg8k_banks - 1);
+      break;
+    default:
+      mapper_mmc2_shared_write(e, addr, val);
+      break;
+  }
+}
+
+static void mapper10_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr >> 12) {
+    case 10:
+      set_prg16k_map(e, m->prg_bank[0] = val & 0xf & (e->ci.prg16k_banks - 1),
+                     e->ci.prg16k_banks - 1);
+      break;
+    default:
+      mapper_mmc2_shared_write(e, addr, val);
+      break;
+  }
 }
 
 static void mapper11_write(E *e, u16 addr, u8 val) {
@@ -3510,6 +3597,23 @@ static Result init_mapper(E *e) {
     set_mirror(e, MIRROR_SINGLE_0);
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
     set_prg32k_map(e, e->ci.prg32k_banks - 1);
+    break;
+  case BOARD_MAPPER_9:
+    e->mapper_write = mapper9_write;
+    e->s.m.has_mmc2_latch = true;
+    set_mirror(e, e->ci.mirror);
+    set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
+    set_prg8k_map(e, e->s.m.prg_bank[0], e->ci.prg8k_banks - 3,
+                  e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
+    break;
+  case BOARD_MAPPER_10:
+    e->mapper_write = mapper10_write;
+    e->s.m.has_mmc2_latch = true;
+    set_mirror(e, e->ci.mirror);
+    set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
+    set_prg16k_map(e, e->s.m.prg_bank[0], e->ci.prg16k_banks - 1);
+    e->s.m.prg_ram_en = true;
+    e->s.m.prg_ram_bank_en = e->s.m.prg_ram_write_bank_en = ~0;
     break;
   case BOARD_MAPPER_11:
     e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1;

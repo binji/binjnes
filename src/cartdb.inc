@@ -601,7 +601,7 @@
   /* GeGeGe no Kitarou: Youkai Daimakyou */
   {.crc=0x25468546, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Mike Tyson's Punch-Out!! */
-  {.crc=0x25551F3F, .board=BOARD_UNSUPPORTED, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x25551F3F, .board=BOARD_MAPPER_9, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Formula 1 Sensation */
   {.crc=0x256392F1, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Pool of Radiance, Advanced Dungeons & Dragons */
@@ -753,7 +753,7 @@
   /* Pac-Man */
   {.crc=0x2C7D68F3, .board=BOARD_MAPPER_0, .mapper=0, .prg=1, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Mike Tyson's Punch-Out!! */
-  {.crc=0x2C818014, .board=BOARD_UNSUPPORTED, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x2C818014, .board=BOARD_MAPPER_9, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Felix the Cat */
   {.crc=0x2CAAE01C, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* NES Open Tournament Golf */
@@ -969,7 +969,7 @@
   /* Paperboy 2 */
   {.crc=0x3A0965B1, .board=BOARD_MAPPER_2, .mapper=2, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Mike Tyson's Punch-Out!! */
-  {.crc=0x3A4D4D10, .board=BOARD_UNSUPPORTED, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x3A4D4D10, .board=BOARD_MAPPER_9, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Wrath of the Black Manta */
   {.crc=0x3A8723B9, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Wing of Madoola, The */
@@ -2411,7 +2411,7 @@
   /* Ice Hockey */
   {.crc=0x92924548, .board=BOARD_MAPPER_0, .mapper=0, .prg=2, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Mike Tyson's Punch-Out!! */
-  {.crc=0x92A2185C, .board=BOARD_UNSUPPORTED, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x92A2185C, .board=BOARD_MAPPER_9, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Impossible Mission-II */
   {.crc=0x92A3D007, .board=BOARD_NINA001, .mapper=34, .prg=4, .chr=16, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Miracle Piano Teaching System, The */
@@ -2499,7 +2499,7 @@
   /* Touhou Kenbun Roku */
   {.crc=0x97BC4585, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Fire Emblem: Ankokuryuu to Hikari no Ken */
-  {.crc=0x97CAD370, .board=BOARD_UNSUPPORTED, .mapper=10, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0x97CAD370, .board=BOARD_MAPPER_10, .mapper=10, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Zelda II: The Adventure of Link */
   {.crc=0x97D52C06, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Battletoads */
@@ -2565,7 +2565,7 @@
   /* Shi-Kin-Jou */
   {.crc=0x9B53F848, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Famicom Wars */
-  {.crc=0x9B547E05, .board=BOARD_UNSUPPORTED, .mapper=10, .prg=8, .chr=16, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0x9B547E05, .board=BOARD_MAPPER_10, .mapper=10, .prg=8, .chr=16, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Lemmings */
   {.crc=0x9B568CC4, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Bard's Tale, The: Tales of the Unknown */
@@ -2849,7 +2849,7 @@
   /* Battle of Olympus, The */
   {.crc=0xA97567A4, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Fire Emblem Gaiden */
-  {.crc=0xA98046B8, .board=BOARD_UNSUPPORTED, .mapper=10, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0xA98046B8, .board=BOARD_MAPPER_10, .mapper=10, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Mahjong */
   {.crc=0xA9842027, .board=BOARD_MAPPER_0, .mapper=0, .prg=1, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Rollerball */
@@ -3097,7 +3097,7 @@
   /* Treasure Master */
   {.crc=0xB918580C, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Punch-Out!! */
-  {.crc=0xB95E9E7F, .board=BOARD_UNSUPPORTED, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xB95E9E7F, .board=BOARD_MAPPER_9, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Jumpin' Kid: Jack to Mame no Ki Monogatari */
   {.crc=0xB976219A, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Fisher-Price: Perfect Fit */
@@ -3543,7 +3543,7 @@
   /* Eric Cantona Football Challenge Goal! 2 */
   {.crc=0xD20BB617, .board=BOARD_TXROM_MMC3C, .mapper=118, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Punch-Out!! */
-  {.crc=0xD229FD5C, .board=BOARD_UNSUPPORTED, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xD229FD5C, .board=BOARD_MAPPER_9, .mapper=9, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Wizards & Warriors III */
   {.crc=0xD2562072, .board=BOARD_MAPPER_7, .mapper=7, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Bionic Commando */

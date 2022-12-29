@@ -98,6 +98,10 @@ typedef struct {
     } mmc1;
 
     struct {
+      bool latch[2];
+    } mmc2_4;
+
+    struct {
       u8 bank_select, irq_latch;
       bool irq_enable, irq_reload;
     } mmc3;
@@ -118,7 +122,7 @@ typedef struct {
     } m28;
   };
   u16 prg_ram_bank_en, prg_ram_write_bank_en; // Bit map of enabled 512b banks.
-  bool prg_ram_en, has_a12_irq, has_vrc_irq, has_vrc_audio;
+  bool prg_ram_en, has_a12_irq, has_vrc_irq, has_vrc_audio, has_mmc2_latch;
 } M;
 
 typedef struct {
