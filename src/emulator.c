@@ -2101,6 +2101,12 @@ static void mapper66_write(E *e, u16 addr, u8 val) {
   set_prg32k_map(e, m->prg_bank[0] = (val >> 4) & 3 & (e->ci.prg32k_banks - 1));
 }
 
+static void mapper87_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  set_chr8k_map(e, m->chr_bank[0] = (((val << 1) & 2) | ((val >> 1) & 1)) &
+                                    (e->ci.chr8k_banks - 1));
+}
+
 static inline u8 get_P(E *e, bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
          (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
@@ -3819,6 +3825,14 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_87:
+    e->mapper_write = mapper0_write;
+    e->mapper_prg_ram_write = mapper87_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
 
   case BOARD_MAPPER_206:

@@ -239,7 +239,7 @@
   /* Stadium Events */
   {.crc=0x0DA28A50, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Urusei Yatsura: Lum no Wedding Bell */
-  {.crc=0x0DA5E32E, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x0DA5E32E, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Plasma Ball */
   {.crc=0x0DB4B382, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Jesus: Kyoufu no Bio Monster */
@@ -527,7 +527,7 @@
   /* Mother */
   {.crc=0x20CC079D, .board=BOARD_TXROM_MMC3A, .mapper=4, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* City Connection */
-  {.crc=0x20F98977, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=1, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x20F98977, .board=BOARD_MAPPER_87, .mapper=87, .prg=1, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* U.S. Championship V'Ball */
   {.crc=0x213CB3FB, .board=BOARD_TXROM_MMC3A, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Haja no Fuuin */
@@ -535,7 +535,7 @@
   /* WWF WrestleMania: Steel Cage Challenge */
   {.crc=0x21F2A1A6, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Hyper Olympic Gentaiban! */
-  {.crc=0x21F85681, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x21F85681, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Tenka no Goikenban: Mito Koumon */
   {.crc=0x21F8C4AB, .board=BOARD_UNSUPPORTED, .mapper=89, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Space Shuttle Project */
@@ -1593,7 +1593,7 @@
   /* Battle Stadium: Senbatsu Pro Yakyuu */
   {.crc=0x61A852EA, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Jajamaru no Daibouken */
-  {.crc=0x61B4295A, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x61B4295A, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Street Cop */
   {.crc=0x61D86167, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Guerrilla War */
@@ -1661,7 +1661,7 @@
   /* Urban Champion */
   {.crc=0x656D4265, .board=BOARD_MAPPER_0, .mapper=0, .prg=1, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Argus */
-  {.crc=0x656FA3B5, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x656FA3B5, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Soccer */
   {.crc=0x657F7875, .board=BOARD_MAPPER_0, .mapper=0, .prg=2, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Jetsons, The: Cogswell's Caper */
@@ -2201,7 +2201,7 @@
   /* Cyberball */
   {.crc=0x88338ED5, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Choplifter */
-  {.crc=0x883454EA, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x883454EA, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Immortal, Will Harvey Presents The */
   {.crc=0x8889C564, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* StarTropics */
@@ -2511,7 +2511,7 @@
   /* Karate Kid, The */
   {.crc=0x983948A5, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* TwinBee */
-  {.crc=0x985B1D05, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
+  {.crc=0x985B1D05, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Mega Man 6 */
   {.crc=0x988798A8, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=32, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Lunar Pool */
@@ -3173,7 +3173,7 @@
   /* Bomber King */
   {.crc=0xBD9D0E85, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Kage no Densetsu */
-  {.crc=0xBDA7925E, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
+  {.crc=0xBDA7925E, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* GeGeGe no Kitarou 2: Youkai Gundan no Chousen */
   {.crc=0xBDA8F8E4, .board=BOARD_UNSUPPORTED, .mapper=152, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Shuffle Fight */
@@ -3663,7 +3663,7 @@
   /* Willow */
   {.crc=0xD9323EE6, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Ninja Jajamaru-kun */
-  {.crc=0xD97595A3, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=1, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xD97595A3, .board=BOARD_MAPPER_87, .mapper=87, .prg=1, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Rasaaru Ishii no Childs Quest */
   {.crc=0xD97C31B0, .board=BOARD_MAPPER_206, .mapper=206, .prg=8, .chr=16, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Wizardry: Proving Grounds of the Mad Overlord */
@@ -3903,7 +3903,7 @@
   /* Motocross Champion */
   {.crc=0xE6C9029E, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Goonies, The */
-  {.crc=0xE6DF6616, .board=BOARD_UNSUPPORTED, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xE6DF6616, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Pro Wrestling */
   {.crc=0xE6F08E93, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Snake's Revenge */
