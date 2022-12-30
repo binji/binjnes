@@ -91,7 +91,7 @@ typedef struct {
 typedef struct {
   u16 chr1k_bank[8], prg8k_bank[4],
       prgram8k_bank;                         // Actual mapped bank indexes.
-  u16 chr_bank[8], prg_bank[2], prgram_bank; // Mapper's selected bank indexes.
+  u16 chr_bank[8], prg_bank[4], prgram_bank; // Mapper's selected bank indexes.
   union {
     struct {
       u8 bits, data, ctrl;
@@ -122,9 +122,15 @@ typedef struct {
     struct {
       u8 reg_select, inner_bank, bank_mode, outer_bank;
     } m28;
+
+    struct {
+      u8 command;
+      u16 irq_counter;
+      bool irq_enable, irq_counter_enable;
+    } fme7;
   };
-  bool prg_ram_en, prg_ram_write_en, has_a12_irq, has_vrc_irq, has_vrc_audio,
-      has_mmc2_latch;
+  bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq, has_vrc_irq,
+      has_vrc_audio, has_mmc2_latch;
 } M;
 
 typedef struct {

@@ -59,7 +59,7 @@
   /* Wario no Mori */
   {.crc=0x03E2898F, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=16, .chr=64, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Batman: Return of the Joker */
-  {.crc=0x03EC46AF, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x03EC46AF, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Hunt for Red October, The */
   {.crc=0x03F899CD, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Zombie Nation */
@@ -133,7 +133,7 @@
   /* Die Hard */
   {.crc=0x085DE7C9, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Gremlins 2: Shinshu Tanjou */
-  {.crc=0x0897021B, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x0897021B, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Sanada Juu Yuushi */
   {.crc=0x0902C8F0, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Kyuukyoku Tiger */
@@ -229,7 +229,7 @@
   /* Seirei Densetsu Lickle */
   {.crc=0x0D3482D7, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Gimmick! */
-  {.crc=0x0D65E7C7, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x0D65E7C7, .board=BOARD_MAPPER_69, .mapper=69, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Maniac Mansion */
   {.crc=0x0D9F5BD1, .board=BOARD_SNROM, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Gozonji: Yaji Kita Chin Douchuu */
@@ -271,7 +271,7 @@
   /* Section Z */
   {.crc=0x0FEC90D2, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Dynamite Batman */
-  {.crc=0x0FF6A3B5, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x0FF6A3B5, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Fantasy Zone */
   {.crc=0x0FFDE258, .board=BOARD_MAPPER_206, .mapper=206, .prg=4, .chr=16, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Fantasy Zone */
@@ -685,7 +685,7 @@
   /* Adventures of Lolo */
   {.crc=0x297198B9, .board=BOARD_TXROM_MMC3A, .mapper=4, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Batman: Return of the Joker */
-  {.crc=0x29DD37F4, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x29DD37F4, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Family Trainer 3: Aerobics Studio */
   {.crc=0x29DE87AF, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Gyrodine */
@@ -1119,7 +1119,7 @@
   /* Barker Bill's Trick Shooting */
   {.crc=0x4318A2F8, .board=BOARD_MAPPER_1, .mapper=1, .prg=4, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Pyokotan no Dai Meiro */
-  {.crc=0x4339865C, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x4339865C, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Space Harrier */
   {.crc=0x43539A3C, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Panic Restaurant */
@@ -1221,7 +1221,7 @@
   /* Four Players' Tennis */
   {.crc=0x48B8EE58, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Barcode World */
-  {.crc=0x48CA0EE1, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0x48CA0EE1, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Snake's Revenge */
   {.crc=0x48E904D0, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Clu Clu Land */
@@ -1265,7 +1265,7 @@
   /* Isolated Warrior */
   {.crc=0x4BB9B840, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Honoo no Toukyuuji: Dodge Danpei */
-  {.crc=0x4C049CFE, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x4C049CFE, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Satomi Hakkenden */
   {.crc=0x4C0E8BBB, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Namco Classic */
@@ -1283,7 +1283,7 @@
   /* Crime Busters */
   {.crc=0x4D68CFB1, .board=BOARD_UNSUPPORTED, .mapper=38, .prg=8, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Batman */
-  {.crc=0x4D7859A9, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x4D7859A9, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Sqoon */
   {.crc=0x4DFD949E, .board=BOARD_MAPPER_0, .mapper=0, .prg=2, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Top Gun */
@@ -1875,7 +1875,7 @@
   /* Route 16 Turbo */
   {.crc=0x728BFA8D, .board=BOARD_MAPPER_0, .mapper=0, .prg=2, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Hebereke */
-  {.crc=0x72928698, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x72928698, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Crystal Mines */
   {.crc=0x72E66392, .board=BOARD_MAPPER_11, .mapper=11, .prg=4, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Bible Adventures */
@@ -2765,7 +2765,7 @@
   /* Mega Man 5 */
   {.crc=0xA4DCF72E, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=16, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Honoo no Toukyuuji: Dodge Danpei 2 */
-  {.crc=0xA4E935DF, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=16, .chr=64, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0xA4E935DF, .board=BOARD_MAPPER_69, .mapper=69, .prg=16, .chr=64, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Raid on Bungeling Bay */
   {.crc=0xA547A6EC, .board=BOARD_MAPPER_0, .mapper=0, .prg=1, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Destiny of an Emperor */
@@ -2797,7 +2797,7 @@
   /* Best of the Best: Championship Karate */
   {.crc=0xA6A725B8, .board=BOARD_MAPPER_2, .mapper=2, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Mr. Gimmick */
-  {.crc=0xA713DD30, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xA713DD30, .board=BOARD_MAPPER_69, .mapper=69, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Defenders of Dynatron City */
   {.crc=0xA725B2D3, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Densetsu no Kishi: Elrond */
@@ -3113,7 +3113,7 @@
   /* Zelda II: The Adventure of Link */
   {.crc=0xBA322865, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Batman: Return of the Joker */
-  {.crc=0xBA327FD9, .board=BOARD_UNSUPPORTED, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xBA327FD9, .board=BOARD_MAPPER_69, .mapper=69, .prg=8, .chr=64, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Kyonshiizu 2 */
   {.crc=0xBA43568A, .board=BOARD_UNSUPPORTED, .mapper=80, .prg=8, .chr=32, .vram=0, .wram=0, .battery=1, .mirror=MIRROR_NONE},
   /* Holy Diver */
