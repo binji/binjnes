@@ -1295,6 +1295,18 @@ static void cpu_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static void update_ppu_bank(E *e, int index, u16 bank, bool use_ntram) {
+  if (use_ntram) {
+    u16 b = bank & 1;
+    e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (b << 10);
+  } else {
+    u16 b = bank & (e->ci.chr1k_banks - 1);
+    e->ppu_map[index] = e->ci.chr_data + (b << 10);
+    e->ppu_map_write[index] =
+        e->ci.chr_data_write + ((b & CHRRAM1K_MASK) << 10);
+  }
+}
+
 static void update_nt_map_mirror(E *e) {
   u8 bank[4] = {0, 0, 0, 0};
   switch (e->s.p.mirror) {
@@ -1313,15 +1325,21 @@ static void update_nt_map_mirror(E *e) {
     bank[0] = bank[1] = bank[2] = bank[3] = 1;
     break;
   }
-
   for (int i = 8; i < 16; ++i) {
-    e->ppu_map[i] = e->ppu_map_write[i] = e->s.p.ram + (bank[i & 3] << 10);
+    update_ppu_bank(e, i, bank[i & 3], true);
   }
 }
 
 static void update_nt_map_fourscreen(E *e) {
   for (int i = 8; i < 16; ++i) {
-    e->ppu_map[i] = e->ppu_map_write[i] = e->s.p.ram + ((i & 3) << 10);
+    update_ppu_bank(e, i, i & 3, true);
+  }
+}
+
+static void update_nt_map_banking(E* e) {
+  for (int i = 0; i < 4; ++i) {
+    update_ppu_bank(e, 8 + i, e->s.m.nt_bank[i], !e->s.m.nt_bank_is_chr[i]);
+    update_ppu_bank(e, 12 + i, e->s.m.nt_bank[i], !e->s.m.nt_bank_is_chr[i]);
   }
 }
 
@@ -1332,9 +1350,7 @@ static void set_mirror(E *e, Mirror mirror) {
 
 static void update_chr1k_map(E* e) {
   for (size_t i = 0; i < ARRAY_SIZE(e->s.m.chr1k_bank); ++i) {
-    u16 bank = e->s.m.chr1k_bank[i] & (e->ci.chr1k_banks - 1);
-    e->ppu_map[i] = e->ci.chr_data + (bank << 10);
-    e->ppu_map_write[i] = e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
+    update_ppu_bank(e, i, e->s.m.chr1k_bank[i], e->s.m.chr_bank_is_ntram[i]);
   }
 }
 
@@ -1755,6 +1771,84 @@ static void mapper11_write(E *e, u16 addr, u8 val) {
   if (addr < 0x8000) return;
   set_chr8k_map(e, (m->chr_bank[0] = (val >> 4) & (e->ci.chr8k_banks - 1)));
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
+}
+
+static void mapper19_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  u8 reg = addr >> 11;
+  DEBUG("mapper19_write(%04x, %02x)\n", addr, val);
+  switch (reg) {
+    case 9: // 0x4800..0x4fff   audio
+      // TODO
+      break;
+    case 10: // 0x5000..0x57ff            IRQ counter low
+      m->namco163.irq_counter = (m->namco163.irq_counter & 0xff00) | val;
+      e->s.c.irq &= ~IRQ_MAPPER;
+      break;
+    case 11: // 0x5800..0x5fff            IRQ counter high
+      m->namco163.irq_counter =
+          (m->namco163.irq_counter & 0xff) | ((val & 0x7f) << 8);
+      m->namco163.irq_enable = !!(val & 0x80);
+      e->s.c.irq &= ~IRQ_MAPPER;
+      break;
+    case 16 ... 27: // 0x8000..0xdfff  CHR bank
+      if (reg < 24) {
+        m->chr_bank[reg - 16] = val;
+      } else {
+        m->nt_bank[reg - 24] = val;
+      }
+      goto update_chr;
+    case 28: // PRG select 1
+      m->prg_bank[0] = val & 0x3f & (e->ci.prg8k_banks - 1);
+      // TODO sound enable
+      break;
+    case 29: // PRG select 2 / CHR RAM enable
+      m->prg_bank[1] = val & 0x3f & (e->ci.prg8k_banks - 1);
+      m->namco163.use_ntram[0] = !(val & 0x40);
+      m->namco163.use_ntram[1] = !(val & 0x80);
+      goto update_chr;
+    case 30: // PRG select 3
+      m->prg_bank[2] = val & 0x3f & (e->ci.prg8k_banks - 1);
+      break;
+    case 31: { // Write protect for ext ram
+      bool write_en = (val & 0xf0) == 0x40;
+      m->namco163.prg_bank_write_en[0] = write_en && !!(val & 1);
+      m->namco163.prg_bank_write_en[1] = write_en && !!(val & 2);
+      m->namco163.prg_bank_write_en[2] = write_en && !!(val & 4);
+      m->namco163.prg_bank_write_en[3] = write_en && !!(val & 8);
+      break;
+    }
+
+    update_chr: {
+      for (int i = 0; i < 4; ++i) {
+        m->chr_bank_is_ntram[i] =
+            m->namco163.use_ntram[0] && m->chr_bank[i] >= 0xe0;
+      }
+      for (int i = 4; i < 8; ++i) {
+        m->chr_bank_is_ntram[i] =
+            m->namco163.use_ntram[1] && m->chr_bank[i] >= 0xe0;
+      }
+      for (int i = 0; i < 4; ++i) {
+        m->nt_bank_is_chr[i] = m->nt_bank[i] < 0xe0;
+      }
+      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                    m->chr_bank[6], m->chr_bank[7]);
+      e->mapper_update_nt_map(e);
+      break;
+    }
+  }
+  set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], m->prg_bank[2],
+                m->prg_bank[3]);
+}
+
+static void mapper19_cpu_step(E* e) {
+  if (e->s.m.namco163.irq_enable) {
+    if (e->s.m.namco163.irq_counter < 0x7fff &&
+        ++e->s.m.namco163.irq_counter == 0x7fff) {
+      e->s.c.irq |= IRQ_MAPPER;
+    }
+  }
 }
 
 static void mapper_vrc_prg_map(E* e) {
@@ -4124,6 +4218,16 @@ static Result init_mapper(E *e) {
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0]);
     break;
+
+  case BOARD_MAPPER_19:
+    e->mapper_write = mapper19_write;
+    e->mapper_cpu_step = mapper19_cpu_step;
+    e->mapper_update_nt_map = update_nt_map_banking;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 1, 2, 3, 4, 5, 6, 7);
+    set_prg8k_map(e, 0, 0, 0, e->s.m.prg_bank[3] = e->ci.prg8k_banks - 1);
+    break;
+
   case BOARD_VRC4A:
     e->mapper_write = mapper_vrc4a_write;
     goto vrc4_shared;

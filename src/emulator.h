@@ -92,6 +92,7 @@ typedef struct {
   u16 chr1k_bank[8], prg8k_bank[4],
       prgram8k_bank;                         // Actual mapped bank indexes.
   u16 chr_bank[8], prg_bank[4], prgram_bank; // Mapper's selected bank indexes.
+  u16 nt_bank[4]; // Only used if nt_bank_is_chr is true
   union {
     struct {
       u8 bits, data, ctrl;
@@ -133,9 +134,15 @@ typedef struct {
       u16 irq_counter;
       bool irq_enable, irq_counter_enable;
     } fme7;
+
+    struct {
+      u16 irq_counter;
+      bool irq_enable, use_ntram[2], prg_bank_write_en[4];
+    } namco163;
   };
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
       has_mmc2_latch;
+  bool chr_bank_is_ntram[8], nt_bank_is_chr[4];
 } M;
 
 typedef union {
