@@ -157,14 +157,14 @@ static void do_mmc2_access(E* e, u16 addr) {
 
 static inline u8 chr_read(E *e, u16 addr) {
   do_a12_access(e, addr);
-  u8 result = e->chr_map[(addr >> 10) & 7][addr & 0x3ff];
+  u8 result = e->ppu_map[(addr >> 10) & 0xf][addr & 0x3ff];
   do_mmc2_access(e, addr);
   return result;
 }
 
 static inline u8 nt_read(E *e, u16 addr) {
   do_a12_access(e, addr);
-  return e->nt_map[(addr >> 10) & 3][addr & 0x3ff];
+  return e->ppu_map[(addr >> 10) & 0xf][addr & 0x3ff];
 }
 
 static u8 ppu_read(E *e, u16 addr) {
@@ -196,7 +196,7 @@ static void ppu_write(E *e, u16 addr, u8 val) {
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      e->chr_map_write[addr >> 10][addr & 0x3ff] = val;
+      e->ppu_map_write[addr >> 10][addr & 0x3ff] = val;
       break;
 
     case 15:
@@ -220,18 +220,20 @@ static void ppu_write(E *e, u16 addr, u8 val) {
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
-      e->nt_map[(addr >> 10) & 3][addr & 0x3ff] = val;
+      e->ppu_map_write[addr >> 10][addr & 0x3ff] = val;
       DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%u:%u)\n", e->s.cy,
              addr, val, e->s.p.state % 341, e->s.p.state / 341);
       break;
   }
 }
 
-static inline void read_ntb(E *e) { e->s.p.ntb = nt_read(e, e->s.p.v & 0xfff); }
+static inline void read_ntb(E *e) {
+  e->s.p.ntb = nt_read(e, 0x2000 | (e->s.p.v & 0xfff));
+}
 
 static inline void read_atb(E *e) {
   u16 v = e->s.p.v;
-  u16 at = 0x3c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
+  u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
   int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
   u8 atb1 = (nt_read(e, at) >> shift) & 3;
   u8 atb2 = (atb1 << 2) | atb1;
@@ -1299,30 +1301,39 @@ static void cpu_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void update_nt_map(E* e) {
+static void update_nt_map(E *e) {
+  u8 bank[4] = {0, 0, 0, 0};
   if (e->ci.fourscreen) {
-    e->nt_map[0] = e->s.p.ram;
-    e->nt_map[1] = e->s.p.ram + 0x400;
-    e->nt_map[2] = e->s.p.ram + 0x800;
-    e->nt_map[3] = e->s.p.ram + 0xc00;
+    bank[0] = 0;
+    bank[1] = 1;
+    bank[2] = 2;
+    bank[3] = 3;
   } else {
     switch (e->s.p.mirror) {
-      case MIRROR_HORIZONTAL:
-        e->nt_map[0] = e->nt_map[1] = e->s.p.ram;
-        e->nt_map[2] = e->nt_map[3] = e->s.p.ram + 0x400;
-        break;
-      case MIRROR_VERTICAL:
-        e->nt_map[0] = e->nt_map[2] = e->s.p.ram;
-        e->nt_map[1] = e->nt_map[3] = e->s.p.ram + 0x400;
-        break;
-      case MIRROR_SINGLE_0:
-        e->nt_map[0] = e->nt_map[2] = e->nt_map[1] = e->nt_map[3] = e->s.p.ram;
-        break;
-      case MIRROR_SINGLE_1:
-        e->nt_map[0] = e->nt_map[2] = e->nt_map[1] = e->nt_map[3] =
-            e->s.p.ram + 0x400;
-        break;
+    case MIRROR_HORIZONTAL:
+      bank[0] = bank[1] = 0;
+      bank[2] = bank[3] = 1;
+      break;
+    case MIRROR_VERTICAL:
+      bank[0] = bank[2] = 0;
+      bank[1] = bank[3] = 1;
+      break;
+    case MIRROR_SINGLE_0:
+      bank[0] = bank[1] = bank[2] = bank[3] = 0;
+      break;
+    case MIRROR_SINGLE_1:
+      bank[0] = bank[1] = bank[2] = bank[3] = 1;
+      break;
     }
+  }
+
+  e->ppu_map[8] = e->ppu_map[12] = e->s.p.ram + (bank[0] << 10);
+  e->ppu_map[9] = e->ppu_map[13] = e->s.p.ram + (bank[1] << 10);
+  e->ppu_map[10] = e->ppu_map[14] = e->s.p.ram + (bank[2] << 10);
+  e->ppu_map[11] = e->ppu_map[15] = e->s.p.ram + (bank[3] << 10);
+  // Update write pointers.
+  for (int i = 8; i < 16; ++i) {
+    e->ppu_map_write[i] = e->ppu_map[i];
   }
 }
 
@@ -1334,8 +1345,8 @@ static void set_mirror(E *e, Mirror mirror) {
 static void update_chr1k_map(E* e) {
   for (size_t i = 0; i < ARRAY_SIZE(e->s.m.chr1k_bank); ++i) {
     u16 bank = e->s.m.chr1k_bank[i] & (e->ci.chr1k_banks - 1);
-    e->chr_map[i] = e->ci.chr_data + (bank << 10);
-    e->chr_map_write[i] = e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
+    e->ppu_map[i] = e->ci.chr_data + (bank << 10);
+    e->ppu_map_write[i] = e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
   }
 }
 

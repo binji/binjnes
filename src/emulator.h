@@ -203,7 +203,7 @@ typedef struct Emulator {
   EmulatorConfig config;
   S s;
   CartInfo ci;
-  u8 *prg_rom_map[4], *prg_ram_map, *nt_map[4], *chr_map[8], *chr_map_write[8];
+  u8 *prg_rom_map[4], *prg_ram_map, *ppu_map[16], *ppu_map_write[16];
   void (*mapper_write)(struct Emulator*, u16, u8);
   void (*mapper_prg_ram_write)(struct Emulator*, u16, u8);
   u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
