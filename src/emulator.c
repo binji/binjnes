@@ -2041,6 +2041,32 @@ static void mapper_vrc6b_write(E *e, u16 addr, u8 val) {
   mapper_vrc6_shared_write(e, VRC_ADDR(addr, 1, 0), val);
 }
 
+static void mapper_vrc_cpu_step(E *e) {
+  M *m = &e->s.m;
+  if (!e->s.m.vrc.irq_enable) return;
+
+  bool clock = false;
+  if (m->vrc.irq_cycle_mode) { // cycle mode
+    clock = true;
+  } else { // scanline mode
+    m->vrc.prescaler += 3;
+    if (m->vrc.prescaler >= 341) {
+      m->vrc.prescaler -= 341;
+      clock = true;
+    }
+  }
+  if (clock) {
+    DEBUG("[%" PRIu64 "]: clocked %u=>%u\n", e->s.cy, m->vrc.irq_counter,
+          m->vrc.irq_counter + 1);
+    if (++m->vrc.irq_counter == 0) {
+      DEBUG("[%" PRIu64 "]: IRQ (reset to %u) [scany=%u]\n", e->s.cy,
+            m->vrc.irq_latch, scany(&e->s.p));
+      e->s.c.irq |= IRQ_MAPPER;
+      m->vrc.irq_counter = m->vrc.irq_latch;
+    }
+  }
+}
+
 static void mapper28_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
   switch (addr >> 12) {
@@ -2189,6 +2215,12 @@ static void mapper69_prg_ram_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static void mapper69_cpu_step(E* e) {
+  if (e->s.m.fme7.irq_counter-- == 0 && e->s.m.fme7.irq_enable) {
+    e->s.c.irq |= IRQ_MAPPER;
+  }
+}
+
 static void mapper87_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   set_chr8k_map(e, m->chr_bank[0] = (((val << 1) & 2) | ((val >> 1) & 1)) &
@@ -2292,32 +2324,8 @@ static void cpu_step(E *e) {
 #endif
   C* c = &e->s.c;
 
-  if (e->s.m.has_vrc_irq && e->s.m.vrc.irq_enable) {
-    M* m = &e->s.m;
-    bool clock = false;
-    if (m->vrc.irq_cycle_mode) { // cycle mode
-      clock = true;
-    } else { // scanline mode
-      m->vrc.prescaler += 3;
-      if (m->vrc.prescaler >= 341) {
-        m->vrc.prescaler -= 341;
-        clock = true;
-      }
-    }
-    if (clock) {
-      DEBUG("[%" PRIu64 "]: clocked %u=>%u\n", e->s.cy, m->vrc.irq_counter,
-            m->vrc.irq_counter + 1);
-      if (++m->vrc.irq_counter == 0) {
-        DEBUG("[%" PRIu64 "]: IRQ (reset to %u) [scany=%u]\n", e->s.cy,
-              m->vrc.irq_latch, scany(&e->s.p));
-        e->s.c.irq |= IRQ_MAPPER;
-        m->vrc.irq_counter = m->vrc.irq_latch;
-      }
-    }
-  } else if (e->ci.board == BOARD_MAPPER_69 && e->s.m.fme7.irq_counter_enable) {
-    if (e->s.m.fme7.irq_counter-- == 0 && e->s.m.fme7.irq_enable) {
-      c->irq |= IRQ_MAPPER;
-    }
+  if (e->mapper_cpu_step) {
+    e->mapper_cpu_step(e);
   }
 
   switch (c->bits) {
@@ -3870,7 +3878,7 @@ static Result init_mapper(E *e) {
     // fallthrough
   vrc4_shared:
     DEBUG("setting has VRC irq\n");
-    e->s.m.has_vrc_irq = true;
+    e->mapper_cpu_step = mapper_vrc_cpu_step;
     // fallthrough
   vrc_shared:
     set_mirror(e, e->ci.mirror);
@@ -3932,6 +3940,7 @@ static Result init_mapper(E *e) {
     e->mapper_write = mapper69_write;
     e->mapper_prg_ram_write = mapper69_prg_ram_write;
     e->mapper_prg_ram_read = mapper69_prg_ram_read;
+    e->mapper_cpu_step = mapper69_cpu_step;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);

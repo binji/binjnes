@@ -129,7 +129,7 @@ typedef struct {
       bool irq_enable, irq_counter_enable;
     } fme7;
   };
-  bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq, has_vrc_irq,
+  bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
       has_vrc_audio, has_mmc2_latch;
 } M;
 
@@ -207,6 +207,7 @@ typedef struct Emulator {
   void (*mapper_write)(struct Emulator*, u16, u8);
   void (*mapper_prg_ram_write)(struct Emulator*, u16, u8);
   u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
+  void (*mapper_cpu_step)(struct Emulator*);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
