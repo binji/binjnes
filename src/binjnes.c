@@ -73,6 +73,7 @@ static atomic_size_t s_audio_buffer_read = 0;
 static atomic_size_t s_audio_buffer_write = 0;
 static bool s_key_state[KEYCODE_COUNT];
 static JoypadBuffer *s_joypad_buffer;
+static JoypadPlayback s_joypad_playback;
 static RewindBuffer *s_rewind_buffer;
 static RewindState s_rewind_state;
 static Ticks s_last_ticks;
@@ -409,6 +410,8 @@ static void init_emulator(void) {
     CHECK(SUCCESS(file_read(s_read_joypad_filename, &file_data)));
     CHECK(SUCCESS(joypad_read(&file_data, &s_joypad_buffer)));
     file_data_delete(&file_data);
+    emulator_set_joypad_playback_callback(e, s_joypad_buffer,
+                                          &s_joypad_playback);
   } else {
     emulator_set_joypad_callback(e, joypad_callback, NULL);
     s_joypad_buffer = joypad_new();
