@@ -509,6 +509,7 @@ static void ppu_step(E *e) {
       &ppu36, &ppu37, &ppu38, &ppu39, &ppu40, &ppu41, &ppu42,
   };
   const u8 *steps = e->s.p.enabled ? s_ppu_steps_en : s_ppu_steps_dis;
+  e->s.p.enabled = e->s.p.next_enabled;
   void (*const f)(E* e) = s_ppu_funcs[steps[e->s.p.state++]];
   if (f) f(e);
 }
@@ -1131,7 +1132,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         p->bg_changed_cy = e->s.cy;
       }
       p->ppumask = val;
-      p->enabled = !!(val & 0x18);
+      p->next_enabled = !!(val & 0x18);
       break;
     case 3: p->oamaddr = val; break;
     case 4:
@@ -3970,7 +3971,6 @@ static Result init_emulator(E *e, const EInit *init) {
   s->c.step = s_callvec;
   s->c.next_step = s_cpu_decode;
   s->c.bits = s_opcode_bits[s->c.step++];
-  s->p.enabled = false;
   // Triangle volume is always full; disabled by len counter or linear counter.
   e->s.a.vol[2] = 1;
   e->s.a.cvol[2] = ~0;
