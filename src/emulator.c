@@ -1301,45 +1301,39 @@ static void cpu_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void update_nt_map(E *e) {
+static void update_nt_map_mirror(E *e) {
   u8 bank[4] = {0, 0, 0, 0};
-  if (e->ci.fourscreen) {
-    bank[0] = 0;
-    bank[1] = 1;
-    bank[2] = 2;
-    bank[3] = 3;
-  } else {
-    switch (e->s.p.mirror) {
-    case MIRROR_HORIZONTAL:
-      bank[0] = bank[1] = 0;
-      bank[2] = bank[3] = 1;
-      break;
-    case MIRROR_VERTICAL:
-      bank[0] = bank[2] = 0;
-      bank[1] = bank[3] = 1;
-      break;
-    case MIRROR_SINGLE_0:
-      bank[0] = bank[1] = bank[2] = bank[3] = 0;
-      break;
-    case MIRROR_SINGLE_1:
-      bank[0] = bank[1] = bank[2] = bank[3] = 1;
-      break;
-    }
+  switch (e->s.p.mirror) {
+  case MIRROR_HORIZONTAL:
+    bank[0] = bank[1] = 0;
+    bank[2] = bank[3] = 1;
+    break;
+  case MIRROR_VERTICAL:
+    bank[0] = bank[2] = 0;
+    bank[1] = bank[3] = 1;
+    break;
+  case MIRROR_SINGLE_0:
+    bank[0] = bank[1] = bank[2] = bank[3] = 0;
+    break;
+  case MIRROR_SINGLE_1:
+    bank[0] = bank[1] = bank[2] = bank[3] = 1;
+    break;
   }
 
-  e->ppu_map[8] = e->ppu_map[12] = e->s.p.ram + (bank[0] << 10);
-  e->ppu_map[9] = e->ppu_map[13] = e->s.p.ram + (bank[1] << 10);
-  e->ppu_map[10] = e->ppu_map[14] = e->s.p.ram + (bank[2] << 10);
-  e->ppu_map[11] = e->ppu_map[15] = e->s.p.ram + (bank[3] << 10);
-  // Update write pointers.
   for (int i = 8; i < 16; ++i) {
-    e->ppu_map_write[i] = e->ppu_map[i];
+    e->ppu_map[i] = e->ppu_map_write[i] = e->s.p.ram + (bank[i & 3] << 10);
+  }
+}
+
+static void update_nt_map_fourscreen(E *e) {
+  for (int i = 8; i < 16; ++i) {
+    e->ppu_map[i] = e->ppu_map_write[i] = e->s.p.ram + ((i & 3) << 10);
   }
 }
 
 static void set_mirror(E *e, Mirror mirror) {
   e->s.p.mirror = mirror;
-  update_nt_map(e);
+  e->mapper_update_nt_map(e);
 }
 
 static void update_chr1k_map(E* e) {
@@ -3729,6 +3723,8 @@ static Result init_mapper(E *e) {
   e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = true;
   e->mapper_prg_ram_read = mapper_prg_ram_read;
   e->mapper_prg_ram_write = mapper_prg_ram_write;
+  e->mapper_update_nt_map =
+      e->ci.fourscreen ? update_nt_map_fourscreen : update_nt_map_mirror;
 
   switch (e->ci.board) {
   case BOARD_MAPPER_0:
@@ -3779,6 +3775,9 @@ static Result init_mapper(E *e) {
   case BOARD_HKROM:
     e->mapper_write = mapper4_write;
     e->ci.fourscreen = e->ci.ignore_mirror;
+    if (e->ci.fourscreen) {
+      e->mapper_update_nt_map = update_nt_map_fourscreen;
+    }
     e->s.m.mmc3.bank_select = 0;
     e->s.m.mmc3.irq_latch = 0;
     e->s.m.mmc3.irq_reload = true;
@@ -4112,7 +4111,7 @@ Result emulator_read_state(Emulator *e, const FileData *file_data) {
   update_chr1k_map(e);
   update_prg8k_map(e);
   update_prgram_map(e);
-  update_nt_map(e);
+  e->mapper_update_nt_map(e);
   return OK;
   ON_ERROR_RETURN;
 }

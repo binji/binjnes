@@ -208,6 +208,7 @@ typedef struct Emulator {
   void (*mapper_prg_ram_write)(struct Emulator*, u16, u8);
   u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
   void (*mapper_cpu_step)(struct Emulator*);
+  void (*mapper_update_nt_map)(struct Emulator*);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
