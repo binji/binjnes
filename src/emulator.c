@@ -382,8 +382,8 @@ static void ppu3(E *e) {
 static void ppu4(E *e) { inch(&e->s.p); }
 static void ppu5(E *e) { inch(&e->s.p); shift_bg(e); }
 static void ppu6(E *e) { inch(&e->s.p); shift_en(e); spr_step(e); }
-static void ppu7(E *e) { incv(&e->s.p); }
-static void ppu8(E *e) { incv(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu7(E *e) { inch(&e->s.p); incv(&e->s.p); }
+static void ppu8(E *e) { inch(&e->s.p); incv(&e->s.p); shift_en(e); spr_step(e); }
 static void ppu9(E *e) { e->s.p.ptbh = read_ptb(e, 8); }
 static void ppu10(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_bg(e); }
 static void ppu11(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); spr_step(e); }
