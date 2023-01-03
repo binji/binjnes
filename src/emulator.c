@@ -1081,10 +1081,9 @@ static u8 cpu_read(E *e, u16 addr) {
         e->s.j.joyp[1] >>= 1;
         return result;
       }
-      default:
-        DEBUG("*** NYI: read($%04x)\n", addr);
-        break;
     }
+    // fallthrough
+  case 5:
     break;
 
   case 6: case 7:
@@ -1096,7 +1095,7 @@ static u8 cpu_read(E *e, u16 addr) {
   case 12: case 13: return e->prg_rom_map[2][addr - 0xc000];
   case 14: case 15: return e->prg_rom_map[3][addr - 0xe000];
   }
-  return c->open_bus;
+  return e->mapper_read(e, addr);
 }
 
 static void cpu_write(E *e, u16 addr, u8 val) {
@@ -1293,7 +1292,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         break;
       }
       default:
-        LOG("*** NYI: write($%04x, $%02hhx)\n", addr, val);
+        e->mapper_write(e, addr, val);
         break;
     }
     break;
@@ -1402,6 +1401,10 @@ static void update_prgram_map(E* e) {
   } else {
     e->prg_ram_map = e->s.c.prg_ram + (bank << 13);
   }
+}
+
+static u8 mapper_read_open_bus(E* e, u16 addr) {
+  return e->s.c.open_bus;
 }
 
 static void set_prgram8k_map(E* e, u16 bank) {
@@ -3733,6 +3736,7 @@ static Result init_mapper(E *e) {
   e->mapper_prg_ram_write = mapper_prg_ram_write;
   e->mapper_update_nt_map =
       e->ci.fourscreen ? update_nt_map_fourscreen : update_nt_map_mirror;
+  e->mapper_read = mapper_read_open_bus;
 
   switch (e->ci.board) {
   case BOARD_MAPPER_0:
