@@ -221,7 +221,7 @@ static void ppu_write(E *e, u16 addr, u8 val) {
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
       e->ppu_map_write[addr >> 10][addr & 0x3ff] = val;
-      DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%u:%u)\n", e->s.cy,
+      DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%3u:%3u)\n", e->s.cy,
              addr, val, e->s.p.state % 341, e->s.p.state / 341);
       break;
   }
@@ -1124,10 +1124,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       p->ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
-      DEBUG("(%" PRIu64 "): ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy, p->t, val);
+      DEBUG("(%" PRIu64 ") [%3u:%3u]: ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy,
+            p->state % 341, p->state / 341, p->t, val);
       break;
     case 1:
-      DEBUG("(%" PRIu64 "): ppumask: %02x=>%02x\n", e->s.cy, p->ppumask, val);
+      DEBUG("(%" PRIu64 ") [%3u:%3u]: ppumask: %02x=>%02x\n", e->s.cy,
+            p->state % 341, p->state / 341, p->ppumask, val);
       if ((val ^ p->ppumask) & 8) {
         p->bg_changed_cy = e->s.cy;
       }
@@ -1147,12 +1149,14 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         p->x = val & 7;
         p->t = (p->t & 0xffe0) | (val >> 3);
         p->bgatpreshift = p->bgatshift >> ((p->x + (p->fbidx & 7)) * 2);
-        DEBUG("     ppu:t=%04hx x=%02hhx w=0\n", p->t, p->x);
+        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx x=%02hhx w=0\n",
+              e->s.cy, p->state % 341, p->state / 341, val, p->t, p->x);
       } else {
         // w was 1.
         // t: CBA..HG FED..... = d: HGFEDCBA
         p->t = (p->t & 0x8c1f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
-        DEBUG("     ppu:t=%04hx w=1\n", p->t);
+        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx w=1\n", e->s.cy,
+              p->state % 341, p->state / 341, val, p->t);
       }
       break;
     case 6:
@@ -1161,14 +1165,16 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         // t: .FEDCBA ........ = d: ..FEDCBA
         // t: X...... ........ = 0
         p->t = (p->t & 0xff) | ((val & 0x3f) << 8);
-        DEBUG("     ppu:t=%04hx w=0\n", p->t);
+        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:t=%04hx w=0\n", e->s.cy,
+              p->state % 341, p->state / 341, val, p->t);
       } else {
         // w was 1.
         // t: ....... HGFEDCBA = d: HGFEDCBA
         // v                   = t
         p->v = p->t = (p->t & 0xff00) | val;
         do_a12_access(e, p->v);
-        DEBUG("     ppu:v=%04hx t=%04hx w=1\n", p->v, p->t);
+        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:v=%04hx t=%04hx w=1\n",
+              e->s.cy, p->state % 341, p->state / 341, val, p->v, p->t);
       }
       break;
     case 7: {
@@ -1176,7 +1182,8 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       ppu_write(e, p->v, val);
       inc_ppu_addr(p);
       do_a12_access(e, p->v);
-      DEBUG("     ppu:write(%04hx)=%02hhx, v=%04hx\n", oldv, val, p->v);
+      DEBUG("  (%" PRIu64 ") [%3u:%3u]: ppu:write(%04hx)=%02hhx, v=%04hx\n",
+            e->s.cy, p->state % 341, p->state / 341, oldv, val, p->v);
     }
     }
     break;
