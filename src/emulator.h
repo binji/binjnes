@@ -117,6 +117,11 @@ typedef struct {
       u16 prescaler;
       bool irq_enable, irq_enable_after_ack, irq_cycle_mode;
       u8 ppu_bank_style; // VRC6 only
+      // audio (VRC6 only)
+      u16x4 timer, period, seq, play_mask;
+      f32x4 sample, vol;
+      u8 duty[2], sawadd, sawaccum;
+      bool update_audio;
     } vrc;
 
     struct {
@@ -130,7 +135,7 @@ typedef struct {
     } fme7;
   };
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
-      has_vrc_audio, has_mmc2_latch;
+      has_mmc2_latch;
 } M;
 
 typedef struct {
@@ -173,12 +178,11 @@ typedef struct {
   u16x8 timer, period, seq, halt, len, play_mask, swmute_mask;
   u32x4 start, cvol, envdiv, envloop, envreload;         // envelope
   u16x8 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
-  f32x4 sample, vol, decay, vrc_sample, vrc_vol;
-  f32 mixed;
+  f32x4 sample, vol, decay;
+  f32 mixed, base_mixed;
 
   u16 state, noise, dmcbytes, dmcaddr;
-  u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate,
-      vrc_duty[2], vrc_sawadd, vrc_sawaccum;
+  u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate;
   bool update, trireload, dmcen, dmcfetch;
   u64 resetcy; // XXX
 } A;
@@ -210,6 +214,7 @@ typedef struct Emulator {
   u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
   void (*mapper_cpu_step)(struct Emulator*);
   void (*mapper_update_nt_map)(struct Emulator*);
+  void (*mapper_apu_tick)(struct Emulator*, bool update);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;

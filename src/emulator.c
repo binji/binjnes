@@ -724,7 +724,7 @@ static void set_period_hi(A* a, int chan, u8 val) {
 }
 
 static void apu_tick(E *e) {
-  static const u16x8 timer_diff = {1, 1, 2, 1, 1, 2, 2, 1};
+  static const u16x8 timer_diff = {1, 1, 2, 1, 1};
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
                                 {0, 1, 1, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 1, 1, 1, 1},
@@ -742,10 +742,9 @@ static void apu_tick(E *e) {
   a->timer = blendv_u16x8(a->timer - timer_diff, a->period, timer0);
   timer0 &= a->play_mask;
 
-  if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4] | timer0[5] |
-      timer0[6] | timer0[7]) {
+  if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4]) {
     // Advance the sequence for reloaded timers.
-    a->seq = (a->seq + (1 & timer0)) & (u16x8){7, 7, 31, 0, 7, 15, 15, 7};
+    a->seq = (a->seq + (1 & timer0)) & (u16x8){7, 7, 31, 0, 7};
 
     if (timer0[0]) {
       a->sample[0] = pduty[a->reg[2] >> 6][a->seq[0]];
@@ -784,21 +783,6 @@ static void apu_tick(E *e) {
         }
       }
     }
-    if (timer0[5]) {
-      a->vrc_sample[0] = (a->seq[5] <= a->vrc_duty[0]) | (a->vrc_duty[0] >> 3);
-    }
-    if (timer0[6]) {
-      a->vrc_sample[1] = (a->seq[6] <= a->vrc_duty[1]) | (a->vrc_duty[1] >> 3);
-    }
-    if (timer0[7]) {
-      a->vrc_sample[2] = 1;
-      a->vrc_vol[2] = a->vrc_sawaccum >> 3;
-      a->vrc_sawaccum += a->vrc_sawadd;
-      if (a->seq[7] == 7) {
-        a->vrc_sawaccum = 0;
-        a->seq[7] = 0;
-      }
-    }
     a->update = true;
   }
 
@@ -817,10 +801,10 @@ static void apu_tick(E *e) {
     a->dmcfetch = false;
   }
 
+  bool update = a->update;
   if (a->update) {
-    typedef s16 s16x4 __attribute__((vector_size(8)));
     u16x8 play_mask =
-        a->play_mask & (a->swmute_mask | (u16x8){0, 0, ~0, ~0, ~0, ~0, ~0, ~0});
+        a->play_mask & (a->swmute_mask | (u16x8){0, 0, ~0, ~0, ~0});
     u32x4 play_mask4 =
         (u32x4) __builtin_convertvector(*(s16x4 *)&play_mask, s32x4) |
         (s32x4){0, 0, -1, 0};
@@ -834,16 +818,12 @@ static void apu_tick(E *e) {
                      TD = 0.00000003402641447451;
     f32 p = sampvol[0] + sampvol[1];
     f32 t = 3 * sampvol[2] + 2 * sampvol[3] + a->dmcout;
-    a->mixed = p * (PB + p * PC) + t * (TB + t * (TC + t * TD));
-
-    if (e->s.m.has_vrc_audio) {
-      u32x4 play_mask4 = (u32x4) __builtin_convertvector(
-          (s16x4)__builtin_shufflevector(play_mask, (u16x8){}, 5, 6, 7, 8),
-          s32x4);
-      f32x4 sampvol = (f32x4)((u32x4)a->vrc_sample & play_mask4) * a->vrc_vol;
-      a->mixed += (sampvol[0] + sampvol[1] + sampvol[2]) * 0.01f;
-    }
+    a->base_mixed = a->mixed = p * (PB + p * PC) + t * (TB + t * (TC + t * TD));
     a->update = false;
+  }
+
+  if (e->mapper_apu_tick) {
+    e->mapper_apu_tick(e, update);
   }
 
   // Store twice so we don't have to wrap when filtering.
@@ -1924,7 +1904,7 @@ static void mapper25_write(E* e, u16 addr, u8 val) {
 static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
   A *a = &e->s.a;
-  u8 chan = (addr >> 12) - 4;
+  u8 chan = (addr >> 12) - 9;
   switch (addr & 0xf003) {
     case 0x8000 ... 0x8003: // 16k PRG Select
       m->prg_bank[0] = (val & 0xf) << 1;
@@ -1933,30 +1913,28 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
       goto prg_select;
 
     case 0x9000: case 0xa000:  // Pulse Control
-      a->vrc_duty[chan - 5] = val >> 4;
-      a->vrc_vol[chan - 5] = val & 0xf;
+      m->vrc.duty[chan] = val >> 4;
+      m->vrc.vol[chan] = val & 0xf;
       print_byte(addr, val, chan + 1, "MDDDVVVV");
       break;
     case 0xb000: // Saw Accum Rate
-      a->vrc_sawadd = val & 0x1f;
+      m->vrc.sawadd = val & 0x1f;
       print_byte(addr, val, chan + 1, "XXAAAAAA");
       break;
     case 0x9001: case 0xa001: case 0xb001: // Freq Low
-      a->period[chan] = (a->period[chan] & 0x0f00) | val;
+      m->vrc.period[chan] = (m->vrc.period[chan] & 0x0f00) | val;
       print_byte(addr, val, chan + 1, "LLLLLLLL");
       break;
     case 0x9002: case 0xa002: case 0xb002: // Freq High
-      a->period[chan] = (a->period[chan] & 0x00ff) | ((val & 0xf) << 8);
+      m->vrc.period[chan] = (m->vrc.period[chan] & 0x00ff) | ((val & 0xf) << 8);
       if (val & 0x80) { // Channel enabled.
-        a->play_mask[chan] = ~0;
-        a->len[chan] = 1;
-        a->halt[chan] = ~0;
+        m->vrc.play_mask[chan] = ~0;
       } else {
-        a->timer[chan] = 0;
-        a->vrc_sample[chan - 5] = a->seq[chan] = 0;
-        a->play_mask[chan] = 0;
+        m->vrc.timer[chan] = 0;
+        m->vrc.sample[chan] = m->vrc.seq[chan] = 0;
+        m->vrc.play_mask[chan] = 0;
       }
-      a->update = true;
+      m->vrc.update_audio = true;
       print_byte(addr, val, chan + 1, "EXXXHHHH");
       break;
 
@@ -2069,6 +2047,44 @@ static void mapper_vrc_cpu_step(E *e) {
       e->s.c.irq |= IRQ_MAPPER;
       m->vrc.irq_counter = m->vrc.irq_latch;
     }
+  }
+}
+
+static void mapper_vrc6_apu_tick(E* e, bool update) {
+  M *m = &e->s.m;
+  static const u16x4 timer_diff = {2, 2, 1};
+  u16x4 timer0 = m->vrc.timer < timer_diff;
+  m->vrc.timer = blendv_u16x4(m->vrc.timer - timer_diff, m->vrc.period, timer0);
+  timer0 &= m->vrc.play_mask;
+  if (timer0[0] | timer0[1] | timer0[2]) {
+    // Advance the sequence for reloaded timers.
+    m->vrc.seq = (m->vrc.seq + (1 & timer0)) & (u16x4){15, 15, 7};
+
+    if (timer0[0]) {
+      m->vrc.sample[0] = (m->vrc.seq[0] <= m->vrc.duty[0]) | (m->vrc.duty[0] >> 3);
+    }
+    if (timer0[1]) {
+      m->vrc.sample[1] = (m->vrc.seq[1] <= m->vrc.duty[1]) | (m->vrc.duty[1] >> 3);
+    }
+    if (timer0[2]) {
+      m->vrc.sample[2] = 1;
+      m->vrc.vol[2] = m->vrc.sawaccum >> 3;
+      m->vrc.sawaccum += m->vrc.sawadd;
+      if (m->vrc.seq[2] == 7) {
+        m->vrc.sawaccum = 0;
+        m->vrc.seq[2] = 0;
+      }
+    }
+    m->vrc.update_audio = true;
+  }
+
+  if (update || m->vrc.update_audio) {
+    u32x4 play_mask4 =
+        (u32x4) __builtin_convertvector((s16x4)m->vrc.play_mask, s32x4);
+    f32x4 sampvol = (f32x4)((u32x4)m->vrc.sample & play_mask4) * m->vrc.vol;
+    e->s.a.mixed =
+        e->s.a.base_mixed + (sampvol[0] + sampvol[1] + sampvol[2]) * 0.01f;
+    m->vrc.update_audio = false;
   }
 }
 
@@ -3885,7 +3901,7 @@ static Result init_mapper(E *e) {
     goto vrc6_shared;
 
   vrc6_shared:
-    e->s.m.has_vrc_audio = true;
+    e->mapper_apu_tick = mapper_vrc6_apu_tick;
     // fallthrough
   vrc4_shared:
     DEBUG("setting has VRC irq\n");

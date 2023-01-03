@@ -20,6 +20,8 @@
 typedef u16 u16x2 __attribute__((vector_size(4)));
 
 typedef u8  u8x8  __attribute__((vector_size(8)));
+typedef u16 u16x4 __attribute__((vector_size(8)));
+typedef s16 s16x4 __attribute__((vector_size(8)));
 typedef u32 u32x2 __attribute__((vector_size(8)));
 
 typedef u8  u8x16 __attribute__((vector_size(16)));
@@ -28,6 +30,11 @@ typedef u32 u32x4 __attribute__((vector_size(16)));
 typedef s32 s32x4 __attribute__((vector_size(16)));
 typedef u64 u64x2 __attribute__((vector_size(16)));
 typedef f32 f32x4 __attribute__((vector_size(16)));
+
+static inline u16x4 blendv_u16x4(u16x4 a, u16x4 b, u16x4 mask) {
+  // TODO: other versions?
+  return (a & ~mask) | (b & mask);
+}
 
 static inline u8x16 blendv_u8x16(u8x16 a, u8x16 b, u8x16 mask) {
 #if __SSE4_1__
