@@ -2842,13 +2842,23 @@ static void cpu_step(E *e) {
       if (c->req_nmi) {
         c->veclo = 0xfa;
         DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
-      } else if (c->opcode == 0 || c->irq) {
+      } else {
         c->veclo = 0xfe;
         DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
-      } else {
-        c->veclo = 0xfc;
-        DEBUG("     [%" PRIu64 "] using reset vec\n", e->s.cy);
       }
+      c->set_vec_cy = e->s.cy;
+      c->has_irq = false;
+      c->has_nmi = false;
+      c->req_nmi = false;
+      break;
+
+    case 125:
+      c->bushi = 1; c->buslo = c->S;
+      busval = c->PCL;
+      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
+      --c->S;
+      c->veclo = 0xfc;
+      DEBUG("     [%" PRIu64 "] using reset vec\n", e->s.cy);
       c->set_vec_cy = e->s.cy;
       c->has_irq = false;
       c->has_nmi = false;
@@ -3329,220 +3339,221 @@ static const u16 s_opcode_loc[256] = {
 };
 
 static const u8 s_opcode_bits[] = {
-  119,                        /* 0x02 - HLT*/
-  2, 61, 63, 65, 110, 111,    /* 0x00 - BRK*/
-  2, 11, 14, 15, 35,          /* 0x01 - ORA (nn,x)*/
-  2, 11, 14, 15, 14, 47, 48,  /* 0x03 - SLO (nn,x)*/
-  2, 33,                      /* 0x04 - NOP nn*/
-  2, 35,                      /* 0x05 - ORA nn*/
-  2, 14, 20, 16,              /* 0x06 - ASL nn*/
-  2, 14, 47, 48,              /* 0x07 - SLO nn*/
-  1, 55,                      /* 0x08 - PHP*/
-  56,                         /* 0x09 - ORA #nn*/
-  57,                         /* 0x0a - ASL*/
-  121,                        /* 0x0b - ANC #nn*/
-  2, 3, 33,                   /* 0x0c - NOP nnnn*/
-  2, 3, 35,                   /* 0x0d - ORA nnnn*/
-  2, 3, 14, 20, 16,           /* 0x0e - ASL nnnn*/
-  2, 3, 14, 47, 48,           /* 0x0f - SLO nnnn*/
-  58, 9, 10,                  /* 0x10 - BPL*/
-  2, 14, 13, 7, 35,           /* 0x11 - ORA (nn),y*/
-  2, 14, 90, 7, 14, 47, 48,   /* 0x13 - SLO (nn),y*/
-  2, 11, 33,                  /* 0x14 - NOP nn,x*/
-  2, 11, 35,                  /* 0x15 - ORA nn,x*/
-  2, 11, 14, 20, 16,          /* 0x16 - ASL nn,x*/
-  2, 11, 14, 47, 48,          /* 0x17 - SLO nn,x*/
-  59,                         /* 0x18 - CLC*/
-  2, 6, 7, 35,                /* 0x19 - ORA nnnn,y*/
-  34,                         /* 0x1a - NOP*/
-  2, 92, 7, 14, 47, 48,       /* 0x1b - SLO nnnn,y*/
-  2, 4, 7, 33,                /* 0x1c - NOP nnnn,x*/
-  2, 4, 7, 35,                /* 0x1d - ORA nnnn,x*/
-  2, 5, 7, 14, 20, 16,        /* 0x1e - ASL nnnn,x*/
-  2, 5, 7, 14, 47, 48,        /* 0x1f - SLO nnnn,x*/
-  2, 60, 61, 62, 76,          /* 0x20 - JSR*/
-  2, 11, 14, 15, 19,          /* 0x21 - AND (nn,x)*/
-  2, 11, 14, 15, 14, 49, 50,  /* 0x23 - RLA (nn,x)*/
-  2, 21,                      /* 0x24 - BIT nn*/
-  2, 19,                      /* 0x25 - AND nn*/
-  2, 14, 36, 16,              /* 0x26 - ROL nn*/
-  2, 14, 49, 50,              /* 0x27 - RLA nn*/
-  1, 8, 66,                   /* 0x28 - PLP*/
-  67,                         /* 0x29 - AND #nn*/
-  68,                         /* 0x2a - ROL*/
-  2, 3, 21,                   /* 0x2c - BIT nnnn*/
-  2, 3, 19,                   /* 0x2d - AND nnnn*/
-  2, 3, 14, 36, 16,           /* 0x2e - ROL nnnn*/
-  2, 3, 14, 49, 50,           /* 0x2f - RLA nnnn*/
-  69, 9, 10,                  /* 0x30 - BMI*/
-  2, 14, 13, 7, 19,           /* 0x31 - AND (nn),y*/
-  2, 14, 90, 7, 14, 49, 50,   /* 0x33 - RLA (nn),y*/
-  2, 11, 19,                  /* 0x35 - AND nn,x*/
-  2, 11, 14, 36, 16,          /* 0x36 - ROL nn,x*/
-  2, 11, 14, 49, 50,          /* 0x37 - RLA nn,x*/
-  70,                         /* 0x38 - SEC*/
-  2, 6, 7, 19,                /* 0x39 - AND nnnn,y*/
-  2, 92, 7, 14, 49, 50,       /* 0x3b - RLA nnnn,y*/
-  2, 4, 7, 19,                /* 0x3d - AND nnnn,x*/
-  2, 5, 7, 14, 36, 16,        /* 0x3e - ROL nnnn,x*/
-  2, 5, 7, 14, 49, 50,        /* 0x3f - RLA nnnn,x*/
-  1, 8, 71, 17, 72,           /* 0x40 - RTI*/
-  2, 11, 14, 15, 26,          /* 0x41 - EOR (nn,x)*/
-  2, 11, 14, 15, 14, 51, 52,  /* 0x43 - SRE (nn,x)*/
-  2, 26,                      /* 0x45 - EOR nn*/
-  2, 14, 32, 16,              /* 0x46 - LSR nn*/
-  2, 14, 51, 52,              /* 0x47 - SRE nn*/
-  1, 73,                      /* 0x48 - PHA*/
-  74,                         /* 0x49 - EOR #nn*/
-  75,                         /* 0x4a - LSR*/
-  120,                        /* 0x4b - ASR #nn*/
-  2, 76,                      /* 0x4c - JMP*/
-  2, 3, 26,                   /* 0x4d - EOR nnnn*/
-  2, 3, 14, 32, 16,           /* 0x4e - LSR nnnn*/
-  2, 3, 14, 51, 52,           /* 0x4f - SRE nnnn*/
-  77, 9, 10,                  /* 0x50 - BVC*/
-  2, 14, 13, 7, 26,           /* 0x51 - EOR (nn),y*/
-  2, 14, 90, 7, 14, 51, 52,   /* 0x53 - SRE (nn),y*/
-  2, 11, 26,                  /* 0x55 - EOR nn,x*/
-  2, 11, 14, 32, 16,          /* 0x56 - LSR nn,x*/
-  2, 11, 14, 51, 52,          /* 0x57 - SRE nn,x*/
-  78,                         /* 0x58 - CLI*/
-  2, 6, 7, 26,                /* 0x59 - EOR nnnn,y*/
-  2, 92, 7, 14, 51, 52,       /* 0x5b - SRE nnnn,y*/
-  2, 4, 7, 26,                /* 0x5d - EOR nnnn,x*/
-  2, 5, 7, 14, 32, 16,        /* 0x5e - LSR nnnn,x*/
-  2, 5, 7, 14, 51, 52,        /* 0x5f - SRE nnnn,x*/
-  1, 8, 17, 79, 80,           /* 0x60 - RTS*/
-  2, 11, 14, 15, 18,          /* 0x61 - ADC (nn,x)*/
-  2, 11, 14, 15, 14, 53, 54,  /* 0x63 - RRA (nn,x)*/
-  2, 18,                      /* 0x65 - ADC nn*/
-  2, 14, 37, 16,              /* 0x66 - ROR nn*/
-  2, 14, 53, 54,              /* 0x67 - RRA nn*/
-  1, 8, 81,                   /* 0x68 - PLA*/
-  82,                         /* 0x69 - ADC #nn*/
-  83,                         /* 0x6a - ROR*/
-  2, 3, 14, 84,               /* 0x6c - JMP ()*/
-  2, 3, 18,                   /* 0x6d - ADC nnnn*/
-  2, 3, 14, 37, 16,           /* 0x6e - ROR nnnn*/
-  2, 3, 14, 53, 54,           /* 0x6f - RRA nnnn*/
-  85, 9, 10,                  /* 0x70 - BVS*/
-  2, 14, 13, 7, 18,           /* 0x71 - ADC (nn),y*/
-  2, 14, 90, 7, 14, 53, 54,   /* 0x73 - RRA (nn),y*/
-  2, 11, 18,                  /* 0x75 - ADC nn,x*/
-  2, 11, 14, 37, 16,          /* 0x76 - ROR nn,x*/
-  2, 11, 14, 53, 54,          /* 0x77 - RRA nn,x*/
-  2, 6, 7, 18,                /* 0x79 - ADC nnnn,y*/
-  2, 92, 7, 14, 53, 54,       /* 0x7b - RRA nnnn,y*/
-  2, 4, 7, 18,                /* 0x7d - ADC nnnn,x*/
-  2, 5, 7, 14, 37, 16,        /* 0x7e - ROR nnnn,x*/
-  2, 5, 7, 14, 53, 54,        /* 0x7f - RRA nnnn,x*/
-  86,                         /* 0x80 - NOP #nn*/
-  2, 11, 14, 15, 40,          /* 0x81 - STA (nn,x)*/
-  2, 11, 14, 15, 39,          /* 0x83 - SAX (nn,x)*/
-  2, 42,                      /* 0x84 - STY nn*/
-  2, 40,                      /* 0x85 - STA nn*/
-  2, 41,                      /* 0x86 - STX nn*/
-  2, 39,                      /* 0x87 - SAX nn*/
-  87,                         /* 0x88 - DEY*/
-  88,                         /* 0x8a - TXA*/
-  2, 3, 42,                   /* 0x8c - STY nnnn*/
-  2, 3, 40,                   /* 0x8d - STA nnnn*/
-  2, 3, 41,                   /* 0x8e - STX nnnn*/
-  2, 3, 39,                   /* 0x8f - SAX nnnn*/
-  89, 9, 10,                  /* 0x90 - BCC*/
-  2, 14, 90, 7, 40,           /* 0x91 - STA (nn),y*/
-  2, 14, 90, 7, 124,          /* 0x93 - SHA (nn),y*/
-  2, 11, 42,                  /* 0x94 - STY nn,x*/
-  2, 11, 40,                  /* 0x95 - STA nn,x*/
-  2, 12, 41,                  /* 0x96 - STX nn,y*/
-  2, 12, 39,                  /* 0x97 - SAX nn,y*/
-  91,                         /* 0x98 - TYA*/
-  2, 92, 7, 40,               /* 0x99 - STA nnnn,y*/
-  2, 92, 7, 124,              /* 0x9b - SHS nnnn,y*/
-  2, 5, 7, 124,               /* 0x9c - SHY nnnn,x*/
-  2, 5, 7, 40,                /* 0x9d - STA nnnn,x*/
-  93,                         /* 0xa0 - LDY #nn*/
-  2, 11, 14, 15, 29,          /* 0xa1 - LDA (nn,x)*/
-  94,                         /* 0xa2 - LDX #nn*/
-  2, 11, 14, 15, 28,          /* 0xa3 - LAX (nn,x)*/
-  2, 31,                      /* 0xa4 - LDY nn*/
-  2, 29,                      /* 0xa5 - LDA nn*/
-  2, 30,                      /* 0xa6 - LDX nn*/
-  2, 28,                      /* 0xa7 - LAX nn*/
-  95,                         /* 0xa8 - TAY*/
-  96,                         /* 0xa9 - LDA #nn*/
-  97,                         /* 0xaa - TAX*/
-  122,                        /* 0xab - LXA #nn*/
-  2, 3, 31,                   /* 0xac - LDY nnnn*/
-  2, 3, 29,                   /* 0xad - LDA nnnn*/
-  2, 3, 30,                   /* 0xae - LDX nnnn*/
-  2, 3, 28,                   /* 0xaf - LAX nnnn*/
-  98, 9, 10,                  /* 0xb0 - BCS*/
-  2, 14, 13, 7, 29,           /* 0xb1 - LDA (nn),y*/
-  2, 14, 13, 7, 28,           /* 0xb3 - LAX (nn),y*/
-  2, 11, 31,                  /* 0xb4 - LDY nn,x*/
-  2, 11, 29,                  /* 0xb5 - LDA nn,x*/
-  2, 12, 30,                  /* 0xb6 - LDX nn,y*/
-  2, 12, 28,                  /* 0xb7 - LAX nn,y*/
-  2, 6, 7, 29,                /* 0xb9 - LDA nnnn,y*/
-  99,                         /* 0xba - TSX*/
-  2, 6, 7, 123,               /* 0xbb - LAS nnnn,y*/
-  2, 4, 7, 31,                /* 0xbc - LDY nnnn,x*/
-  2, 4, 7, 29,                /* 0xbd - LDA nnnn,x*/
-  2, 6, 7, 30,                /* 0xbe - LDX nnnn,y*/
-  2, 6, 7, 28,                /* 0xbf - LAX nnnn,y*/
-  100,                        /* 0xc0 - CPY #nn*/
-  2, 11, 14, 15, 22,          /* 0xc1 - CMP (nn,x)*/
-  2, 11, 14, 15, 14, 43, 44,  /* 0xc3 - DCP (nn,x)*/
-  2, 24,                      /* 0xc4 - CPY nn*/
-  2, 22,                      /* 0xc5 - CMP nn*/
-  2, 14, 25, 16,              /* 0xc6 - DEC nn*/
-  2, 14, 43, 44,              /* 0xc7 - DCP nn*/
-  101,                        /* 0xc8 - INY*/
-  102,                        /* 0xc9 - CMP #nn*/
-  103,                        /* 0xca - DEX*/
-  2, 3, 24,                   /* 0xcc - CPY nnnn*/
-  2, 3, 22,                   /* 0xcd - CMP nnnn*/
-  2, 3, 14, 25, 16,           /* 0xce - DEC nnnn*/
-  2, 3, 14, 43, 44,           /* 0xcf - DCP nnnn*/
-  104, 9, 10,                 /* 0xd0 - BNE*/
-  2, 14, 13, 7, 22,           /* 0xd1 - CMP (nn),y*/
-  2, 14, 90, 7, 14, 43, 44,   /* 0xd3 - DCP (nn),y*/
-  2, 11, 22,                  /* 0xd5 - CMP nn,x*/
-  2, 11, 14, 25, 16,          /* 0xd6 - DEC nn,x*/
-  2, 11, 14, 43, 44,          /* 0xd7 - DCP nn,x*/
-  2, 6, 7, 22,                /* 0xd9 - CMP nnnn,y*/
-  2, 92, 7, 14, 43, 44,       /* 0xdb - DCP nnnn,y*/
-  2, 4, 7, 22,                /* 0xdd - CMP nnnn,x*/
-  2, 5, 7, 14, 25, 16,        /* 0xde - DEC nnnn,x*/
-  2, 5, 7, 14, 43, 44,        /* 0xdf - DCP nnnn,x*/
-  105,                        /* 0xe0 - CPX #nn*/
-  2, 11, 14, 15, 38,          /* 0xe1 - SBC (nn,x)*/
-  2, 11, 14, 15, 14, 45, 46,  /* 0xe3 - ISB (nn,x)*/
-  2, 23,                      /* 0xe4 - CPX nn*/
-  2, 38,                      /* 0xe5 - SBC nn*/
-  2, 14, 27, 16,              /* 0xe6 - INC nn*/
-  2, 14, 45, 46,              /* 0xe7 - ISB nn*/
-  107,                        /* 0xe8 - INX*/
-  106,                        /* 0xe9 - SBC #nn*/
-  2, 3, 23,                   /* 0xec - CPX nnnn*/
-  2, 3, 38,                   /* 0xed - SBC nnnn*/
-  2, 3, 14, 27, 16,           /* 0xee - INC nnnn*/
-  2, 3, 14, 45, 46,           /* 0xef - ISB nnnn*/
-  108, 9, 10,                 /* 0xf0 - BEQ*/
-  2, 14, 13, 7, 38,           /* 0xf1 - SBC (nn),y*/
-  2, 14, 90, 7, 14, 45, 46,   /* 0xf3 - ISB (nn),y*/
-  2, 11, 38,                  /* 0xf5 - SBC nn,x*/
-  2, 11, 14, 27, 16,          /* 0xf6 - INC nn,x*/
-  2, 11, 14, 45, 46,          /* 0xf7 - ISB nn,x*/
-  2, 6, 7, 38,                /* 0xf9 - SBC nnnn,y*/
-  2, 92, 7, 14, 45, 46,       /* 0xfb - ISB nnnn,y*/
-  2, 4, 7, 38,                /* 0xfd - SBC nnnn,x*/
-  2, 5, 7, 14, 27, 16,        /* 0xfe - INC nnnn,x*/
-  2, 5, 7, 14, 45, 46,        /* 0xff - ISB nnnn,x*/
+  119,                         /* 0x02 - HLT*/
+  2, 61, 63, 65, 110, 111,     /* 0x00 - BRK*/
+  2, 11, 14, 15, 35,           /* 0x01 - ORA (nn,x)*/
+  2, 11, 14, 15, 14, 47, 48,   /* 0x03 - SLO (nn,x)*/
+  2, 33,                       /* 0x04 - NOP nn*/
+  2, 35,                       /* 0x05 - ORA nn*/
+  2, 14, 20, 16,               /* 0x06 - ASL nn*/
+  2, 14, 47, 48,               /* 0x07 - SLO nn*/
+  1, 55,                       /* 0x08 - PHP*/
+  56,                          /* 0x09 - ORA #nn*/
+  57,                          /* 0x0a - ASL*/
+  121,                         /* 0x0b - ANC #nn*/
+  2, 3, 33,                    /* 0x0c - NOP nnnn*/
+  2, 3, 35,                    /* 0x0d - ORA nnnn*/
+  2, 3, 14, 20, 16,            /* 0x0e - ASL nnnn*/
+  2, 3, 14, 47, 48,            /* 0x0f - SLO nnnn*/
+  58, 9, 10,                   /* 0x10 - BPL*/
+  2, 14, 13, 7, 35,            /* 0x11 - ORA (nn),y*/
+  2, 14, 90, 7, 14, 47, 48,    /* 0x13 - SLO (nn),y*/
+  2, 11, 33,                   /* 0x14 - NOP nn,x*/
+  2, 11, 35,                   /* 0x15 - ORA nn,x*/
+  2, 11, 14, 20, 16,           /* 0x16 - ASL nn,x*/
+  2, 11, 14, 47, 48,           /* 0x17 - SLO nn,x*/
+  59,                          /* 0x18 - CLC*/
+  2, 6, 7, 35,                 /* 0x19 - ORA nnnn,y*/
+  34,                          /* 0x1a - NOP*/
+  2, 92, 7, 14, 47, 48,        /* 0x1b - SLO nnnn,y*/
+  2, 4, 7, 33,                 /* 0x1c - NOP nnnn,x*/
+  2, 4, 7, 35,                 /* 0x1d - ORA nnnn,x*/
+  2, 5, 7, 14, 20, 16,         /* 0x1e - ASL nnnn,x*/
+  2, 5, 7, 14, 47, 48,         /* 0x1f - SLO nnnn,x*/
+  2, 60, 61, 62, 76,           /* 0x20 - JSR*/
+  2, 11, 14, 15, 19,           /* 0x21 - AND (nn,x)*/
+  2, 11, 14, 15, 14, 49, 50,   /* 0x23 - RLA (nn,x)*/
+  2, 21,                       /* 0x24 - BIT nn*/
+  2, 19,                       /* 0x25 - AND nn*/
+  2, 14, 36, 16,               /* 0x26 - ROL nn*/
+  2, 14, 49, 50,               /* 0x27 - RLA nn*/
+  1, 8, 66,                    /* 0x28 - PLP*/
+  67,                          /* 0x29 - AND #nn*/
+  68,                          /* 0x2a - ROL*/
+  2, 3, 21,                    /* 0x2c - BIT nnnn*/
+  2, 3, 19,                    /* 0x2d - AND nnnn*/
+  2, 3, 14, 36, 16,            /* 0x2e - ROL nnnn*/
+  2, 3, 14, 49, 50,            /* 0x2f - RLA nnnn*/
+  69, 9, 10,                   /* 0x30 - BMI*/
+  2, 14, 13, 7, 19,            /* 0x31 - AND (nn),y*/
+  2, 14, 90, 7, 14, 49, 50,    /* 0x33 - RLA (nn),y*/
+  2, 11, 19,                   /* 0x35 - AND nn,x*/
+  2, 11, 14, 36, 16,           /* 0x36 - ROL nn,x*/
+  2, 11, 14, 49, 50,           /* 0x37 - RLA nn,x*/
+  70,                          /* 0x38 - SEC*/
+  2, 6, 7, 19,                 /* 0x39 - AND nnnn,y*/
+  2, 92, 7, 14, 49, 50,        /* 0x3b - RLA nnnn,y*/
+  2, 4, 7, 19,                 /* 0x3d - AND nnnn,x*/
+  2, 5, 7, 14, 36, 16,         /* 0x3e - ROL nnnn,x*/
+  2, 5, 7, 14, 49, 50,         /* 0x3f - RLA nnnn,x*/
+  1, 8, 71, 17, 72,            /* 0x40 - RTI*/
+  2, 11, 14, 15, 26,           /* 0x41 - EOR (nn,x)*/
+  2, 11, 14, 15, 14, 51, 52,   /* 0x43 - SRE (nn,x)*/
+  2, 26,                       /* 0x45 - EOR nn*/
+  2, 14, 32, 16,               /* 0x46 - LSR nn*/
+  2, 14, 51, 52,               /* 0x47 - SRE nn*/
+  1, 73,                       /* 0x48 - PHA*/
+  74,                          /* 0x49 - EOR #nn*/
+  75,                          /* 0x4a - LSR*/
+  120,                         /* 0x4b - ASR #nn*/
+  2, 76,                       /* 0x4c - JMP*/
+  2, 3, 26,                    /* 0x4d - EOR nnnn*/
+  2, 3, 14, 32, 16,            /* 0x4e - LSR nnnn*/
+  2, 3, 14, 51, 52,            /* 0x4f - SRE nnnn*/
+  77, 9, 10,                   /* 0x50 - BVC*/
+  2, 14, 13, 7, 26,            /* 0x51 - EOR (nn),y*/
+  2, 14, 90, 7, 14, 51, 52,    /* 0x53 - SRE (nn),y*/
+  2, 11, 26,                   /* 0x55 - EOR nn,x*/
+  2, 11, 14, 32, 16,           /* 0x56 - LSR nn,x*/
+  2, 11, 14, 51, 52,           /* 0x57 - SRE nn,x*/
+  78,                          /* 0x58 - CLI*/
+  2, 6, 7, 26,                 /* 0x59 - EOR nnnn,y*/
+  2, 92, 7, 14, 51, 52,        /* 0x5b - SRE nnnn,y*/
+  2, 4, 7, 26,                 /* 0x5d - EOR nnnn,x*/
+  2, 5, 7, 14, 32, 16,         /* 0x5e - LSR nnnn,x*/
+  2, 5, 7, 14, 51, 52,         /* 0x5f - SRE nnnn,x*/
+  1, 8, 17, 79, 80,            /* 0x60 - RTS*/
+  2, 11, 14, 15, 18,           /* 0x61 - ADC (nn,x)*/
+  2, 11, 14, 15, 14, 53, 54,   /* 0x63 - RRA (nn,x)*/
+  2, 18,                       /* 0x65 - ADC nn*/
+  2, 14, 37, 16,               /* 0x66 - ROR nn*/
+  2, 14, 53, 54,               /* 0x67 - RRA nn*/
+  1, 8, 81,                    /* 0x68 - PLA*/
+  82,                          /* 0x69 - ADC #nn*/
+  83,                          /* 0x6a - ROR*/
+  2, 3, 14, 84,                /* 0x6c - JMP ()*/
+  2, 3, 18,                    /* 0x6d - ADC nnnn*/
+  2, 3, 14, 37, 16,            /* 0x6e - ROR nnnn*/
+  2, 3, 14, 53, 54,            /* 0x6f - RRA nnnn*/
+  85, 9, 10,                   /* 0x70 - BVS*/
+  2, 14, 13, 7, 18,            /* 0x71 - ADC (nn),y*/
+  2, 14, 90, 7, 14, 53, 54,    /* 0x73 - RRA (nn),y*/
+  2, 11, 18,                   /* 0x75 - ADC nn,x*/
+  2, 11, 14, 37, 16,           /* 0x76 - ROR nn,x*/
+  2, 11, 14, 53, 54,           /* 0x77 - RRA nn,x*/
+  2, 6, 7, 18,                 /* 0x79 - ADC nnnn,y*/
+  2, 92, 7, 14, 53, 54,        /* 0x7b - RRA nnnn,y*/
+  2, 4, 7, 18,                 /* 0x7d - ADC nnnn,x*/
+  2, 5, 7, 14, 37, 16,         /* 0x7e - ROR nnnn,x*/
+  2, 5, 7, 14, 53, 54,         /* 0x7f - RRA nnnn,x*/
+  86,                          /* 0x80 - NOP #nn*/
+  2, 11, 14, 15, 40,           /* 0x81 - STA (nn,x)*/
+  2, 11, 14, 15, 39,           /* 0x83 - SAX (nn,x)*/
+  2, 42,                       /* 0x84 - STY nn*/
+  2, 40,                       /* 0x85 - STA nn*/
+  2, 41,                       /* 0x86 - STX nn*/
+  2, 39,                       /* 0x87 - SAX nn*/
+  87,                          /* 0x88 - DEY*/
+  88,                          /* 0x8a - TXA*/
+  2, 3, 42,                    /* 0x8c - STY nnnn*/
+  2, 3, 40,                    /* 0x8d - STA nnnn*/
+  2, 3, 41,                    /* 0x8e - STX nnnn*/
+  2, 3, 39,                    /* 0x8f - SAX nnnn*/
+  89, 9, 10,                   /* 0x90 - BCC*/
+  2, 14, 90, 7, 40,            /* 0x91 - STA (nn),y*/
+  2, 14, 90, 7, 124,           /* 0x93 - SHA (nn),y*/
+  2, 11, 42,                   /* 0x94 - STY nn,x*/
+  2, 11, 40,                   /* 0x95 - STA nn,x*/
+  2, 12, 41,                   /* 0x96 - STX nn,y*/
+  2, 12, 39,                   /* 0x97 - SAX nn,y*/
+  91,                          /* 0x98 - TYA*/
+  2, 92, 7, 40,                /* 0x99 - STA nnnn,y*/
+  2, 92, 7, 124,               /* 0x9b - SHS nnnn,y*/
+  2, 5, 7, 124,                /* 0x9c - SHY nnnn,x*/
+  2, 5, 7, 40,                 /* 0x9d - STA nnnn,x*/
+  93,                          /* 0xa0 - LDY #nn*/
+  2, 11, 14, 15, 29,           /* 0xa1 - LDA (nn,x)*/
+  94,                          /* 0xa2 - LDX #nn*/
+  2, 11, 14, 15, 28,           /* 0xa3 - LAX (nn,x)*/
+  2, 31,                       /* 0xa4 - LDY nn*/
+  2, 29,                       /* 0xa5 - LDA nn*/
+  2, 30,                       /* 0xa6 - LDX nn*/
+  2, 28,                       /* 0xa7 - LAX nn*/
+  95,                          /* 0xa8 - TAY*/
+  96,                          /* 0xa9 - LDA #nn*/
+  97,                          /* 0xaa - TAX*/
+  122,                         /* 0xab - LXA #nn*/
+  2, 3, 31,                    /* 0xac - LDY nnnn*/
+  2, 3, 29,                    /* 0xad - LDA nnnn*/
+  2, 3, 30,                    /* 0xae - LDX nnnn*/
+  2, 3, 28,                    /* 0xaf - LAX nnnn*/
+  98, 9, 10,                   /* 0xb0 - BCS*/
+  2, 14, 13, 7, 29,            /* 0xb1 - LDA (nn),y*/
+  2, 14, 13, 7, 28,            /* 0xb3 - LAX (nn),y*/
+  2, 11, 31,                   /* 0xb4 - LDY nn,x*/
+  2, 11, 29,                   /* 0xb5 - LDA nn,x*/
+  2, 12, 30,                   /* 0xb6 - LDX nn,y*/
+  2, 12, 28,                   /* 0xb7 - LAX nn,y*/
+  2, 6, 7, 29,                 /* 0xb9 - LDA nnnn,y*/
+  99,                          /* 0xba - TSX*/
+  2, 6, 7, 123,                /* 0xbb - LAS nnnn,y*/
+  2, 4, 7, 31,                 /* 0xbc - LDY nnnn,x*/
+  2, 4, 7, 29,                 /* 0xbd - LDA nnnn,x*/
+  2, 6, 7, 30,                 /* 0xbe - LDX nnnn,y*/
+  2, 6, 7, 28,                 /* 0xbf - LAX nnnn,y*/
+  100,                         /* 0xc0 - CPY #nn*/
+  2, 11, 14, 15, 22,           /* 0xc1 - CMP (nn,x)*/
+  2, 11, 14, 15, 14, 43, 44,   /* 0xc3 - DCP (nn,x)*/
+  2, 24,                       /* 0xc4 - CPY nn*/
+  2, 22,                       /* 0xc5 - CMP nn*/
+  2, 14, 25, 16,               /* 0xc6 - DEC nn*/
+  2, 14, 43, 44,               /* 0xc7 - DCP nn*/
+  101,                         /* 0xc8 - INY*/
+  102,                         /* 0xc9 - CMP #nn*/
+  103,                         /* 0xca - DEX*/
+  2, 3, 24,                    /* 0xcc - CPY nnnn*/
+  2, 3, 22,                    /* 0xcd - CMP nnnn*/
+  2, 3, 14, 25, 16,            /* 0xce - DEC nnnn*/
+  2, 3, 14, 43, 44,            /* 0xcf - DCP nnnn*/
+  104, 9, 10,                  /* 0xd0 - BNE*/
+  2, 14, 13, 7, 22,            /* 0xd1 - CMP (nn),y*/
+  2, 14, 90, 7, 14, 43, 44,    /* 0xd3 - DCP (nn),y*/
+  2, 11, 22,                   /* 0xd5 - CMP nn,x*/
+  2, 11, 14, 25, 16,           /* 0xd6 - DEC nn,x*/
+  2, 11, 14, 43, 44,           /* 0xd7 - DCP nn,x*/
+  2, 6, 7, 22,                 /* 0xd9 - CMP nnnn,y*/
+  2, 92, 7, 14, 43, 44,        /* 0xdb - DCP nnnn,y*/
+  2, 4, 7, 22,                 /* 0xdd - CMP nnnn,x*/
+  2, 5, 7, 14, 25, 16,         /* 0xde - DEC nnnn,x*/
+  2, 5, 7, 14, 43, 44,         /* 0xdf - DCP nnnn,x*/
+  105,                         /* 0xe0 - CPX #nn*/
+  2, 11, 14, 15, 38,           /* 0xe1 - SBC (nn,x)*/
+  2, 11, 14, 15, 14, 45, 46,   /* 0xe3 - ISB (nn,x)*/
+  2, 23,                       /* 0xe4 - CPX nn*/
+  2, 38,                       /* 0xe5 - SBC nn*/
+  2, 14, 27, 16,               /* 0xe6 - INC nn*/
+  2, 14, 45, 46,               /* 0xe7 - ISB nn*/
+  107,                         /* 0xe8 - INX*/
+  106,                         /* 0xe9 - SBC #nn*/
+  2, 3, 23,                    /* 0xec - CPX nnnn*/
+  2, 3, 38,                    /* 0xed - SBC nnnn*/
+  2, 3, 14, 27, 16,            /* 0xee - INC nnnn*/
+  2, 3, 14, 45, 46,            /* 0xef - ISB nnnn*/
+  108, 9, 10,                  /* 0xf0 - BEQ*/
+  2, 14, 13, 7, 38,            /* 0xf1 - SBC (nn),y*/
+  2, 14, 90, 7, 14, 45, 46,    /* 0xf3 - ISB (nn),y*/
+  2, 11, 38,                   /* 0xf5 - SBC nn,x*/
+  2, 11, 14, 27, 16,           /* 0xf6 - INC nn,x*/
+  2, 11, 14, 45, 46,           /* 0xf7 - ISB nn,x*/
+  2, 6, 7, 38,                 /* 0xf9 - SBC nnnn,y*/
+  2, 92, 7, 14, 45, 46,        /* 0xfb - ISB nnnn,y*/
+  2, 4, 7, 38,                 /* 0xfd - SBC nnnn,x*/
+  2, 5, 7, 14, 27, 16,         /* 0xfe - INC nnnn,x*/
+  2, 5, 7, 14, 45, 46,         /* 0xff - ISB nnnn,x*/
 
-  0,                          /* decode */
-  1, 1, 61, 63, 64, 110, 111, /* nmi, irq or reset */
+  0,                           /* decode */
+  1, 1, 61, 63, 64, 110, 111,  /* nmi, irq */
+  1, 1, 61, 125, 64, 110, 111, /* reset */
 
   /* oam dma */
 #define OAMDMA_RW 113, 114
@@ -3556,7 +3567,8 @@ static const u8 s_opcode_bits[] = {
   117, 117, 117, 118, /* DMC */
 };
 static const u16 s_cpu_decode = 781, s_callvec = s_cpu_decode + 1,
-                 s_oamdma = s_callvec + 7, s_dmc = s_oamdma + 514;
+                 s_reset = s_callvec + 7, s_oamdma = s_reset + 7,
+                 s_dmc = s_oamdma + 514;
 
 static Result get_cart_info(E *e, const FileData *file_data) {
   const u32 kHeaderSize = 16;
@@ -3995,7 +4007,7 @@ static Result init_emulator(E *e, const EInit *init) {
   CHECK(SUCCESS(init_mapper(e)));
   s->c.opcode = 1; // anything but 0, so it isn't interpreted as BRK.
   s->c.I = true;
-  s->c.step = s_callvec;
+  s->c.step = s_reset;
   s->c.next_step = s_cpu_decode;
   s->c.bits = s_opcode_bits[s->c.step++];
   // Triangle volume is always full; disabled by len counter or linear counter.
