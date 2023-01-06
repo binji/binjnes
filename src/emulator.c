@@ -4488,6 +4488,8 @@ void disasm(E *e, u16 addr) {
   int n = 0;
   char buf[100];
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wformat-security"
   switch (bytes) {
   case 1:
     printf("%02x     ", opcode);
@@ -4502,6 +4504,8 @@ void disasm(E *e, u16 addr) {
     n = snprintf(buf, 100, fmt, b01);
     break;
   }
+#pragma clang diagnostic pop
+
   if ((opcode & 0x1f) == 0x10) {  // Branch.
     snprintf(buf + n, 100 - n, " (%04x)", addr + 2 + (s8)b0);
   }

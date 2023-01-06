@@ -11,7 +11,7 @@ option(WERROR "Build with warnings as errors" OFF)
 add_definitions(
   -Wall -Wextra -Wpointer-arith -Wno-unused-parameter -g
   -Wno-unused-function -Wno-unused-variable
-  -Wno-implicit-fallthrough
+  -Wno-implicit-fallthrough -Wno-unknown-pragmas
 )
 if (WERROR)
   add_definitions(-Werror)
@@ -39,6 +39,8 @@ if (NOT EMSCRIPTEN)
 
 
   # Sokol stuff
+  set(OpenGL_GL_PREFERENCE GLVND)
+  find_package(OpenGL)
   find_package(X11)
   find_package(Threads)
   find_package(ALSA)
@@ -56,7 +58,7 @@ if (NOT EMSCRIPTEN)
   target_include_directories(binjnes
     PUBLIC ${PROJECT_SOURCE_DIR}/third_party)
   target_link_libraries(binjnes
-    ${OPENGL_gl_LIBRARY}
+    OpenGL::GL
     ${X11_X11_LIB}
     ${X11_Xi_LIB}
     ${X11_Xcursor_LIB}
