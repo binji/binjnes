@@ -1003,9 +1003,12 @@ static inline void read_joyp(E *e, bool write) {
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
 static u8 cpu_read(E *e, u16 addr) {
+  if (LIKELY(addr >= 0x8000)) {
+    return e->prg_rom_map[(addr >> 13) & 3][addr & 0x1fff];
+  }
+
   A* a = &e->s.a;
   C* c = &e->s.c;
-  c->bus_write = false;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
     return c->ram[addr & 0x7ff];
@@ -1070,10 +1073,8 @@ static u8 cpu_read(E *e, u16 addr) {
     return e->mapper_prg_ram_read(e, addr);
 
    // ROM
-  case  8:  case 9: return e->prg_rom_map[0][addr - 0x8000];
-  case 10: case 11: return e->prg_rom_map[1][addr - 0xa000];
-  case 12: case 13: return e->prg_rom_map[2][addr - 0xc000];
-  case 14: case 15: return e->prg_rom_map[3][addr - 0xe000];
+  default:
+    __builtin_unreachable();
   }
   return e->mapper_read(e, addr);
 }
@@ -1081,7 +1082,6 @@ static u8 cpu_read(E *e, u16 addr) {
 static void cpu_write(E *e, u16 addr, u8 val) {
   P* p = &e->s.p;
   C* c = &e->s.c;
-  c->bus_write = true;
   DEBUG("     write(%04hx, %02hhx)\n", addr, val);
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
@@ -1262,7 +1262,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
 
       case 0x14: {   // OAMDMA
-        c->oamhi = val;
+        c->oam.hi = val;
         c->next_step = s_oamdma + (e->s.cy & 1); // 513/514 cycles
         break;
       }
@@ -2287,7 +2287,7 @@ static inline void set_next_step(E* e) {
 static inline void check_irq(E* e) {
   C* c = &e->s.c;
   c->has_nmi = c->req_nmi;
-  c->has_irq = c->irq && !c->I;
+  c->has_irq = (c->irq != 0) & !c->I;
   if (c->has_nmi || c->has_irq) {
     DEBUG("     [%" PRIu64 "] NMI or IRQ requested\n", e->s.cy);
   }
@@ -2297,39 +2297,39 @@ static u8 rare_opcode(E* e, u8 busval) {
   C* c = &e->s.c;
   switch (c->opcode) {
     case 0x0b: case 0x2b:                               // ANC
-      c->TL = (c->A &= busval);
-      c->C = !!(c->TL & 0x80);
+      c->T.lo = (c->A &= busval);
+      c->C = !!(c->T.lo & 0x80);
       break;
     case 0x58: c->I = 0; break;                         // CLI
     case 0x6b:                                          // ARR
-      c->TL = c->A = (c->C << 7) | ((c->A & busval) >> 1);
-      c->C = !!(c->TL & 0x40);
-      c->V = c->C ^ ((c->TL >> 5) & 1);
+      c->T.lo = c->A = (c->C << 7) | ((c->A & busval) >> 1);
+      c->C = !!(c->T.lo & 0x40);
+      c->V = c->C ^ ((c->T.lo >> 5) & 1);
       break;
     case 0x78: c->I = 1; break;                         // SEI
     case 0x83: case 0x87: case 0x8f: case 0x97:         // SAX
       busval = c->A & c->X; break;
-    case 0x8b: c->TL = (c->A &= c->X & busval); break;  // ANE
+    case 0x8b: c->T.lo = (c->A &= c->X & busval); break;  // ANE
     case 0x93: case 0x9f:                               // SHA
-      busval = c->A & c->X & (c->TH + 1); break;
+      busval = c->A & c->X & (c->T.hi + 1); break;
     case 0x9a: c->S = c->X; break;                      // TXS
     case 0x9b:                                          // SHS
       c->S = c->A & c->X;
-      busval = c->S & (c->TH + 1); break;
+      busval = c->S & (c->T.hi + 1); break;
     case 0x9c:
-      busval = c->Y & (c->TH + 1);
-      if (c->fixhi) { c->bushi = busval; }
+      busval = c->Y & (c->T.hi + 1);
+      if (c->fixhi) { c->bus.hi = busval; }
       break;                                            // SHY
     case 0x9e:
-      busval = c->X & (c->TH + 1);
-      if (c->fixhi) { c->bushi = busval; }
+      busval = c->X & (c->T.hi + 1);
+      if (c->fixhi) {  c->bus.hi = busval; }
       break;                                            // SHX
     case 0xb8: c->V = 0; break;                         // CLV
-    case 0xba: c->TL = c->X = c->S; break;              // TSX
+    case 0xba: c->T.lo = c->X = c->S; break;              // TSX
     case 0xbb: c->A = c->X = c->S &= busval; break;     // TSX
     case 0xcb:                                          // AXS
       c->C = (c->A & c->X) >= busval;
-      c->TL = (c->X = (c->A & c->X) - busval);
+      c->T.lo = (c->X = (c->A & c->X) - busval);
       break;
     case 0xd8: c->D = 0; break;                         // CLD
     case 0xf8: c->D = 1; break;                         // SED
@@ -2338,959 +2338,1186 @@ static u8 rare_opcode(E* e, u8 busval) {
   return busval;
 }
 
-static void cpu_step(E *e) {
-  u8 busval = 0;
-#if 0
-  print_info(e); printf("\n");
-#endif
+static void cpu0(E* e, u8 busval) {
   C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->PC.val++;
+  #if DISASM
+    disasm(e, c->PC.val - 1);
+  #endif
+  c->step = s_opcode_loc[c->opcode = busval];
+}
+static void cpu125(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+}
+static void cpu1(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->PC;
+  return cpu125(e, busval);
+}
+static void cpu126(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->PC.val;
+}
+static void cpu2(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  return cpu126(e, busval);
+}
+static void cpu127(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->T.hi = busval;
+  return cpu126(e, busval);
+}
+static void cpu3(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu127(e, busval);
+}
+static void cpu129(E* e, u8 busval) {
+  C* c = &e->s.c;
+  if (!c->fixhi) { ++c->step; }
+}
+static void cpu128(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->T.hi = busval;
+  ++c->PC.val;
+  return cpu129(e, busval);
+}
+static void cpu4(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->X, &c->T.lo);
+  return cpu128(e, busval);
+}
+static void cpu5(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->X, &c->T.lo);
+  return cpu127(e, busval);
+}
+static void cpu6(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  return cpu128(e, busval);
+}
+static void cpu7(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.hi += c->fixhi;
+}
+static void cpu130(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->S;
+}
+static void cpu8(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus.val = get_u16(1, c->S);
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu130(e, busval);
+}
+static void cpu131(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->step = c->next_step;
+  c->next_step = s_cpu_decode;
+}
+static void cpu9(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  u16 result = c->PC.lo + (s8)c->T.lo;
+  c->fixhi = result >> 8;
+  c->PC.lo = result;
+  if (!c->fixhi) { return cpu131(e, busval); }
+}
+static void cpu10(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->PC.hi += c->fixhi;
+  return cpu131(e, busval);
+}
+static void cpu11(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->X, &c->T.lo);
+}
+static void cpu12(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+}
+static void cpu13(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->bus.lo;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  c->T.hi = busval;
+  return cpu129(e, busval);
+}
+static void cpu132(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+}
+static void cpu14(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus = c->T;
+  return cpu132(e, busval);
+}
+static void cpu133(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->T.hi = busval;
+}
+static void cpu15(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  ++c->bus.lo;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu133(e, busval);
+}
+static void cpu135(E* e, u8 busval) {
+  C* c = &e->s.c;
+  cpu_write(e, c->bus.val, busval);
+  return cpu131(e, busval);
+}
+static void cpu134(E* e, u8 busval) {
+  C* c = &e->s.c;
+  busval = c->T.lo;
+  return cpu135(e, busval);
+}
+static void cpu16(E* e, u8 busval) {
+  set_next_step(e);
+  return cpu134(e, busval);
+}
+static void cpu136(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->PC.lo = c->T.lo;
+}
+static void cpu17(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus.val = get_u16(1, c->S);
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  ++c->S;
+  return cpu136(e, busval);
+}
+static void cpu138(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->Z = c->T.lo == 0; c->N = !!(c->T.lo & 0x80);
+  return cpu131(e, busval);
+}
+static void cpu137(E* e, u8 busval) {
+  C* c = &e->s.c;
+  u16 sum = c->A + busval + c->C;
+  c->C = sum >= 0x100;
+  c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
+  c->T.lo = c->A = sum;
+  return cpu138(e, busval);
+}
+static void cpu18(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu137(e, busval);
+}
+static void cpu139(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->T.lo = (c->A &= busval);
+  return cpu138(e, busval);
+}
+static void cpu19(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu139(e, busval);
+}
+static void cpu140(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->Z = c->T.lo == 0; c->N = !!(c->T.lo & 0x80);
+}
+static void cpu20(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  c->C = !!(c->T.lo & 0x80); c->T.lo <<= 1;
+  return cpu140(e, busval);
+}
+static void cpu21(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->N = !!(busval & 0x80);
+  c->V = !!(busval & 0x40);
+  c->Z = (c->A & busval) == 0;
+  return cpu131(e, busval);
+}
+static void cpu141(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->C = c->A >= busval; c->T.lo = (c->A - busval);
+  return cpu138(e, busval);
+}
+static void cpu22(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu141(e, busval);
+}
+static void cpu142(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->C = c->T.lo >= busval; c->T.lo -= busval;
+  return cpu138(e, busval);
+}
+static void cpu23(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->X;
+  return cpu142(e, busval);
+}
+static void cpu24(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->Y;
+  return cpu142(e, busval);
+}
+static void cpu25(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  --c->T.lo;
+  return cpu140(e, busval);
+}
+static void cpu143(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->T.lo = (c->A ^= busval);
+  return cpu138(e, busval);
+}
+static void cpu26(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu143(e, busval);
+}
+static void cpu27(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  ++c->T.lo;
+  return cpu140(e, busval);
+}
+static void cpu144(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->X = c->T.lo;
+  return cpu138(e, busval);
+}
+static void cpu28(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  c->A = c->T.lo;
+  return cpu144(e, busval);
+}
+static void cpu146(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->A = c->T.lo;
+  return cpu138(e, busval);
+}
+static void cpu145(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  return cpu146(e, busval);
+}
+static void cpu29(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  return cpu145(e, busval);
+}
+static void cpu30(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  return cpu144(e, busval);
+}
+static void cpu147(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->Y = c->T.lo;
+  return cpu138(e, busval);
+}
+static void cpu31(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  return cpu147(e, busval);
+}
+static void cpu32(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  c->C = !!(c->T.lo & 0x01); c->T.lo >>= 1;
+  return cpu140(e, busval);
+}
+static void cpu148(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu131(e, busval);
+}
+static void cpu33(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  return cpu148(e, busval);
+}
+static void cpu34(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  return cpu148(e, busval);
+}
+static void cpu149(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->T.lo = (c->A |= busval);
+  return cpu138(e, busval);
+}
+static void cpu35(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu149(e, busval);
+}
+static void cpu36(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  rol(c->T.lo, c->C, &c->T.lo, &c->C);
+  return cpu140(e, busval);
+}
+static void cpu37(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  ror(c->T.lo, c->C, &c->T.lo, &c->C);
+  return cpu140(e, busval);
+}
+static void cpu150(E* e, u8 busval) {
+  busval = ~busval;
+  return cpu137(e, busval);
+}
+static void cpu38(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu150(e, busval);
+}
+static void cpu151(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  busval = rare_opcode(e, busval);
+  return cpu135(e, busval);
+}
+static void cpu39(E* e, u8 busval) {
+  return cpu151(e, busval);
+}
+static void cpu40(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->T.lo = c->A;
+  return cpu134(e, busval);
+}
+static void cpu41(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->T.lo = c->X;
+  return cpu134(e, busval);
+}
+static void cpu42(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->T;
+  c->T.lo = c->Y;
+  return cpu134(e, busval);
+}
+static void cpu43(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  --c->T.lo;
+}
+static void cpu44(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  return cpu141(e, busval);
+}
+static void cpu45(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  ++c->T.lo;
+}
+static void cpu46(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  return cpu150(e, busval);
+}
+static void cpu47(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  c->C = !!(c->T.lo & 0x80); c->T.lo <<= 1;
+}
+static void cpu48(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  return cpu149(e, busval);
+}
+static void cpu49(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  rol(c->T.lo, c->C, &c->T.lo, &c->C);
+}
+static void cpu50(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  return cpu139(e, busval);
+}
+static void cpu51(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  c->C = !!(c->T.lo & 0x01); c->T.lo >>= 1;
+}
+static void cpu52(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  return cpu143(e, busval);
+}
+static void cpu53(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  ror(c->T.lo, c->C, &c->T.lo, &c->C);
+}
+static void cpu54(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  busval = c->T.lo;
+  cpu_write(e, c->bus.val, busval);
+  return cpu137(e, busval);
+}
+static void cpu152(E* e, u8 busval) {
+  C* c = &e->s.c;
+  cpu_write(e, c->bus.val, busval);
+  --c->S;
+  return cpu131(e, busval);
+}
+static void cpu55(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus.val = get_u16(1, c->S);
+  busval = get_P(e, true);
+  return cpu152(e, busval);
+}
+static void cpu153(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->PC.val;
+  return cpu138(e, busval);
+}
+static void cpu56(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = (c->A |= busval);
+  return cpu153(e, busval);
+}
+static void cpu57(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->A;
+  c->C = !!(c->T.lo & 0x80); c->T.lo <<= 1;
+  return cpu146(e, busval);
+}
+static void cpu154(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->PC.val;
+  if (c->T.lo) { return cpu131(e, busval); } c->T.lo = busval;
+}
+static void cpu58(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->N;
+  return cpu154(e, busval);
+}
+static void cpu155(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->C = c->T.lo;
+  return cpu131(e, busval);
+}
+static void cpu59(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = 0;
+  return cpu155(e, busval);
+}
+static void cpu60(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(1, c->S);
+  return cpu125(e, busval);
+}
+static void cpu156(E* e, u8 busval) {
+  C* c = &e->s.c;
+  cpu_write(e, c->bus.val, busval);
+  --c->S;
+}
+static void cpu61(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(1, c->S);
+  busval = c->PC.hi;
+  return cpu156(e, busval);
+}
+static void cpu62(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus.val = get_u16(1, c->S);
+  busval = c->PC.lo;
+  return cpu156(e, busval);
+}
+static void cpu63(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(1, c->S);
+  busval = c->PC.lo;
+  cpu_write(e, c->bus.val, busval);
+  --c->S;
+  if (c->req_nmi) {
+    c->veclo = 0xfa;
+    DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
+  } else if (c->opcode == 0 || c->irq) {
+    c->veclo = 0xfe;
+    DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
+  }
+  c->set_vec_cy = e->s.cy;
+  c->has_irq = false;
+  c->has_nmi = false;
+  c->req_nmi = false;
+}
+static void cpu168(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(1, c->S);
+  busval = c->PC.lo;
+  cpu_write(e, c->bus.val, busval);
+  --c->S;
+  c->veclo = 0xfc;
+  c->set_vec_cy = e->s.cy;
+  c->has_irq = false;
+  c->has_nmi = false;
+  c->req_nmi = false;
+}
+static void cpu64(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(1, c->S);
+  busval = get_P(e, false);
+  return cpu156(e, busval);
+}
+static void cpu65(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(1, c->S);
+  busval = get_P(e, true);
+  return cpu156(e, busval);
+}
+static void cpu66(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus.val = get_u16(1, c->S);
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  set_P(e, c->T.lo);
+  return cpu131(e, busval);
+}
+static void cpu67(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = (c->A &= busval);
+  return cpu153(e, busval);
+}
+static void cpu68(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->A;
+  rol(c->T.lo, c->C, &c->T.lo, &c->C);
+  return cpu146(e, busval);
+}
+static void cpu157(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->T.lo = !c->T.lo;
+  return cpu154(e, busval);
+}
+static void cpu69(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->N;
+  return cpu157(e, busval);
+}
+static void cpu70(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = 1;
+  return cpu155(e, busval);
+}
+static void cpu71(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(1, c->S);
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  set_P(e, c->T.lo);
+  return cpu130(e, busval);
+}
+static void cpu159(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->PC.hi = busval;
+  return cpu131(e, busval);
+}
+static void cpu158(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu159(e, busval);
+}
+static void cpu72(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus.val = get_u16(1, c->S);
+  return cpu158(e, busval);
+}
+static void cpu73(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus.val = get_u16(1, c->S);
+  c->T.lo = c->A;
+  busval = c->T.lo;
+  return cpu152(e, busval);
+}
+static void cpu74(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = (c->A ^= busval);
+  return cpu153(e, busval);
+}
+static void cpu75(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->A;
+  c->C = !!(c->T.lo & 0x01); c->T.lo >>= 1;
+  return cpu146(e, busval);
+}
+static void cpu160(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->PC.lo = c->T.lo;
+  return cpu159(e, busval);
+}
+static void cpu76(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  return cpu160(e, busval);
+}
+static void cpu77(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->V;
+  return cpu154(e, busval);
+}
+static void cpu78(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = rare_opcode(e, busval);
+  return cpu131(e, busval);
+}
+static void cpu79(E* e, u8 busval) {
+  C* c = &e->s.c;
+  check_irq(e);
+  c->bus.val = get_u16(1, c->S);
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->PC.hi = busval;
+}
+static void cpu161(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->PC.val;
+  return cpu131(e, busval);
+}
+static void cpu80(E* e, u8 busval) {
+  set_next_step(e);
+  return cpu161(e, busval);
+}
+static void cpu81(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus.val = get_u16(1, c->S);
+  return cpu145(e, busval);
+}
+static void cpu162(E* e, u8 busval) {
+  C* c = &e->s.c;
+  u16 sum = c->A + busval + c->C;
+  c->C = sum >= 0x100;
+  c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
+  c->T.lo = c->A = sum;
+  return cpu153(e, busval);
+}
+static void cpu82(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu162(e, busval);
+}
+static void cpu83(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->A;
+  ror(c->T.lo, c->C, &c->T.lo, &c->C);
+  return cpu146(e, busval);
+}
+static void cpu84(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  ++c->bus.lo;
+  return cpu160(e, busval);
+}
+static void cpu85(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->V;
+  return cpu157(e, busval);
+}
+static void cpu86(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu161(e, busval);
+}
+static void cpu87(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->Y;
+  --c->T.lo;
+  return cpu147(e, busval);
+}
+static void cpu88(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->X;
+  return cpu146(e, busval);
+}
+static void cpu89(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->C;
+  return cpu154(e, busval);
+}
+static void cpu90(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->bus.lo;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  return cpu133(e, busval);
+}
+static void cpu91(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->Y;
+  return cpu146(e, busval);
+}
+static void cpu92(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  return cpu127(e, busval);
+}
+static void cpu93(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  c->Y = c->T.lo;
+  return cpu153(e, busval);
+}
+static void cpu163(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->X = c->T.lo;
+  return cpu153(e, busval);
+}
+static void cpu94(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  return cpu163(e, busval);
+}
+static void cpu95(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->A;
+  return cpu147(e, busval);
+}
+static void cpu164(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->A = c->T.lo;
+  return cpu153(e, busval);
+}
+static void cpu96(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  return cpu164(e, busval);
+}
+static void cpu97(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->A;
+  return cpu144(e, busval);
+}
+static void cpu98(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->C;
+  return cpu157(e, busval);
+}
+static void cpu165(E* e, u8 busval) {
+  busval = rare_opcode(e, busval);
+  return cpu138(e, busval);
+}
+static void cpu99(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  return cpu165(e, busval);
+}
+static void cpu166(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->C = c->T.lo >= busval; c->T.lo -= busval;
+  return cpu153(e, busval);
+}
+static void cpu100(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->Y;
+  return cpu166(e, busval);
+}
+static void cpu101(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->Y;
+  ++c->T.lo;
+  return cpu147(e, busval);
+}
+static void cpu102(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->C = c->A >= busval; c->T.lo = (c->A - busval);
+  return cpu153(e, busval);
+}
+static void cpu103(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->X;
+  --c->T.lo;
+  return cpu144(e, busval);
+}
+static void cpu104(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->Z;
+  return cpu154(e, busval);
+}
+static void cpu105(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->X;
+  return cpu166(e, busval);
+}
+static void cpu106(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = ~busval;
+  return cpu162(e, busval);
+}
+static void cpu107(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->X;
+  ++c->T.lo;
+  return cpu144(e, busval);
+}
+static void cpu108(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = c->Z;
+  return cpu157(e, busval);
+}
+static void cpu167(E* e, u8 busval) {
+  C* c = &e->s.c;
+  c->bus.val = get_u16(0xff, c->veclo);
+  c->I = 1;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  return cpu136(e, busval);
+}
+static void cpu109(E* e, u8 busval) {
+  return cpu167(e, busval);
+}
+static void cpu110(E* e, u8 busval) {
+  return cpu167(e, busval);
+}
+static void cpu111(E* e, u8 busval) {
+  C* c = &e->s.c;
+  ++c->bus.lo;
+  return cpu158(e, busval);
+}
+static void cpu112(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus.val = get_u16(c->oam.hi, 0);
+  c->oam.lo = e->s.p.oamaddr;
+}
+static void cpu113(E* e, u8 busval) {
+  return cpu132(e, busval);
+}
+static void cpu114(E* e, u8 busval) {
+  C* c = &e->s.c;
+  e->s.p.oam[c->oam.lo++] = c->T.lo;
+  ++c->bus.lo;
+}
+static void cpu115(E* e, u8 busval) {
+  return cpu132(e, busval);
+}
+static void cpu116(E* e, u8 busval) {
+  C* c = &e->s.c;
+  e->s.p.oam[c->oam.lo++] = c->T.lo;
+  ++c->bus.lo;
+  return cpu131(e, busval);
+}
+static void cpu117(E* e, u8 busval) {
+}
+static void cpu118(E* e, u8 busval) {
+  C* c = &e->s.c;
+  e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
+  c->step = c->dmc_step;
+  e->s.a.dmcaddr = (e->s.a.dmcaddr + 1) | 0x8000;
+  if (e->s.a.dmcbytes) {
+    --e->s.a.dmcbytes;
+  } else {
+    start_dmc(&e->s.a);
+    if (e->s.a.reg[0x10] & 0x40) {
+      e->s.a.dmcen = true;
+    } else {
+      DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
+      e->s.a.dmcen = false;
+      if (e->s.a.reg[0x10] & 0x80) {
+        c->irq |= IRQ_DMC;
+        DEBUG("  dmc irq!\n");
+      }
+    }
+  }
+  DEBUG(" DO dmcfetch=%u (cy: %" PRIu64
+        ") (addr=>%04hx, bytes=>%u) (bufstate=%u=>2)\n",
+        e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes,
+        e->s.a.dmcbufstate);
+  e->s.a.dmcbufstate = 2;
+}
+static void cpu119(E* e, u8 busval) {
+  busval = rare_opcode(e, busval);
+}
+static void cpu120(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.lo = (c->A &= busval);
+  c->C = !!(c->T.lo & 0x01); c->T.lo >>= 1;
+  return cpu164(e, busval);
+}
+static void cpu121(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = rare_opcode(e, busval);
+  return cpu153(e, busval);
+}
+static void cpu122(E* e, u8 busval) {
+  C* c = &e->s.c;
+  set_next_step(e);
+  c->bus = c->PC;
+  c->open_bus = busval = cpu_read(e, c->bus.val);
+  c->T.val = busval;
+  c->A = c->T.lo;
+  return cpu163(e, busval);
+}
+static void cpu123(E* e, u8 busval) {
+  set_next_step(e);
+  return cpu165(e, busval);
+}
+static void cpu124(E* e, u8 busval) {
+  return cpu151(e, busval);
+}
+
+static void cpu_step(E *e) {
+  static void (*const s_cpu_funcs[])(E*, u8) = {
+    &cpu0, &cpu1, &cpu2, &cpu3, &cpu4, &cpu5, &cpu6, &cpu7,
+    &cpu8, &cpu9, &cpu10, &cpu11, &cpu12, &cpu13, &cpu14, &cpu15,
+    &cpu16, &cpu17, &cpu18, &cpu19, &cpu20, &cpu21, &cpu22, &cpu23,
+    &cpu24, &cpu25, &cpu26, &cpu27, &cpu28, &cpu29, &cpu30, &cpu31,
+    &cpu32, &cpu33, &cpu34, &cpu35, &cpu36, &cpu37, &cpu38, &cpu39,
+    &cpu40, &cpu41, &cpu42, &cpu43, &cpu44, &cpu45, &cpu46, &cpu47,
+    &cpu48, &cpu49, &cpu50, &cpu51, &cpu52, &cpu53, &cpu54, &cpu55,
+    &cpu56, &cpu57, &cpu58, &cpu59, &cpu60, &cpu61, &cpu62, &cpu63,
+    &cpu64, &cpu65, &cpu66, &cpu67, &cpu68, &cpu69, &cpu70, &cpu71,
+    &cpu72, &cpu73, &cpu74, &cpu75, &cpu76, &cpu77, &cpu78, &cpu79,
+    &cpu80, &cpu81, &cpu82, &cpu83, &cpu84, &cpu85, &cpu86, &cpu87,
+    &cpu88, &cpu89, &cpu90, &cpu91, &cpu92, &cpu93, &cpu94, &cpu95,
+    &cpu96, &cpu97, &cpu98, &cpu99, &cpu100, &cpu101, &cpu102, &cpu103,
+    &cpu104, &cpu105, &cpu106, &cpu107, &cpu108, &cpu109, &cpu110, &cpu111,
+    &cpu112, &cpu113, &cpu114, &cpu115, &cpu116, &cpu117, &cpu118, &cpu119,
+    &cpu120, &cpu121, &cpu122, &cpu123, &cpu124, &cpu168,
+  };
 
   if (e->mapper_cpu_step) {
     e->mapper_cpu_step(e);
   }
 
-  switch (c->bits) {
-    case 0:
-      check_irq(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
-      #if DISASM
-        disasm(e, get_u16(c->PCH, c->PCL) - 1);
-      #endif
-      c->step = s_opcode_loc[c->opcode = busval];
-      break;
-
-    case 1:
-      check_irq(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-    _0:
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      break;
-
-    case 2:
-      check_irq(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-    _1:
-      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
-      break;
-
-    case 3:
-      check_irq(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _2:
-      c->TH = busval;
-      goto _1;
-
-    case 4:
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL);
-    _3:
-      c->TH = busval;
-      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
-    _4:
-      if (!c->fixhi) { ++c->step; }
-      break;
-
-    case 5:
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL);
-      goto _2;
-
-    case 6:
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
-      goto _3;
-
-    case 7:
-      check_irq(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TH += c->fixhi;
-      break;
-
-    case 8:
-      check_irq(e);
-      c->bushi = 1; c->buslo = c->S;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _5:
-      ++c->S;
-      break;
-
-    case 9:
-      check_irq(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      u16 result = c->PCL + (s8)c->TL;
-      c->fixhi = result >> 8;
-      c->PCL = result;
-      if (!c->fixhi) { goto done; }
-      break;
-
-    case 10:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->PCH += c->fixhi;
-    _6:
-      done: c->step = c->next_step;
-      c->next_step = s_cpu_decode;
-      break;
-
-    case 11:
-      check_irq(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->X, &c->TL);
-      break;
-
-    case 12:
-      check_irq(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
-      break;
-
-    case 13:
-      ++c->buslo;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
-      c->TH = busval;
-      goto _4;
-
-    case 14:
-      check_irq(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-    _7:
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      break;
-
-    case 15:
-      check_irq(e);
-      ++c->buslo;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _8:
-      c->TH = busval;
-      break;
-
-    case 16:
-      set_next_step(e);
-    _9:
-      busval = c->TL;
-    _10:
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      goto _6;
-
-    case 17:
-      check_irq(e);
-      c->bushi = 1; c->buslo = c->S;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      ++c->S;
-    _11:
-      c->PCL = c->TL;
-      break;
-
-    case 18:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _12:
-      {/*adc*/ u16 sum = c->A + busval + c->C;
-      c->C = sum >= 0x100;
-      c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
-      c->TL = c->A = sum;}
-    _13:
-      c->Z = c->TL == 0; c->N = !!(c->TL & 0x80);
-      goto _6;
-
-    case 19:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _14:
-      c->TL = (c->A &= busval);
-      goto _13;
-
-    case 20:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      c->C = !!(c->TL & 0x80); c->TL <<= 1;
-    _15:
-      c->Z = c->TL == 0; c->N = !!(c->TL & 0x80);
-      break;
-
-    case 21:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->N = !!(busval & 0x80);
-      c->V = !!(busval & 0x40);
-      c->Z = (c->A & busval) == 0;
-      goto _6;
-
-    case 22:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _16:
-      c->C = c->A >= busval; c->TL = (c->A - busval);
-      goto _13;
-
-    case 23:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->X;
-    _17:
-      c->C = c->TL >= busval; c->TL -= busval;
-      goto _13;
-
-    case 24:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->Y;
-      goto _17;
-
-    case 25:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      --c->TL;
-      goto _15;
-
-    case 26:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _18:
-      c->TL = (c->A ^= busval);
-      goto _13;
-
-    case 27:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      ++c->TL;
-      goto _15;
-
-    case 28:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      c->A = c->TL;
-    _19:
-      c->X = c->TL;
-      goto _13;
-
-    case 29:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-    _20:
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-    _21:
-      c->A = c->TL;
-      goto _13;
-
-    case 30:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      goto _19;
-
-    case 31:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-    _22:
-      c->Y = c->TL;
-      goto _13;
-
-    case 32:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      c->C = !!(c->TL & 0x01); c->TL >>= 1;
-      goto _15;
-
-    case 33:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-    _23:
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      goto _6;
-
-    case 34:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      goto _23;
-
-    case 35:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _24:
-      c->TL = (c->A |= busval);
-      goto _13;
-
-    case 36:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      rol(c->TL, c->C, &c->TL, &c->C);
-      goto _15;
-
-    case 37:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      ror(c->TL, c->C, &c->TL, &c->C);
-      goto _15;
-
-    case 38:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _25:
-      busval = ~busval; /*sbc*/
-      goto _12;
-
-    case 39:
-    _26:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      busval = rare_opcode(e, busval);
-      goto _10;
-
-    case 40:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->TL = c->A;
-      goto _9;
-
-    case 41:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->TL = c->X;
-      goto _9;
-
-    case 42:
-      set_next_step(e);
-      c->bushi = c->TH; c->buslo = c->TL;
-      c->TL = c->Y;
-      goto _9;
-
-    case 43:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      --c->TL;
-      break;
-
-    case 44:
-      set_next_step(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      goto _16;
-
-    case 45:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      ++c->TL;
-      break;
-
-    case 46:
-      set_next_step(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      goto _25;
-
-    case 47:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      c->C = !!(c->TL & 0x80); c->TL <<= 1;
-      break;
-
-    case 48:
-      set_next_step(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      goto _24;
-
-    case 49:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      rol(c->TL, c->C, &c->TL, &c->C);
-      break;
-
-    case 50:
-      set_next_step(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      goto _14;
-
-    case 51:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      c->C = !!(c->TL & 0x01); c->TL >>= 1;
-      break;
-
-    case 52:
-      set_next_step(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      goto _18;
-
-    case 53:
-      check_irq(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      ror(c->TL, c->C, &c->TL, &c->C);
-      break;
-
-    case 54:
-      set_next_step(e);
-      busval = c->TL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      goto _12;
-
-    case 55:
-      set_next_step(e);
-      c->bushi = 1; c->buslo = c->S;
-      busval = get_P(e, true);
-    _27:
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      --c->S;
-      goto _6;
-
-    case 56:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = (c->A |= busval);
-    _28:
-      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
-      goto _13;
-
-    case 57:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->A;
-      c->C = !!(c->TL & 0x80); c->TL <<= 1;
-      goto _21;
-
-    case 58:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->N;
-    _29:
-      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
-      if (c->TL) { goto done; } c->TL = busval;
-      break;
-
-    case 59:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = 0;
-    _30:
-      c->C = c->TL;
-      goto _6;
-
-    case 60:
-      c->bushi = 1; c->buslo = c->S;
-      goto _0;
-
-    case 61:
-      c->bushi = 1; c->buslo = c->S;
-      busval = c->PCH;
-    _31:
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      --c->S;
-      break;
-
-    case 62:
-      check_irq(e);
-      c->bushi = 1; c->buslo = c->S;
-      busval = c->PCL;
-      goto _31;
-
-    case 63:
-      c->bushi = 1; c->buslo = c->S;
-      busval = c->PCL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      --c->S;
-      if (c->req_nmi) {
-        c->veclo = 0xfa;
-        DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
-      } else {
-        c->veclo = 0xfe;
-        DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
-      }
-      c->set_vec_cy = e->s.cy;
-      c->has_irq = false;
-      c->has_nmi = false;
-      c->req_nmi = false;
-      break;
-
-    case 125:
-      c->bushi = 1; c->buslo = c->S;
-      busval = c->PCL;
-      cpu_write(e, get_u16(c->bushi, c->buslo), busval);
-      --c->S;
-      c->veclo = 0xfc;
-      DEBUG("     [%" PRIu64 "] using reset vec\n", e->s.cy);
-      c->set_vec_cy = e->s.cy;
-      c->has_irq = false;
-      c->has_nmi = false;
-      c->req_nmi = false;
-      break;
-
-    case 64:
-      c->bushi = 1; c->buslo = c->S;
-      busval = get_P(e, false);
-      goto _31;
-
-    case 65:
-      c->bushi = 1; c->buslo = c->S;
-      busval = get_P(e, true);
-      goto _31;
-
-    case 66:
-      set_next_step(e);
-      c->bushi = 1; c->buslo = c->S;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      set_P(e, c->TL);
-      goto _6;
-
-    case 67:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = (c->A &= busval);
-      goto _28;
-
-    case 68:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->A;
-      rol(c->TL, c->C, &c->TL, &c->C);
-      goto _21;
-
-    case 69:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->N;
-    _32:
-      c->TL = !c->TL;
-      goto _29;
-
-    case 70:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = 0;
-      c->TL = !c->TL;
-      goto _30;
-
-    case 71:
-      c->bushi = 1; c->buslo = c->S;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      set_P(e, c->TL);
-      goto _5;
-
-    case 72:
-      set_next_step(e);
-      c->bushi = 1; c->buslo = c->S;
-    _33:
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _34:
-      c->PCH = busval;
-      goto _6;
-
-    case 73:
-      set_next_step(e);
-      c->bushi = 1; c->buslo = c->S;
-      c->TL = c->A;
-      busval = c->TL;
-      goto _27;
-
-    case 74:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = (c->A ^= busval);
-      goto _28;
-
-    case 75:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->A;
-      c->C = !!(c->TL & 0x01); c->TL >>= 1;
-      goto _21;
-
-    case 76:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-    _35:
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->PCL = c->TL;
-      goto _34;
-
-    case 77:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->V;
-      goto _29;
-
-    case 78:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      busval = rare_opcode(e, busval);
-      goto _6;
-
-    case 79:
-      check_irq(e);
-      c->bushi = 1; c->buslo = c->S;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->PCH = busval;
-      break;
-
-    case 80:
-      set_next_step(e);
-    _36:
-      c->PCH += __builtin_add_overflow(c->PCL, 1, &c->PCL);
-      goto _6;
-
-    case 81:
-      set_next_step(e);
-      c->bushi = 1; c->buslo = c->S;
-      goto _20;
-
-    case 82:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _37:
-      {/*adc*/ u16 sum = c->A + busval + c->C;
-      c->C = sum >= 0x100;
-      c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
-      c->TL = c->A = sum;}
-      goto _28;
-
-    case 83:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->A;
-      ror(c->TL, c->C, &c->TL, &c->C);
-      goto _21;
-
-    case 84:
-      set_next_step(e);
-      ++c->buslo;
-      goto _35;
-
-    case 85:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->V;
-      goto _32;
-
-    case 86:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      goto _36;
-
-    case 87:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->Y;
-      --c->TL;
-      goto _22;
-
-    case 88:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->X;
-      goto _21;
-
-    case 89:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->C;
-      goto _29;
-
-    case 90:
-      ++c->buslo;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
-      goto _8;
-
-    case 91:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->Y;
-      goto _21;
-
-    case 92:
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->fixhi = __builtin_add_overflow(c->TL, c->Y, &c->TL);
-      goto _2;
-
-    case 93:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      c->Y = c->TL;
-      goto _28;
-
-    case 94:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-    _38:
-      c->X = c->TL;
-      goto _28;
-
-    case 95:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->A;
-      goto _22;
-
-    case 96:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-    _39:
-      c->A = c->TL;
-      goto _28;
-
-    case 97:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->A;
-      goto _19;
-
-    case 98:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->C;
-      goto _32;
-
-    case 99:
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-    _40:
-      busval = rare_opcode(e, busval);
-      goto _13;
-
-    case 100:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->Y;
-    _41:
-      c->C = c->TL >= busval; c->TL -= busval;
-      goto _28;
-
-    case 101:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->Y;
-      ++c->TL;
-      goto _22;
-
-    case 102:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->C = c->A >= busval; c->TL = (c->A - busval);
-      goto _28;
-
-    case 103:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->X;
-      --c->TL;
-      goto _19;
-
-    case 104:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->Z;
-      goto _29;
-
-    case 105:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->X;
-      goto _41;
-
-    case 106:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      busval = ~busval; /*sbc*/
-      goto _37;
-
-    case 107:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->X;
-      ++c->TL;
-      goto _19;
-
-    case 108:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = c->Z;
-      goto _32;
-
-    case 109:
-    _42:
-      c->bushi = 0xff; c->buslo = c->veclo; c->I = 1;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      goto _11;
-
-    case 110:
-      goto _42;
-
-    case 111:
-      ++c->buslo;
-      goto _33;
-
-    case 112:
-      set_next_step(e);
-      c->bushi = c->oamhi; c->buslo = 0; c->oamlo = e->s.p.oamaddr;
-      break;
-
-    case 113:
-      goto _7;
-
-    case 114:
-      e->s.p.oam[c->oamlo++] = c->TL;
-      ++c->buslo;
-      break;
-
-    case 115:
-      goto _7;
-
-    case 116:
-      e->s.p.oam[c->oamlo++] = c->TL;
-      ++c->buslo;
-      goto _6;
-
-    case 117:
-      break;
-
-    case 118:
-      e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
-      c->step = c->dmc_step;
-      e->s.a.dmcaddr = (e->s.a.dmcaddr + 1) | 0x8000;
-      if (e->s.a.dmcbytes) {
-        --e->s.a.dmcbytes;
-      } else {
-        start_dmc(&e->s.a);
-        if (e->s.a.reg[0x10] & 0x40) {
-          e->s.a.dmcen = true;
-        } else {
-          DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
-          e->s.a.dmcen = false;
-          if (e->s.a.reg[0x10] & 0x80) {
-            c->irq |= IRQ_DMC;
-            DEBUG("  dmc irq!\n");
-          }
-        }
-      }
-      DEBUG(" DO dmcfetch=%u (cy: %" PRIu64
-            ") (addr=>%04hx, bytes=>%u) (bufstate=%u=>2)\n",
-            e->s.a.dmcbuf, e->s.cy, e->s.a.dmcaddr, e->s.a.dmcbytes,
-            e->s.a.dmcbufstate);
-      e->s.a.dmcbufstate = 2;
-      break;
-
-    case 119:
-      busval = rare_opcode(e, busval);
-      break;
-
-    case 120:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = (c->A &= busval);
-      c->C = !!(c->TL & 0x01); c->TL >>= 1;
-      goto _39;
-
-    case 121:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      busval = rare_opcode(e, busval);
-      goto _28;
-
-    case 122:
-      set_next_step(e);
-      c->bushi = c->PCH; c->buslo = c->PCL;
-      c->open_bus = busval = cpu_read(e, get_u16(c->bushi, c->buslo));
-      c->TL = busval; c->TH = 0;
-      c->A = c->TL;
-      goto _38;
-
-    case 123:
-      set_next_step(e);
-      goto _40;
-
-    case 124:
-      goto _26;
-  }
+  C* c = &e->s.c;
+  s_cpu_funcs[c->bits](e, 0);
   c->bits = s_opcode_bits[c->step++];
 }
 
@@ -4285,12 +4512,11 @@ void disasm(E *e, u16 addr) {
 
 void print_info(E *e) {
   C* c = &e->s.c;
-  printf("PC:%02x%02x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
-         "bus:%c %02x%02x  (cy:%08" PRIu64 ")",
-         c->PCH, c->PCL, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
+  printf("PC:%04x A:%02x X:%02x Y:%02x P:%c%c10%c%c%c%c(%02hhx) S:%02x  "
+         "(cy:%08" PRIu64 ")",
+         c->PC.val, c->A, c->X, c->Y, c->N ? 'N' : '_', c->V ? 'V' : '_',
          c->D ? 'D' : '_', c->I ? 'I' : '_', c->Z ? 'Z' : '_', c->C ? 'C' : '_',
-         get_P(e, false), c->S, c->bus_write ? 'W' : 'R', c->bushi, c->buslo,
-         e->s.cy);
+         get_P(e, false), c->S, e->s.cy);
 }
 
 static const char* s_opcode_mnemonic[256] = {

@@ -138,15 +138,21 @@ typedef struct {
       has_mmc2_latch;
 } M;
 
+typedef union {
+  struct { u8 lo, hi; }; // TODO endian
+  u16 val;
+} u16pair;
+
 typedef struct {
   u64 bits;
   u16 step, next_step, dmc_step;
-  u8 PCL, PCH, TL, TH, buslo, bushi, fixhi, veclo, oamlo, oamhi;
+  u16pair PC, T, bus, oam;
+  u8 fixhi, veclo;
   u8 A, X, Y, S;
   u8 ram[0x800], prg_ram[0x2000];
   u8 opcode, open_bus, irq;
   bool C, Z, I, D, V, N; // Flags.
-  bool bus_write, req_nmi, has_nmi, has_irq;
+  bool req_nmi, has_nmi, has_irq;
   u64 set_vec_cy;
 } C;
 
