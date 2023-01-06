@@ -356,6 +356,7 @@ static inline void sprfetch(E* e) {
 
 static void ppu_step(E *);
 
+static void ppu0(E *e) {}
 static void ppu1(E *e) {
   DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
   e->s.p.ppustatus = 0;
@@ -502,7 +503,7 @@ static void ppu_step(E *e) {
       LINE0, LINE1,
   };
   static void (*const s_ppu_funcs[])(E * e) = {
-      NULL,  &ppu1,  &ppu2,  &ppu3,  &ppu4,  &ppu5,  &ppu6,  &ppu7,  &ppu8,
+      &ppu0,  &ppu1,  &ppu2,  &ppu3,  &ppu4,  &ppu5,  &ppu6,  &ppu7,  &ppu8,
       &ppu9,  &ppu10, &ppu11, &ppu12, &ppu13, &ppu14, &ppu15, &ppu16, &ppu17,
       &ppu18, &ppu19, &ppu20, &ppu21, &ppu22, &ppu23, &ppu24, &ppu25, &ppu26,
       &ppu27, &ppu28, &ppu29, &ppu30, &ppu31, &ppu32, &ppu33, &ppu34, &ppu35,
@@ -511,7 +512,7 @@ static void ppu_step(E *e) {
   const u8 *steps = e->s.p.enabled ? s_ppu_steps_en : s_ppu_steps_dis;
   e->s.p.enabled = e->s.p.next_enabled;
   void (*const f)(E* e) = s_ppu_funcs[steps[e->s.p.state++]];
-  if (f) f(e);
+  f(e);
 }
 
 static inline bool y_in_range(P *p, u8 y) {
