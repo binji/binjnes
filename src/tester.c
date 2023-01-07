@@ -238,9 +238,9 @@ int main(int argc, char** argv) {
   }
   f64 host_time = get_time_sec() - start_time;
   Ticks real_total_ticks = emulator_get_ticks(e);
-  f64 nes_time = (f64)real_total_ticks / CPU_TICKS_PER_SECOND;
-  printf("time: nes=%.1fs host=%.1fs (%.1fx)\n", nes_time, host_time,
-         nes_time / host_time);
+  f64 nes_time = (f64)real_total_ticks / (CPU_TICKS_PER_SECOND * 3);
+  printf("time: nes=%.1fs host=%.1fs (%.1fx) (%.1fms/frame)\n", nes_time,
+         host_time, nes_time / host_time, host_time * 1000 / s_frames);
 
   if (s_output_ppm && !s_animate) {
     CHECK(SUCCESS(write_frame_ppm(e, s_output_ppm)));
