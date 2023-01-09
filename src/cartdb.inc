@@ -447,7 +447,7 @@
   /* Mega Man 4 */
   {.crc=0x1B932BEA, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=32, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Fire Hawk */
-  {.crc=0x1BC686A8, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x1BC686A8, .board=BOARD_CAMERICA_BF9097, .mapper=71, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* High Speed */
   {.crc=0x1C212E9D, .board=BOARD_TXROM_MMC3B, .mapper=119, .prg=8, .chr=16, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* F-1 Hero 2, Nakajima Satoru Kanshuu */
@@ -583,7 +583,7 @@
   /* Total Recall */
   {.crc=0x248566A7, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Micro Machines */
-  {.crc=0x24BA12DD, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=4, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x24BA12DD, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=4, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Cobra Command */
   {.crc=0x24BA90CA, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Sesame Street ABC & 123 */
@@ -951,7 +951,7 @@
   /* Pro Wrestling */
   {.crc=0x38DE7053, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Fantastic Adventures of Dizzy, The */
-  {.crc=0x38FBCC85, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x38FBCC85, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Bloody Warriors: Shan-Go no Gyakushuu */
   {.crc=0x391AA1B8, .board=BOARD_SNROM, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Sekiryuuou */
@@ -975,7 +975,7 @@
   /* Wing of Madoola, The */
   {.crc=0x3A8F81B0, .board=BOARD_UNSUPPORTED, .mapper=184, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Stunt Kids */
-  {.crc=0x3A990EE0, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x3A990EE0, .board=BOARD_CAMERICA, .mapper=71, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Action in New York */
   {.crc=0x3AC0830A, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Satsujin Club */
@@ -1777,7 +1777,7 @@
   /* Chester Field: Ankoku Shin e no Chousen */
   {.crc=0x6C70A17B, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Bee 52 */
-  {.crc=0x6C93377C, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=4, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x6C93377C, .board=BOARD_CAMERICA, .mapper=71, .prg=4, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* SD Gundam Gachapon Senshi 5: Battle of Universal Century */
   {.crc=0x6C940A59, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Family Trainer 7: Famitre Daiundoukai */
@@ -1853,7 +1853,7 @@
   /* Prince of Persia */
   {.crc=0x70CE3771, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Cosmic Spacehead */
-  {.crc=0x70F31D2C, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x70F31D2C, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Musashi no Bouken */
   {.crc=0x70F67AB7, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Xenophobe */
@@ -2217,7 +2217,7 @@
   /* Solar Jetman: A La Caza Del Golden Warpship */
   {.crc=0x8904149E, .board=BOARD_MAPPER_7, .mapper=7, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Ultimate Stuntman, The */
-  {.crc=0x892434DD, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x892434DD, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Rockin' Kats */
   {.crc=0x8927FD4C, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Sansuu 2 Nen: Keisan Game */
@@ -2395,7 +2395,7 @@
   /* Magic of Scheherazade, The */
   {.crc=0x92197173, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Micro Machines */
-  {.crc=0x9235B57B, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x9235B57B, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Over Horizon */
   {.crc=0x9237B447, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Ultraman Club 3 */
@@ -2625,7 +2625,7 @@
   /* Meimon! Takonishi Ouendan: Kouha 6 Nin Shuu */
   {.crc=0x9E36080E, .board=BOARD_TXROM_MMC3A, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Linus Spacehead's Cosmic Crusade */
-  {.crc=0x9E379698, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x9E379698, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Dance Aerobics */
   {.crc=0x9E382EBF, .board=BOARD_MAPPER_1, .mapper=1, .prg=4, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Mickey Mouse: Fushigi no Kuni no Daibouken */
@@ -3161,7 +3161,7 @@
   /* Pipe Dream */
   {.crc=0xBCE77871, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Big Nose the Caveman */
-  {.crc=0xBD154C3E, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xBD154C3E, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Dudes with Attitude */
   {.crc=0xBD29178A, .board=BOARD_UNSUPPORTED, .mapper=79, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Best of the Best: Championship Karate */
@@ -3425,7 +3425,7 @@
   /* Quattro Sports */
   {.crc=0xCCCAF368, .board=BOARD_UNSUPPORTED, .mapper=232, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Big Nose Freaks Out */
-  {.crc=0xCCDCBFC6, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xCCDCBFC6, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Sangokushi */
   {.crc=0xCCF35C02, .board=BOARD_SOROM, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=2, .battery=1, .mirror=MIRROR_NONE},
   /* Kickle Cubicle */
@@ -3705,7 +3705,7 @@
   /* Mario Open Golf */
   {.crc=0xDB564628, .board=BOARD_SNROM, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Dizzy The Adventurer */
-  {.crc=0xDB99D0CB, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=8, .chr=0, .vram=4, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xDB99D0CB, .board=BOARD_CAMERICA, .mapper=71, .prg=8, .chr=0, .vram=4, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Arch Rivals: A Basketbrawl! */
   {.crc=0xDB9C072D, .board=BOARD_MAPPER_7, .mapper=7, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Bomberman */
@@ -3891,7 +3891,7 @@
   /* Dragons of Flame, Advanced Dungeons & Dragons */
   {.crc=0xE616FF0A, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* MIG-29 Soviet Fighter */
-  {.crc=0xE62E3382, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xE62E3382, .board=BOARD_CAMERICA, .mapper=71, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Tanigawa Kouji no Shougi Shinan III */
   {.crc=0xE63D9193, .board=BOARD_SNROM, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Sangokushi: Chuugen no Hasha */
@@ -4163,7 +4163,7 @@
   /* Final Fantasy */
   {.crc=0xF71E7EDD, .board=BOARD_SNROM, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Fantastic Adventures of Dizzy, The */
-  {.crc=0xF732C8FD, .board=BOARD_UNSUPPORTED, .mapper=71, .prg=16, .chr=0, .vram=4, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xF732C8FD, .board=BOARD_CAMERICA, .mapper=71, .prg=16, .chr=0, .vram=4, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Win, Lose or Draw */
   {.crc=0xF74DFC91, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Family BASIC */

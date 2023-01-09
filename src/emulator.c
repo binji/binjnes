@@ -2249,6 +2249,28 @@ static void mapper69_cpu_step(E* e) {
   }
 }
 
+static void mapper71_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0xc000) return;
+  set_prg16k_map(e, m->prg_bank[0] = val & 0xf & (e->ci.prg16k_banks - 1),
+                 e->ci.prg16k_banks - 1);
+}
+
+static void mapper71_bf9097_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr >> 13) {
+    case 4: // 0x8000..0x9fff
+      set_mirror(e, (val >> 4) & 1);
+      break;
+
+    case 6: case 7: // 0xc000..0xffff
+      set_prg16k_map(e, m->prg_bank[0] = val & 0xf & (e->ci.prg16k_banks - 1),
+                     e->ci.prg16k_banks - 1);
+      break;
+  }
+}
+
+
 static void mapper87_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   set_chr8k_map(e, m->chr_bank[0] = (((val << 1) & 2) | ((val >> 1) & 1)) &
@@ -4217,6 +4239,19 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_71:
+  case BOARD_CAMERICA:
+  case BOARD_CAMERICA_BF9097:
+    if (e->ci.board == BOARD_CAMERICA_BF9097) {
+      e->mapper_write = mapper71_bf9097_write;
+    } else {
+      e->mapper_write = mapper71_write;
+    }
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
 
   case BOARD_MAPPER_206:
