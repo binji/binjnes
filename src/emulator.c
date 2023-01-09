@@ -273,17 +273,20 @@ static void shift_en(E *e) {
   int palidx = 0, bgpx = 0;
 
   // Decrement inactive counters. Active counters are always 0.
-  u8x16 active = spr->counter == 0;
-  spr->counter -= 1 & ~active;
+  u8x16 active;
+  if (spr->any_active) {
+    active = spr->counter == 0;
+    spr->counter -= 1 & ~active;
+  }
 
   if (p->ppumask & 8) { // Show BG.
     bgpx = p->bgatpreshift[0] & p->bgsprleftmask[0] & 3;
     palidx = ((p->bgatpreshift[1] & 3) << 2) | bgpx;
   }
 
-  // TODO: smarter way to avoid sprites on line 0?
-  if (any_true_u8x16(active) && (p->ppumask & 0x10) && // Show sprites.
-      scany(p) != 0) {
+  if (spr->any_active && any_true_u8x16(active) &&
+      (p->ppumask & 0x10)) { // Show sprites.
+    assert(scany(p) != 0);
     // Find first non-zero sprite, if any. Check only the low bit of the lane
     // (the pixel that might be drawn).
     u64x2 non0x2 = (u64x2)(spr->shift & active & 1);
@@ -340,6 +343,8 @@ static inline void sprclear(E *e) {
   p->bgsprleftmask[1] = (p->ppumask & 4) ? 0xffff : 0;
   memset(p->oam2, 0xff, sizeof(p->oam2));
   spr->spr0 = false;
+  spr->any_active = spr->next_any_active;
+  spr->next_any_active = false;
 }
 
 static inline void spreval(E *e) {
@@ -593,6 +598,7 @@ static void spr12(E *e) {
     shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
     shift_in(&spr->spr0mask, (spr->s == 0 && spr->spr0) ? 0xff : 0);
     spr->counter[idx] = spr->counter[idx + 8] = x;
+    spr->next_any_active = p->state < 341 * 261;
   } else {
     // Dummy read for MMC3 IRQ
     spr_ptb(e, 0xff, 8);

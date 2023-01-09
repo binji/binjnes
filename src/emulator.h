@@ -161,7 +161,7 @@ typedef struct {
   u64 pri, spr0mask;
   u16 s;
   u8 state, d, y, t, at, tile, ptbl;
-  bool spr0;
+  bool spr0, any_active, next_any_active;
 } Spr;
 
 typedef struct {
