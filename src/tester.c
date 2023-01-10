@@ -29,6 +29,7 @@
 static const char* s_joypad_filename;
 static int s_frames = DEFAULT_FRAMES;
 static const char* s_output_ppm;
+static const char* s_output_audio;
 static bool s_animate;
 static bool s_print_ops;
 static u32 s_print_ops_limit = MAX_PRINT_OPS_LIMIT;
@@ -63,14 +64,14 @@ Result write_frame_ppm(Emulator* e, const char* filename) {
 void usage(int argc, char** argv) {
   static const char usage[] =
       "usage: %s [options] <in.nes>\n"
-      "  -h,--help            help\n"
-      "  -j,--joypad FILE     read joypad input from FILE\n"
-      "  -f,--frames N        run for N frames (default: %u)\n"
-      "  -o,--output FILE     output PPM file to FILE\n"
-      "  -a,--animate         output an image every frame\n"
-      "  -s,--seed SEED       random seed used for initializing RAM\n"
-      "  -P,--palette PAL     use a builtin palette for DMG\n"
-      "     --force-dmg       force running as a DMG (original gameboy)\n";
+      "  -h,--help                help\n"
+      "  -j,--joypad FILE         read joypad input from FILE\n"
+      "  -f,--frames N            run for N frames (default: %u)\n"
+      "  -o,--output FILE         output PPM file to FILE\n"
+      "     --output-audio FILE   output raw F32-LE audio to FILE\n"
+      "  -a,--animate             output an image every frame\n"
+      "  -s,--seed SEED           random seed used for initializing RAM\n"
+      "  -P,--palette PAL         use a builtin palette for DMG\n";
 
   PRINT_ERROR(usage, argv[0], DEFAULT_FRAMES);
 }
@@ -92,10 +93,10 @@ void parse_options(int argc, char**argv) {
     {'j', "joypad", 1},
     {'f', "frames", 1},
     {'o', "output", 1},
+    {0,   "output-audio", 1},
     {'a', "animate", 0},
     {'s', "seed", 1},
     {'P', "palette", 1},
-    {0, "force-dmg", 0},
   };
 
   struct OptionParser* parser = option_parser_new(
@@ -146,7 +147,11 @@ void parse_options(int argc, char**argv) {
             break;
 
           default:
-            abort();
+            if (strcmp(result.option->long_name, "output-audio") == 0) {
+              s_output_audio = result.value;
+            } else {
+              abort();
+            }
             break;
         }
         break;
@@ -179,6 +184,7 @@ int main(int argc, char** argv) {
   int result = 1;
   Emulator* e = NULL;
   JoypadBuffer* joypad_buffer = NULL;
+  FILE* output_audio_file = NULL;
 
   parse_options(argc, argv);
 
@@ -203,6 +209,12 @@ int main(int argc, char** argv) {
     emulator_set_joypad_playback_callback(e, joypad_buffer, &joypad_playback);
   }
 
+  if (s_output_audio) {
+    output_audio_file = fopen(s_output_audio, "wb");
+    CHECK_MSG(output_audio_file != NULL, "unable to open file %s.\n",
+              s_output_audio);
+  }
+
   u32 total_ticks = (u32)(s_frames * PPU_FRAME_TICKS);
   u32 until_ticks = emulator_get_ticks(e) + total_ticks;
   printf("frames = %u total_ticks = %u\n", s_frames, total_ticks);
@@ -222,6 +234,18 @@ int main(int argc, char** argv) {
         xfree((char*)result);
       }
 
+      if (finish_at_next_frame) {
+        break;
+      }
+    }
+    if (event & EMULATOR_EVENT_AUDIO_BUFFER_FULL) {
+      if (s_output_audio) {
+        AudioBuffer *audio_buffer = emulator_get_audio_buffer(e);
+        size_t frames = audio_buffer_get_frames(audio_buffer);
+        size_t bytes = frames * sizeof(f32);
+        size_t wrote = fwrite(audio_buffer->data, 1, bytes, output_audio_file);
+        CHECK_MSG(wrote == bytes, "Failed to write %zu bytes.\n", wrote);
+      }
       if (finish_at_next_frame) {
         break;
       }
@@ -248,6 +272,9 @@ int main(int argc, char** argv) {
 
   result = 0;
 error:
+  if (s_output_audio) {
+    fclose(output_audio_file);
+  }
   if (joypad_buffer) {
     joypad_delete(joypad_buffer);
   }
