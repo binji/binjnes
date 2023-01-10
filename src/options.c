@@ -67,12 +67,13 @@ OptionResult option_parser_next(OptionParser* parser) {
 
         size_t long_name_len = strlen(option->long_name);
         if (strncmp(&arg[2], option->long_name, long_name_len) == 0) {
+          char next_char = arg[2 + long_name_len];
           if (option->has_value) {
-            if (arg[2 + long_name_len] == '=') {
+            if (next_char == '=') {
               char* value = &arg[2 + long_name_len + 1];
               return make_option_result_with_value(OPTION_RESULT_KIND_OPTION,
                                                    option, value);
-            } else {
+            } else if (next_char == '\0') {
               if (parser->arg_index >= parser->argc) {
                 return make_option_result(OPTION_RESULT_KIND_EXPECTED_VALUE,
                                           option, NULL);
@@ -82,7 +83,7 @@ OptionResult option_parser_next(OptionParser* parser) {
               return make_option_result_with_value(OPTION_RESULT_KIND_OPTION,
                                                    option, value);
             }
-          } else {
+          } else if (next_char == '\0') {
             return make_option_result(OPTION_RESULT_KIND_OPTION, option, NULL);
           }
         }
