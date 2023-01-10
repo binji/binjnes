@@ -1772,14 +1772,81 @@ static void mapper11_write(E *e, u16 addr, u8 val) {
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
 }
 
+static u8 mapper19_read(E *e, u16 addr) {
+  M *m = &e->s.m;
+  DEBUG("mapper19_read(%04x)\n", addr);
+  switch (addr >> 11) {
+    case 9: { // 0x4800..0x4fff   audio
+      u8 soundram_addr = m->namco163.soundram_addr;
+      u8 result = m->namco163.soundram[soundram_addr];
+      if (m->namco163.autoinc) {
+        m->namco163.soundram_addr = (soundram_addr + 1) & 0x7f;
+      }
+      return result;
+    }
+
+    case 10: // 0x5000..0x57ff            IRQ counter low
+      return m->namco163.irq_counter & 0xff;
+    case 11: // 0x5800..0x5fff            IRQ counter high
+      return m->namco163.irq_counter >> 8;
+  }
+  return e->s.c.open_bus;
+}
+
 static void mapper19_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   u8 reg = addr >> 11;
   DEBUG("mapper19_write(%04x, %02x)\n", addr, val);
   switch (reg) {
-    case 9: // 0x4800..0x4fff   audio
-      // TODO
+    case 9: { // 0x4800..0x4fff   audio
+      u8 soundram_addr = m->namco163.soundram_addr;
+      m->namco163.soundram[soundram_addr] = val;
+      if (soundram_addr >= 0x40) {
+        u8 chan = (soundram_addr - 0x40) >> 3;
+        struct Namco163Channel* c = &m->namco163.channel[chan];
+        switch (soundram_addr & 7) {
+          case 0: // Low freq
+            c->freq = (c->freq & 0x3ff00) | val;
+            break;
+
+          case 1: // Low phase
+            c->phase = (c->phase & 0xffff00) | val;
+            break;
+
+          case 2: // Mid freq
+            c->freq = (c->freq & 0x300ff) | (val << 8);
+            break;
+
+          case 3: // Mid phase
+            c->phase = (c->phase & 0xff00ff) | (val << 8);
+            break;
+
+          case 4: // High freq. and length
+            c->freq = (c->freq & 0xffff) | ((val & 3) << 16);
+            c->len = 256 - (val & 0xfc);
+            break;
+
+          case 5: // High phase
+            c->phase = (c->phase & 0xffff) | (val << 16);
+            break;
+
+          case 6: // Wave offset
+            c->offset = val;
+            break;
+
+          case 7: // Volume.
+            c->vol = (val & 0xf);
+            if (soundram_addr == 0x7f) {
+              m->namco163.numchans = ((val >> 4) & 7) + 1;
+            }
+            break;
+        }
+      }
+      if (m->namco163.autoinc) {
+        m->namco163.soundram_addr = (soundram_addr + 1) & 0x7f;
+      }
       break;
+    }
     case 10: // 0x5000..0x57ff            IRQ counter low
       m->namco163.irq_counter = (m->namco163.irq_counter & 0xff00) | val;
       e->s.c.irq &= ~IRQ_MAPPER;
@@ -1799,7 +1866,7 @@ static void mapper19_write(E *e, u16 addr, u8 val) {
       goto update_chr;
     case 28: // PRG select 1
       m->prg_bank[0] = val & 0x3f & (e->ci.prg8k_banks - 1);
-      // TODO sound enable
+      m->namco163.sound_enable = !(val & 0x40);
       break;
     case 29: // PRG select 2 / CHR RAM enable
       m->prg_bank[1] = val & 0x3f & (e->ci.prg8k_banks - 1);
@@ -1815,6 +1882,9 @@ static void mapper19_write(E *e, u16 addr, u8 val) {
       m->namco163.prg_bank_write_en[1] = write_en && !!(val & 2);
       m->namco163.prg_bank_write_en[2] = write_en && !!(val & 4);
       m->namco163.prg_bank_write_en[3] = write_en && !!(val & 8);
+
+      m->namco163.soundram_addr = val & 0x7f;
+      m->namco163.autoinc = !!(val & 0x80);
       break;
     }
 
@@ -1842,11 +1912,52 @@ static void mapper19_write(E *e, u16 addr, u8 val) {
 }
 
 static void mapper19_cpu_step(E* e) {
+  M* m = &e->s.m;
+
   if (e->s.m.namco163.irq_enable) {
     if (e->s.m.namco163.irq_counter < 0x7fff &&
         ++e->s.m.namco163.irq_counter == 0x7fff) {
       e->s.c.irq |= IRQ_MAPPER;
     }
+  }
+
+  if (m->namco163.sound_enable) {
+    if (++m->namco163.chantick == 15) {
+      m->namco163.chantick = 0;
+      ++m->namco163.curchan;
+      if (m->namco163.curchan >= m->namco163.numchans) {
+        m->namco163.curchan = 0;
+      }
+      u8 chan = 7 - m->namco163.curchan;
+      struct Namco163Channel *c = &m->namco163.channel[chan];
+
+      c->phase += c->freq;
+      u32 len = c->len << 16;
+      if (c->phase >= len) {
+        c->phase -= len;
+      }
+      // Write phase back to sound ram.
+      m->namco163.soundram[0x40 + chan * 8 + 1] = c->phase & 0xff;
+      m->namco163.soundram[0x40 + chan * 8 + 3] = (c->phase >> 8) & 0xff;
+      m->namco163.soundram[0x40 + chan * 8 + 5] = (c->phase >> 16) & 0xff;
+
+      u8 sampleaddr = (c->phase >> 16) + c->offset;
+      u8 byte = m->namco163.soundram[sampleaddr >> 1];
+      byte = sampleaddr & 1 ? byte >> 4 : byte & 0xf;
+      c->sample = (f32)(byte - 8) * c->vol / (8.0f * 15.0f);
+      m->namco163.update_audio = true;
+    }
+  }
+}
+
+static void mapper19_apu_tick(E* e, bool update) {
+  M* m = &e->s.m;
+  if (update || m->namco163.update_audio) {
+    f32 mixed = 0;
+    for (int i = 0; i < m->namco163.numchans; ++i) {
+      mixed += m->namco163.channel[7 - i].sample;
+    }
+    e->s.a.mixed = e->s.a.base_mixed + mixed * 0.15f;
   }
 }
 
@@ -4219,8 +4330,10 @@ static Result init_mapper(E *e) {
     break;
 
   case BOARD_MAPPER_19:
+    e->mapper_read = mapper19_read;
     e->mapper_write = mapper19_write;
     e->mapper_cpu_step = mapper19_cpu_step;
+    e->mapper_apu_tick = mapper19_apu_tick;
     e->mapper_update_nt_map = update_nt_map_banking;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 1, 2, 3, 4, 5, 6, 7);

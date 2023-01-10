@@ -138,6 +138,16 @@ typedef struct {
     struct {
       u16 irq_counter;
       bool irq_enable, use_ntram[2], prg_bank_write_en[4];
+      // Audio stuff
+      u8 soundram[128];
+      u8 soundram_addr;
+      struct Namco163Channel {
+        f32 sample;
+        u32 freq, phase;
+        u8 offset, len, vol;
+      } channel[8];
+      u8 numchans, curchan, chantick;
+      bool sound_enable, autoinc, update_audio;
     } namco163;
   };
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
