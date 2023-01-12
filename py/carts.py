@@ -75,7 +75,7 @@ BOARDS_VRC4 = {
 }
 
 SUPPORTED_GENERIC_MAPPERS = {
-  0, 1, 2, 3, 7, 9, 10, 11, 19, 24, 26, 66, 69, 87, 206,
+  0, 1, 2, 3, 5, 7, 9, 10, 11, 19, 24, 26, 66, 69, 87, 206,
 }
 
 KEYS = ('name', 'mapper', 'board', 'prg', 'chip', 'chr', 'wram', 'battery',

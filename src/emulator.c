@@ -1370,26 +1370,37 @@ static void update_chr1k_map(E* e) {
 static void set_chr1k_map(E *e, u16 bank0, u16 bank1, u16 bank2, u16 bank3,
                           u16 bank4, u16 bank5, u16 bank6, u16 bank7) {
   u16 banks[] = {bank0, bank1, bank2, bank3, bank4, bank5, bank6, bank7};
+  for (int i = 0; i < 8; ++i) {
+    banks[i] &= e->ci.chr1k_banks - 1;
+  }
   memcpy(e->s.m.chr1k_bank, banks, sizeof(e->s.m.chr1k_bank));
   update_chr1k_map(e);
 }
 
+static void set_chr2k_map(E *e, u16 bank0, u16 bank1, u16 bank2, u16 bank3) {
+  set_chr1k_map(e, bank0 * 2, bank0 * 2 + 1, bank1 * 2, bank1 * 2 + 1,
+                bank2 * 2, bank2 * 2 + 1, bank3 * 2, bank3 * 2 + 1);
+}
+
 static void set_chr4k_map(E *e, u16 bank0, u16 bank1) {
-  bank0 &= (e->ci.chr4k_banks - 1);
-  bank1 &= (e->ci.chr4k_banks - 1);
   set_chr1k_map(e, bank0 * 4, bank0 * 4 + 1, bank0 * 4 + 2, bank0 * 4 + 3,
                 bank1 * 4, bank1 * 4 + 1, bank1 * 4 + 2, bank1 * 4 + 3);
 }
 
 static void set_chr8k_map(E *e, u16 bank) {
-  bank &= (e->ci.chr8k_banks - 1);
-  set_chr4k_map(e, bank * 2, bank * 2 + 1);
+  set_chr1k_map(e, bank * 8, bank * 8 + 1, bank * 8 + 2, bank * 8 + 3,
+                bank * 8 + 4, bank * 8 + 5, bank * 8 + 6, bank * 8 + 7);
 }
 
 static void update_prg8k_map(E* e) {
   for (size_t i = 0; i < ARRAY_SIZE(e->s.m.prg8k_bank); ++i) {
-    u16 bank = e->s.m.prg8k_bank[i] & (e->ci.prg8k_banks - 1);
-    e->prg_rom_map[i] = e->ci.prg_data + (bank << 13);
+    if (e->s.m.prg_bank_is_prgram[i]) {
+      u16 bank = e->s.m.prg8k_bank[i] & 7;
+      e->prg_rom_map[i] = e->s.c.prg_ram + (bank << 13);
+    } else {
+      u16 bank = e->s.m.prg8k_bank[i] & (e->ci.prg8k_banks - 1);
+      e->prg_rom_map[i] = e->ci.prg_data + (bank << 13);
+    }
   }
 }
 
@@ -1715,6 +1726,236 @@ static void mapper4_hkrom_prg_ram_write(E* e, u16 addr, u8 val) {
   if (m->mmc3.prgram512b_en[bank] && m->mmc3.prgram512b_write_en[bank]) {
     e->s.c.prg_ram[addr & 0x3ff] = val;
   }
+}
+
+static void mapper5_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  LOG("mapper5_write(%04x, %02x)\n", addr, val);
+  switch (addr) {
+    case 0x5000 ... 0x5003:
+      printf("✓  Pulse 1 audio = %u (%02x)\n", val, val);
+      break;
+    case 0x5004 ... 0x5007:
+      printf("✓  Pulse 2 audio = %u (%02x)\n", val, val);
+      break;
+    case 0x5010:
+      printf("✓  PCM Mode/IRQ = %02x\n", val);
+      break;
+    case 0x5011:
+      printf("✓  Raw PCM = %02x\n", val);
+      break;
+    case 0x5015:
+      printf("✓  APU status = %02x\n", val);
+      break;
+
+    case 0x5100:
+      LOG("  PRG mode = %u\n", val & 3);
+      m->mmc5.prg_mode = val & 3;
+      goto update_prg;
+    case 0x5101:
+      LOG("✓  CHR mode = %u\n", val & 3);
+      m->mmc5.chr_mode = val & 3;
+      goto update_chr;
+    case 0x5102:
+      printf("✓  PRG ram protect 1 = %u\n", val & 3);
+      break;
+    case 0x5103:
+      printf("✓  PRG ram protect 2 = %u\n", val & 3);
+      break;
+    case 0x5104:
+      printf("✓  Extended RAM mode = %u\n", val & 3);
+      break;
+    case 0x5105:
+      LOG("✓  Nametable mapping = %02x\n", val);
+      if ((val >> 0) <= 2) m->nt_bank[0] = (val >> 0) & 3;
+      if ((val >> 2) <= 2) m->nt_bank[1] = (val >> 2) & 3;
+      if ((val >> 4) <= 2) m->nt_bank[2] = (val >> 4) & 3;
+      if ((val >> 6) <= 2) m->nt_bank[3] = (val >> 6) & 3;
+      update_nt_map_banking(e);
+      break;
+    case 0x5106:
+      printf("✓  Fill-mode tile = %u (%02x)\n", val, val);
+      break;
+    case 0x5107:
+      printf("✓  Fill-mode color = %u\n", val & 3);
+      break;
+    case 0x5113:
+      LOG("  PRG RAM bankswitching %04x..%04x = %02x\n",
+          (addr - 0x5113) * 0x2000 + 0x6000, (addr - 0x5113) * 0x2000 + 0x7fff,
+          val);
+      set_prgram8k_map(e, m->prgram_bank = val);
+      break;
+    case 0x5114 ... 0x5117: {
+      u8 bankidx = addr - 0x5114;
+      LOG("  PRG bankswitching %04x..%04x = %02x\n",
+          (addr - 0x5113) * 0x2000 + 0x6000, (addr - 0x5113) * 0x2000 + 0x7fff,
+          val);
+      m->prg_bank[bankidx] = val & 0x7f;
+      m->prg_bank_is_prgram[bankidx] = !(val & 0x80);
+      goto update_prg;
+    }
+
+    case 0x5120 ... 0x5127:
+      LOG("✓  CHR bankswitching %04x..%04x = %02x\n", (addr - 0x5120) * 0x400,
+          (addr - 0x5120) * 0x400 + 0x3ff, val);
+      m->chr_bank[addr - 0x5120] = val;
+      goto update_chr;
+
+    case 0x5128 ... 0x512b:
+      printf("✓  CHR BG bankswitching %04x..%04x = %02x\n",
+             (addr - 0x5128) * 0x400,
+             (addr - 0x5128) * 0x400 + 0x3ff, val);
+      break;
+
+    case 0x5130:
+      printf("✓  CHR bank upper bits = %u\n", val & 3);
+      break;
+
+    case 0x5200:
+      printf("✓  Vertical split mode = %02x\n", val);
+      break;
+
+    case 0x5201:
+      printf("✓  Vertical split scroll = %u\n", val);
+      break;
+
+    case 0x5202:
+      printf("✓  Vertical split bank = %u\n", val);
+      break;
+
+    case 0x5203:
+      printf("✓  IRQ scanline compare value = %u\n", val);
+      m->mmc5.irq_compare = val;
+      break;
+
+    case 0x5204:
+      printf("✓  IRQ status = %u\n", val);
+      m->mmc5.irq_enable = !!(val & 0x80);
+      break;
+
+    case 0x5205:
+      printf("✓  Unsigned 8x8 multiplier lo = %u\n", val);
+      break;
+
+    case 0x5206:
+      printf("✓  Unsigned 8x8 multiplier hi = %u\n", val);
+      break;
+
+    case 0x5207:
+      printf("✓  MMC5A CL3/SL3 Data Dir. and Output Data Source = %02x\n", val);
+      break;
+
+    case 0x5208:
+      printf("✓  MMC5A CL3/SL3 status = %02x\n", val);
+      break;
+
+    case 0x5209:
+      printf("✓  Hardware timer lo = %02x\n", val);
+      break;
+
+    case 0x520a:
+      printf("✓  Hardware timer hi = %02x\n", val);
+      break;
+
+    case 0x5c00 ... 0x5fff:
+      printf("✓  Internal extended RAM = %02x\n", val);
+      break;
+
+    case 0x8000 ... 0xffff: {
+      u16 bank = (addr >> 13) & 3;
+      if (m->prg_bank_is_prgram[bank]) {
+        e->prg_rom_map[bank][addr & 0x1fff] = val;
+      }
+      break;
+    }
+
+    default:
+      printf("  Unknown\n");
+      break;
+
+    update_prg:
+      switch (m->mmc5.prg_mode) {
+        case 0:
+          set_prg32k_map(e, m->prg_bank[3]);
+          break;
+        case 1:
+          set_prg16k_map(e, m->prg_bank[1], m->prg_bank[3]);
+          break;
+        case 2:
+          set_prg8k_map(e, m->prg_bank[1] & ~1, m->prg_bank[1] | 1,
+                        m->prg_bank[2], m->prg_bank[3]);
+          break;
+        case 3:
+          set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], m->prg_bank[2],
+                        m->prg_bank[3]);
+          break;
+      }
+      break;
+
+    update_chr:
+      switch (m->mmc5.chr_mode) {
+        case 0:
+          set_chr8k_map(e, m->chr_bank[7]);
+          break;
+        case 1:
+          set_chr4k_map(e, m->chr_bank[3], m->chr_bank[7]);
+          break;
+        case 2:
+          set_chr2k_map(e, m->chr_bank[1], m->chr_bank[3], m->chr_bank[5],
+                        m->chr_bank[7]);
+          break;
+        case 3:
+          set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                        m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                        m->chr_bank[6], m->chr_bank[7]);
+      }
+      break;
+  }
+}
+
+static u8 mapper5_read(E* e, u16 addr) {
+  switch (addr) {
+    case 0x5010:
+      printf("✓  PCM Mode/IRQ\n");
+      break;
+
+    case 0x5015:
+      printf("✓  APU status\n");
+      break;
+
+    case 0x5204:
+      printf("✓  IRQ status\n");
+      break;
+
+    case 0x5205:
+      printf("✓  Multiplier lo\n");
+      break;
+
+    case 0x5206:
+      printf("✓  Multiplier hi\n");
+      break;
+
+    case 0x5209:
+      printf("✓  Hardware timer status\n");
+      break;
+
+    case 0x5c00 ... 0x5fff:
+      printf("✓  Internal extended RAM\n");
+      break;
+
+    default:
+      printf("✓  unknown read(%04x)\n", addr);
+      break;
+  }
+  return e->s.c.open_bus;
+}
+
+static u8 mapper5_prg_ram_read(E *e, u16 addr) {
+  return mapper_prg_ram_read(e, addr);
+}
+
+static void mapper5_prg_ram_write(E *e, u16 addr, u8 val) {
+  mapper_prg_ram_write(e, addr, val);
 }
 
 static void mapper7_write(E *e, u16 addr, u8 val) {
@@ -2580,7 +2821,7 @@ static u8 rare_opcode(E* e, u8 busval) {
       break;
     case 0xd8: c->D = 0; break;                         // CLD
     case 0xf8: c->D = 1; break;                         // SED
-    default: FATAL("NYI: opcode %02x\n", c->opcode); break;
+    default: FATAL("NYI: opcode %02x @ PC=%04x\n", c->opcode, c->PC.val); break;
   }
   return busval;
 }
@@ -4313,6 +4554,16 @@ static Result init_mapper(E *e) {
       e->mapper_prg_ram_read = mapper4_hkrom_prg_ram_read;
       e->mapper_prg_ram_write = mapper4_hkrom_prg_ram_write;
     }
+    break;
+  case BOARD_MAPPER_5:
+    e->mapper_read = mapper5_read;
+    e->mapper_write = mapper5_write;
+    e->mapper_prg_ram_write = mapper5_prg_ram_write;
+    e->mapper_prg_ram_read = mapper5_prg_ram_read;
+    e->s.m.prg_bank[3] = 0xff;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
   case BOARD_MAPPER_7:
     e->s.m.prg_bank[0] = 0;

@@ -111,6 +111,12 @@ typedef struct {
     } mmc3;
 
     struct {
+      u8 prg_mode, chr_mode;
+      u8 irq_compare;
+      bool irq_enable, in_frame;
+    } mmc5;
+
+    struct {
       u8 bank_select;
     } m206;
 
@@ -154,6 +160,7 @@ typedef struct {
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
       has_mmc2_latch;
   bool chr_bank_is_ntram[8], nt_bank_is_chr[4];
+  bool prg_bank_is_prgram[4];
 } M;
 
 typedef union {
@@ -167,7 +174,7 @@ typedef struct {
   u16pair PC, T, bus, oam;
   u8 fixhi, veclo;
   u8 A, X, Y, S;
-  u8 ram[0x800], prg_ram[0x2000];
+  u8 ram[0x800], prg_ram[0x10000];
   u8 opcode, open_bus, irq;
   bool C, Z, I, D, V, N; // Flags.
   bool req_nmi, has_nmi, has_irq;
