@@ -19,7 +19,7 @@
   /* Salad no Kuni no Tomato Hime */
   {.crc=0x016C93D8, .board=BOARD_MAPPER_1, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Roger Clemens' MVP Baseball */
-  {.crc=0x018A8699, .board=BOARD_UNSUPPORTED, .mapper=4, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x018A8699, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* King's Knight */
   {.crc=0x01B4CA89, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Tecmo Super Bowl */
@@ -339,7 +339,7 @@
   /* Indiana Jones and the Temple of Doom */
   {.crc=0x139EB5B5, .board=BOARD_MAPPER_206, .mapper=206, .prg=8, .chr=16, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Batman */
-  {.crc=0x13C6617E, .board=BOARD_UNSUPPORTED, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x13C6617E, .board=BOARD_TXROM_MMC3A, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Double Dragon II: The Revenge */
   {.crc=0x13C774DD, .board=BOARD_TXROM_MMC3A, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Time Lord */
@@ -4011,7 +4011,7 @@
   /* Bio Senshi Dan: Increaser tono Tatakai */
   {.crc=0xEC40E71B, .board=BOARD_UNSUPPORTED, .mapper=140, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Gauntlet */
-  {.crc=0xEC968C51, .board=BOARD_MAPPER_206, .mapper=206, .prg=8, .chr=16, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xEC968C51, .board=BOARD_TXROM_MMC3A, .mapper=4, .prg=8, .chr=16, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* F1 Circus */
   {.crc=0xECBF33CE, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Racket Attack */

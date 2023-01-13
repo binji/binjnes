@@ -192,13 +192,20 @@ def main(args):
                 diffs.add(key)
                 msg += f'\n\t{key}: {o} != {a}'
 
-            if len(diffs.difference(set(['chip', 'name']))) == 0:
+            if other['board'] is None or \
+                len(diffs.difference(set(['chip', 'name']))) == 0:
               unique = False
 
             # print(msg)
 
         if unique:
           crcs[crc].append(attr)
+        else:
+          # Even though CRC matches, maybe this new one is better?
+          oldattr = crcs[crc][0]
+          if oldattr['board'] is None and attr['board'] is not None:
+            # print(f'Overriding {attr["name"]}, since it has a board')
+            crcs[crc][0] = attr
 
   mappers = collections.defaultdict(int)
 
