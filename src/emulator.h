@@ -90,10 +90,14 @@ typedef struct {
 } CartInfo;
 
 typedef struct {
-  u16 chr1k_bank[8], prg8k_bank[4],
-      prgram8k_bank;                         // Actual mapped bank indexes.
-  u16 chr_bank[8], prg_bank[4], prgram_bank; // Mapper's selected bank indexes.
-  u16 nt_bank[4]; // Only used if nt_bank_is_chr is true
+   // Actual mapped bank indexes.
+  u16 chr1k_bank[8], chr1k_bg_bank[8], chr1k_spr_bank[8];
+  u16 prg8k_bank[4], prgram8k_bank;
+   // Mapper's selected bank indexes.
+  u16 chr_bank[8], chr_bg_bank[8], chr_spr_bank[8];
+  u16 prg_bank[4], prgram_bank;
+   // Only used if using update_nt_map_banking
+  u16 nt_bank[4];
   union {
     struct {
       u8 bits, data, ctrl;
@@ -111,9 +115,11 @@ typedef struct {
     } mmc3;
 
     struct {
-      u8 prg_mode, chr_mode;
-      u8 irq_compare;
-      bool irq_enable, in_frame;
+      u16 chr_bg_bank[4];
+      u16 lastaddr;
+      u8 prg_mode, chr_mode, scan, scan_cmp, match_count;
+      u8 mullo, mulhi;
+      bool irq_enable, irq_pending, in_frame;
     } mmc5;
 
     struct {
@@ -158,7 +164,7 @@ typedef struct {
     } namco163;
   };
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
-      has_mmc2_latch;
+      has_mmc2_latch, has_mmc5_irq;
   bool chr_bank_is_ntram[8], nt_bank_is_chr[4];
   bool prg_bank_is_prgram[4];
 } M;
@@ -195,7 +201,7 @@ typedef struct {
 
 typedef struct {
   RGBA rgbapal[32];
-  u8 ram[0x1000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
+  u8 ram[0x2000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
   u32x2 bgatshift, bgatpreshift;
   u16x2 bgsprleftmask;
   u32 state, fbidx, frame;
@@ -243,8 +249,10 @@ typedef struct Emulator {
   S s;
   CartInfo ci;
   u8 *prg_rom_map[4], *prg_ram_map, *ppu_map[16], *ppu_map_write[16];
+  u8 *ppu_bg_map[16], *ppu_spr_map[16];
   u8 (*mapper_read)(struct Emulator*, u16);
   void (*mapper_write)(struct Emulator*, u16, u8);
+  void (*mapper_io_write)(struct Emulator*, u16, u8);
   void (*mapper_prg_ram_write)(struct Emulator*, u16, u8);
   u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
   void (*mapper_cpu_step)(struct Emulator*);

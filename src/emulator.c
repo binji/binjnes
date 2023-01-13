@@ -155,15 +155,51 @@ static void do_mmc2_access(E* e, u16 addr) {
   }
 }
 
-static inline u8 chr_read(E *e, u16 addr) {
+static void do_mmc5_access(E* e, u16 addr) {
+  M* m = &e->s.m;
+  if (!m->has_mmc5_irq) return;
+  if ((addr & 0x3000) == 0x2000 && addr == m->mmc5.lastaddr) {
+    LOG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", e->s.p.state % 341,
+        e->s.p.state / 341, m->mmc5.match_count + 1, m->mmc5.lastaddr);
+    ++m->mmc5.match_count;
+  } else {
+    if (m->mmc5.match_count == 2) {
+      if (!m->mmc5.in_frame) {
+        m->mmc5.in_frame = true;
+        m->mmc5.scan = 0;
+        LOG("✓  [%3u:%3u] MMC5, setting scan to 0\n", e->s.p.state % 341,
+            e->s.p.state / 341);
+      } else {
+        if (++m->mmc5.scan == m->mmc5.scan_cmp) {
+          LOG("✓  [%3u:%3u] MMC5, scanline match = %u\n", e->s.p.state % 341,
+              e->s.p.state / 341, m->mmc5.scan);
+          m->mmc5.irq_pending = true;
+          if (m->mmc5.irq_enable) {
+            e->s.c.irq |= IRQ_MAPPER;
+          }
+        } else {
+          LOG("✓  [%3u:%3u] MMC5, scan = %u\n", e->s.p.state % 341,
+              e->s.p.state / 341, m->mmc5.scan);
+        }
+      }
+    }
+    m->mmc5.match_count = 0;
+  }
+  m->mmc5.lastaddr = addr;
+  e->s.p.last_vram_access_cy = e->s.cy;
+}
+
+static inline u8 chr_read(E *e, u8 *map[16], u16 addr) {
   do_a12_access(e, addr);
-  u8 result = e->ppu_map[(addr >> 10) & 0xf][addr & 0x3ff];
+  do_mmc5_access(e, addr);
+  u8 result = map[(addr >> 10) & 0xf][addr & 0x3ff];
   do_mmc2_access(e, addr);
   return result;
 }
 
 static inline u8 nt_read(E *e, u16 addr) {
   do_a12_access(e, addr);
+  do_mmc5_access(e, addr);
   return e->ppu_map[(addr >> 10) & 0xf][addr & 0x3ff];
 }
 
@@ -172,7 +208,7 @@ static u8 ppu_read(E *e, u16 addr) {
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      buffer = chr_read(e, addr);
+      buffer = chr_read(e, e->ppu_map, addr);
       break;
 
     case 15:
@@ -245,9 +281,10 @@ static inline void read_atb(E *e) {
 }
 
 static inline u8 read_ptb(E *e, u8 addend) {
-  return chr_read(e, (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
-                      (e->s.p.v >> 12)) +
-                         addend);
+  return chr_read(e, e->ppu_bg_map,
+                  (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
+                   (e->s.p.v >> 12)) +
+                      addend);
 }
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
@@ -543,7 +580,8 @@ static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
 }
 
 static inline u8 spr_ptb(E* e, u8 tile, u8 addend) {
-  return chr_read(e, spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend);
+  return chr_read(e, e->ppu_spr_map,
+                  spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend);
 }
 
 static void spr4(E* e);
@@ -1054,6 +1092,7 @@ static u8 cpu_read(E *e, u16 addr) {
         u8 result = p->ppulast = ppu_read(e, p->v);
         inc_ppu_addr(p);
         do_a12_access(e, p->v);
+        do_mmc5_access(e, addr);
         return result;
       }
     }
@@ -1124,7 +1163,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
       DEBUG("(%" PRIu64 ") [%3u:%3u]: ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy,
             p->state % 341, p->state / 341, p->t, val);
-      break;
+      goto io;
     case 1:
       DEBUG("(%" PRIu64 ") [%3u:%3u]: ppumask: %02x=>%02x\n", e->s.cy,
             p->state % 341, p->state / 341, p->ppumask, val);
@@ -1134,12 +1173,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       p->ppumask = val;
       p->next_enabled = !!(val & 0x18);
       update_rgbapal(e);
-      break;
-    case 3: p->oamaddr = val; break;
+      goto io;
+    case 3: p->oamaddr = val; goto io;
     case 4:
       // TODO: handle writes during rendering.
       oam_write(e, p->oamaddr++, val);
-      break;
+      goto io;
     case 5:
       if ((p->w ^= 1)) {
         // w was 0.
@@ -1157,7 +1196,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx w=1\n", e->s.cy,
               p->state % 341, p->state / 341, val, p->t);
       }
-      break;
+      goto io;
     case 6:
       if ((p->w ^= 1)) {
         // w was 0.
@@ -1175,7 +1214,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:v=%04hx t=%04hx w=1\n",
               e->s.cy, p->state % 341, p->state / 341, val, p->v, p->t);
       }
-      break;
+      goto io;
     case 7: {
       u16 oldv = p->v;
       ppu_write(e, p->v, val);
@@ -1183,6 +1222,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       do_a12_access(e, p->v);
       DEBUG("  (%" PRIu64 ") [%3u:%3u]: ppu:write(%04hx)=%02hhx, v=%04hx\n",
             e->s.cy, p->state % 341, p->state / 341, oldv, val, p->v);
+      goto io;
     }
     }
     break;
@@ -1278,18 +1318,18 @@ static void cpu_write(E *e, u16 addr, u8 val) {
 
         print_byte(addr, val, channels[addr-0x4000], bitnames[addr-0x4000]);
         a->reg[addr - 0x4000] = val;
-        break;
+        goto io;
       }
 
       case 0x14: {   // OAMDMA
         c->oam.hi = val;
         c->next_step = s_oamdma + (e->s.cy & 1); // 513/514 cycles
-        break;
+        goto io;
       }
       case 0x16: {  // JOY1
         read_joyp(e, true, val & 1);
         e->s.j.S = val & 1;
-        break;
+        goto io;
       }
       default:
         e->mapper_write(e, addr, val);
@@ -1297,6 +1337,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
     }
     break;
   }
+
+  io:
+    if (e->mapper_io_write) {
+      e->mapper_io_write(e, addr, val);
+    }
+    break;
 
   case 6: case 7:
     e->mapper_prg_ram_write(e, addr, val);
@@ -1309,6 +1355,8 @@ static void cpu_write(E *e, u16 addr, u8 val) {
 }
 
 static void update_ppu_bank(E *e, int index, u16 bank, bool use_ntram) {
+  DEBUG("  update_ppu_bank ix:%u bank:%u use_ntram:%u\n", index, bank,
+        use_ntram);
   if (use_ntram) {
     u16 b = bank & 1;
     e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (b << 10);
@@ -1317,6 +1365,21 @@ static void update_ppu_bank(E *e, int index, u16 bank, bool use_ntram) {
     e->ppu_map[index] = e->ci.chr_data + (b << 10);
     e->ppu_map_write[index] =
         e->ci.chr_data_write + ((b & CHRRAM1K_MASK) << 10);
+  }
+}
+
+static void update_ppu_bg_spr_bank(E *e, int index, u16 bgbank, u16 sprbank,
+                                   bool use_ntram) {
+  DEBUG("  update_ppu_bg_spr_bank ix:%u bgbank:%u sprbank:%u use_ntram:%u\n",
+        index, bank, use_ntram);
+  if (use_ntram) {
+    e->ppu_bg_map[index] = e->s.p.ram + ((bgbank & 1) << 10);
+    e->ppu_spr_map[index] = e->s.p.ram + ((sprbank & 1) << 10);
+  } else {
+    e->ppu_bg_map[index] =
+        e->ci.chr_data + ((bgbank & (e->ci.chr1k_banks - 1)) << 10);
+    e->ppu_spr_map[index] =
+        e->ci.chr_data + ((sprbank & (e->ci.chr1k_banks - 1)) << 10);
   }
 }
 
@@ -1362,8 +1425,14 @@ static void set_mirror(E *e, Mirror mirror) {
 }
 
 static void update_chr1k_map(E* e) {
-  for (size_t i = 0; i < ARRAY_SIZE(e->s.m.chr1k_bank); ++i) {
+  for (size_t i = 0; i < 8; ++i) {
     update_ppu_bank(e, i, e->s.m.chr1k_bank[i], e->s.m.chr_bank_is_ntram[i]);
+  }
+
+  for (size_t i = 0; i < 8; ++i) {
+    update_ppu_bg_spr_bank(e, i, e->s.m.chr1k_bg_bank[i],
+                           e->s.m.chr1k_spr_bank[i],
+                           e->s.m.chr_bank_is_ntram[i]);
   }
 }
 
@@ -1374,6 +1443,8 @@ static void set_chr1k_map(E *e, u16 bank0, u16 bank1, u16 bank2, u16 bank3,
     banks[i] &= e->ci.chr1k_banks - 1;
   }
   memcpy(e->s.m.chr1k_bank, banks, sizeof(e->s.m.chr1k_bank));
+  memcpy(e->s.m.chr1k_bg_bank, banks, sizeof(e->s.m.chr1k_bank));
+  memcpy(e->s.m.chr1k_spr_bank, banks, sizeof(e->s.m.chr1k_bank));
   update_chr1k_map(e);
 }
 
@@ -1390,6 +1461,64 @@ static void set_chr4k_map(E *e, u16 bank0, u16 bank1) {
 static void set_chr8k_map(E *e, u16 bank) {
   set_chr1k_map(e, bank * 8, bank * 8 + 1, bank * 8 + 2, bank * 8 + 3,
                 bank * 8 + 4, bank * 8 + 5, bank * 8 + 6, bank * 8 + 7);
+}
+
+static void set_chr1k_bg_spr_map(E *e, u16 bank0, u16 bank1, u16 bank2,
+                                 u16 bank3, u16 bank4, u16 bank5, u16 bank6,
+                                 u16 bank7, u16 bg_bank0, u16 bg_bank1,
+                                 u16 bg_bank2, u16 bg_bank3, u16 bg_bank4,
+                                 u16 bg_bank5, u16 bg_bank6, u16 bg_bank7,
+                                 u16 spr_bank0, u16 spr_bank1, u16 spr_bank2,
+                                 u16 spr_bank3, u16 spr_bank4, u16 spr_bank5,
+                                 u16 spr_bank6, u16 spr_bank7) {
+  u16 banks[] = {bank0, bank1, bank2, bank3, bank4, bank5, bank6, bank7};
+  u16 bg_banks[] = {bg_bank0, bg_bank1, bg_bank2, bg_bank3,
+                    bg_bank4, bg_bank5, bg_bank6, bg_bank7};
+  u16 spr_banks[] = {spr_bank0, spr_bank1, spr_bank2, spr_bank3,
+                     spr_bank4, spr_bank5, spr_bank6, spr_bank7};
+  for (int i = 0; i < 8; ++i) {
+    banks[i] &= e->ci.chr1k_banks - 1;
+    bg_banks[i] &= e->ci.chr1k_banks - 1;
+    spr_banks[i] &= e->ci.chr1k_banks - 1;
+  }
+  memcpy(e->s.m.chr1k_bank, banks, sizeof(e->s.m.chr1k_bank));
+  memcpy(e->s.m.chr1k_bg_bank, bg_banks, sizeof(e->s.m.chr1k_bank));
+  memcpy(e->s.m.chr1k_spr_bank, spr_banks, sizeof(e->s.m.chr1k_bank));
+  update_chr1k_map(e);
+}
+
+static void set_chr2k_bg_spr_map(E *e, u16 bank0, u16 bank1, u16 bank2,
+                                 u16 bank3, u16 bg_bank0, u16 bg_bank1,
+                                 u16 bg_bank2, u16 bg_bank3, u16 spr_bank0,
+                                 u16 spr_bank1, u16 spr_bank2, u16 spr_bank3) {
+  set_chr1k_bg_spr_map(
+      e, bank0 * 2, bank0 * 2 + 1, bank1 * 2, bank1 * 2 + 1, bank2 * 2,
+      bank2 * 2 + 1, bank3 * 2, bank3 * 2 + 1, bg_bank0 * 2, bg_bank0 * 2 + 1,
+      bg_bank1 * 2, bg_bank1 * 2 + 1, bg_bank2 * 2, bg_bank2 * 2 + 1,
+      bg_bank3 * 2, bg_bank3 * 2 + 1, spr_bank0 * 2, spr_bank0 * 2 + 1,
+      spr_bank1 * 2, spr_bank1 * 2 + 1, spr_bank2 * 2, spr_bank2 * 2 + 1,
+      spr_bank3 * 2, spr_bank3 * 2 + 1);
+}
+
+static void set_chr4k_bg_spr_map(E *e, u16 bank0, u16 bank1, u16 bg_bank0,
+                                 u16 bg_bank1, u16 spr_bank0, u16 spr_bank1) {
+  set_chr1k_bg_spr_map(
+      e, bank0 * 4, bank0 * 4 + 1, bank0 * 4 + 2, bank0 * 4 + 3, bank1 * 4,
+      bank1 * 4 + 1, bank1 * 4 + 2, bank1 * 4 + 3, bg_bank0 * 4,
+      bg_bank0 * 4 + 1, bg_bank0 * 4 + 2, bg_bank0 * 4 + 3, bg_bank1 * 4,
+      bg_bank1 * 4 + 1, bg_bank1 * 4 + 2, bg_bank1 * 4 + 3, spr_bank0 * 4,
+      spr_bank0 * 4 + 1, spr_bank0 * 4 + 2, spr_bank0 * 4 + 3, spr_bank1 * 4,
+      spr_bank1 * 4 + 1, spr_bank1 * 4 + 2, spr_bank1 * 4 + 3);
+}
+
+static void set_chr8k_bg_spr_map(E *e, u16 bank, u16 bg_bank, u16 spr_bank) {
+  set_chr1k_bg_spr_map(
+      e, bank * 8, bank * 8 + 1, bank * 8 + 2, bank * 8 + 3, bank * 8 + 4,
+      bank * 8 + 5, bank * 8 + 6, bank * 8 + 7, bg_bank * 8, bg_bank * 8 + 1,
+      bg_bank * 8 + 2, bg_bank * 8 + 3, bg_bank * 8 + 4, bg_bank * 8 + 5,
+      bg_bank * 8 + 6, bg_bank * 8 + 7, spr_bank * 8, spr_bank * 8 + 1,
+      spr_bank * 8 + 2, spr_bank * 8 + 3, spr_bank * 8 + 4, spr_bank * 8 + 5,
+      spr_bank * 8 + 6, spr_bank * 8 + 7);
 }
 
 static void update_prg8k_map(E* e) {
@@ -1728,6 +1857,58 @@ static void mapper4_hkrom_prg_ram_write(E* e, u16 addr, u8 val) {
   }
 }
 
+static void mapper5_update_chr(E* e) {
+  M* m = &e->s.m;
+  bool sprite8x16 = e->s.p.ppuctrl & 0x20;
+  switch (m->mmc5.chr_mode) {
+  case 0:
+    if (sprite8x16) {
+      set_chr8k_bg_spr_map(e, m->chr_bank[7], m->chr_bg_bank[7],
+                           m->chr_spr_bank[7]);
+    } else {
+      set_chr8k_map(e, m->chr_bank[7]);
+    }
+    break;
+  case 1:
+    if (sprite8x16) {
+      set_chr4k_bg_spr_map(e, m->chr_bank[3], m->chr_bank[7], m->chr_bg_bank[3],
+                           m->chr_bg_bank[7], m->chr_spr_bank[3],
+                           m->chr_spr_bank[7]);
+    } else {
+      set_chr4k_map(e, m->chr_bank[3], m->chr_bank[7]);
+    }
+    break;
+  case 2:
+    if (sprite8x16) {
+      set_chr2k_bg_spr_map(e, m->chr_bank[1], m->chr_bank[3], m->chr_bank[5],
+                           m->chr_bank[7], m->chr_bg_bank[1], m->chr_bg_bank[3],
+                           m->chr_bg_bank[5], m->chr_bg_bank[7],
+                           m->chr_spr_bank[1], m->chr_spr_bank[3],
+                           m->chr_spr_bank[5], m->chr_spr_bank[7]);
+    } else {
+      set_chr2k_map(e, m->chr_bank[1], m->chr_bank[3], m->chr_bank[5],
+                    m->chr_bank[7]);
+    }
+    break;
+  case 3:
+    if (sprite8x16) {
+      set_chr1k_bg_spr_map(
+          e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2], m->chr_bank[3],
+          m->chr_bank[4], m->chr_bank[5], m->chr_bank[6], m->chr_bank[7],
+          m->chr_bg_bank[0], m->chr_bg_bank[1], m->chr_bg_bank[2],
+          m->chr_bg_bank[3], m->chr_bg_bank[4], m->chr_bg_bank[5],
+          m->chr_bg_bank[6], m->chr_bg_bank[7], m->chr_spr_bank[0],
+          m->chr_spr_bank[1], m->chr_spr_bank[2], m->chr_spr_bank[3],
+          m->chr_spr_bank[4], m->chr_spr_bank[5], m->chr_spr_bank[6],
+          m->chr_spr_bank[7]);
+    } else {
+      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                    m->chr_bank[6], m->chr_bank[7]);
+    }
+  }
+}
+
 static void mapper5_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   LOG("mapper5_write(%04x, %02x)\n", addr, val);
@@ -1755,7 +1936,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
     case 0x5101:
       LOG("✓  CHR mode = %u\n", val & 3);
       m->mmc5.chr_mode = val & 3;
-      goto update_chr;
+      mapper5_update_chr(e);
+      break;
     case 0x5102:
       printf("✓  PRG ram protect 1 = %u\n", val & 3);
       break;
@@ -1766,11 +1948,13 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       printf("✓  Extended RAM mode = %u\n", val & 3);
       break;
     case 0x5105:
-      LOG("✓  Nametable mapping = %02x\n", val);
-      if ((val >> 0) <= 2) m->nt_bank[0] = (val >> 0) & 3;
-      if ((val >> 2) <= 2) m->nt_bank[1] = (val >> 2) & 3;
-      if ((val >> 4) <= 2) m->nt_bank[2] = (val >> 4) & 3;
-      if ((val >> 6) <= 2) m->nt_bank[3] = (val >> 6) & 3;
+      LOG("✓  [%3u:%3u] Nametable mapping = %u:%u:%u:%u\n", e->s.p.state % 341,
+          e->s.p.state / 341, (val >> 0) & 3, (val >> 2) & 3, (val >> 4) & 3,
+          (val >> 6) & 3);
+      if (((val >> 0) & 3) <= 1) m->nt_bank[0] = (val >> 0) & 3;
+      if (((val >> 2) & 3) <= 1) m->nt_bank[1] = (val >> 2) & 3;
+      if (((val >> 4) & 3) <= 1) m->nt_bank[2] = (val >> 4) & 3;
+      if (((val >> 6) & 3) <= 1) m->nt_bank[3] = (val >> 6) & 3;
       update_nt_map_banking(e);
       break;
     case 0x5106:
@@ -1795,17 +1979,24 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       goto update_prg;
     }
 
-    case 0x5120 ... 0x5127:
-      LOG("✓  CHR bankswitching %04x..%04x = %02x\n", (addr - 0x5120) * 0x400,
-          (addr - 0x5120) * 0x400 + 0x3ff, val);
-      m->chr_bank[addr - 0x5120] = val;
-      goto update_chr;
-
-    case 0x5128 ... 0x512b:
-      printf("✓  CHR BG bankswitching %04x..%04x = %02x\n",
-             (addr - 0x5128) * 0x400,
-             (addr - 0x5128) * 0x400 + 0x3ff, val);
+    case 0x5120 ... 0x5127: {
+      u8 bankidx = addr - 0x5120;
+      LOG("✓  CHR bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
+          bankidx * 0x400 + 0x3ff, val);
+      m->chr_bank[bankidx] = m->chr_spr_bank[bankidx] = val;
+      mapper5_update_chr(e);
       break;
+    }
+
+    case 0x5128 ... 0x512b: {
+      u8 bankidx = addr - 0x5128;
+      LOG("✓  CHR BG bankswitching %04x..%04x = %02x\n",
+          bankidx * 0x400, bankidx * 0x400 + 0x3ff, val);
+      m->chr_bank[bankidx] = m->chr_bank[bankidx + 4] = val;
+      m->chr_bg_bank[bankidx] = m->chr_bg_bank[bankidx + 4] = val;
+      mapper5_update_chr(e);
+      break;
+    }
 
     case 0x5130:
       printf("✓  CHR bank upper bits = %u\n", val & 3);
@@ -1824,21 +2015,23 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       break;
 
     case 0x5203:
-      printf("✓  IRQ scanline compare value = %u\n", val);
-      m->mmc5.irq_compare = val;
+      LOG("✓  IRQ scanline compare value = %u\n", val);
+      m->mmc5.scan_cmp = val;
       break;
 
     case 0x5204:
-      printf("✓  IRQ status = %u\n", val);
+      LOG("✓  Write IRQ status = %u\n", val);
       m->mmc5.irq_enable = !!(val & 0x80);
       break;
 
     case 0x5205:
-      printf("✓  Unsigned 8x8 multiplier lo = %u\n", val);
+      LOG("✓  Unsigned 8x8 multiplier lo = %u\n", val);
+      m->mmc5.mullo = val;
       break;
 
     case 0x5206:
-      printf("✓  Unsigned 8x8 multiplier hi = %u\n", val);
+      LOG("✓  Unsigned 8x8 multiplier hi = %u\n", val);
+      m->mmc5.mulhi = val;
       break;
 
     case 0x5207:
@@ -1857,9 +2050,12 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       printf("✓  Hardware timer hi = %02x\n", val);
       break;
 
-    case 0x5c00 ... 0x5fff:
-      printf("✓  Internal extended RAM = %02x\n", val);
+    case 0x5c00 ... 0x5fff: {
+      u16 ramaddr = 0x1000 + (addr - 0x5c00);
+      e->s.p.ram[0x1000 + (addr - 0x5c00)] = val;
+      LOG("✓  Write internal RAM %04x <= %02x\n", ramaddr, val);
       break;
+    }
 
     case 0x8000 ... 0xffff: {
       u16 bank = (addr >> 13) & 3;
@@ -1891,29 +2087,19 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
           break;
       }
       break;
+  }
+}
 
-    update_chr:
-      switch (m->mmc5.chr_mode) {
-        case 0:
-          set_chr8k_map(e, m->chr_bank[7]);
-          break;
-        case 1:
-          set_chr4k_map(e, m->chr_bank[3], m->chr_bank[7]);
-          break;
-        case 2:
-          set_chr2k_map(e, m->chr_bank[1], m->chr_bank[3], m->chr_bank[5],
-                        m->chr_bank[7]);
-          break;
-        case 3:
-          set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
-                        m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
-                        m->chr_bank[6], m->chr_bank[7]);
-      }
-      break;
+static void mapper5_io_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (addr == 0x2000) {
+    mapper5_update_chr(e);
   }
 }
 
 static u8 mapper5_read(E* e, u16 addr) {
+  M* m = &e->s.m;
+
   switch (addr) {
     case 0x5010:
       printf("✓  PCM Mode/IRQ\n");
@@ -1923,28 +2109,38 @@ static u8 mapper5_read(E* e, u16 addr) {
       printf("✓  APU status\n");
       break;
 
-    case 0x5204:
-      printf("✓  IRQ status\n");
-      break;
+    case 0x5204: {
+      u8 result = (m->mmc5.irq_pending << 7) | (m->mmc5.in_frame << 6) |
+                  (e->s.c.open_bus & 0x3f);
+      m->mmc5.irq_pending = false;
+      e->s.c.irq &= ~IRQ_MAPPER;
+      LOG("✓  Read IRQ status = %02x\n", result);
+      return result;
+    }
 
     case 0x5205:
-      printf("✓  Multiplier lo\n");
-      break;
+      LOG("✓  Multiplier lo\n");
+      return (m->mmc5.mullo * m->mmc5.mulhi) & 0xff;
 
     case 0x5206:
-      printf("✓  Multiplier hi\n");
-      break;
+      LOG("✓  Multiplier hi\n");
+      return (m->mmc5.mullo * m->mmc5.mulhi) >> 8;
 
     case 0x5209:
       printf("✓  Hardware timer status\n");
       break;
 
-    case 0x5c00 ... 0x5fff:
-      printf("✓  Internal extended RAM\n");
-      break;
+    case 0x5c00 ... 0x5fff: {
+      u16 ramaddr = 0x1000 + (addr - 0x5c00);
+      u8 result = e->s.p.ram[ramaddr];
+      LOG("✓  Read internal RAM %04x >= %02x\n", ramaddr, result);
+      return result;
+    }
 
     default:
-      printf("✓  unknown read(%04x)\n", addr);
+      if (addr > 0x4017) {
+        printf("✓  unknown read(%04x)\n", addr);
+      }
       break;
   }
   return e->s.c.open_bus;
@@ -1956,6 +2152,18 @@ static u8 mapper5_prg_ram_read(E *e, u16 addr) {
 
 static void mapper5_prg_ram_write(E *e, u16 addr, u8 val) {
   mapper_prg_ram_write(e, addr, val);
+}
+
+static void mapper5_cpu_step(E* e) {
+  M* m = &e->s.m;
+  if (e->s.cy - e->s.p.last_vram_access_cy >= 3 * 3) {
+    if (m->mmc5.in_frame) {
+      LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", e->s.p.state % 341,
+          e->s.p.state / 341);
+    }
+    m->mmc5.in_frame = false;
+    m->mmc5.lastaddr = ~0;
+  }
 }
 
 static void mapper7_write(E *e, u16 addr, u8 val) {
@@ -4558,9 +4766,14 @@ static Result init_mapper(E *e) {
   case BOARD_MAPPER_5:
     e->mapper_read = mapper5_read;
     e->mapper_write = mapper5_write;
+    e->mapper_io_write = mapper5_io_write;
     e->mapper_prg_ram_write = mapper5_prg_ram_write;
     e->mapper_prg_ram_read = mapper5_prg_ram_read;
+    e->mapper_cpu_step = mapper5_cpu_step;
+    e->mapper_update_nt_map = update_nt_map_banking;
+    e->s.m.has_mmc5_irq = true;
     e->s.m.prg_bank[3] = 0xff;
+    e->s.m.mmc5.lastaddr = ~0;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
