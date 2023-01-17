@@ -989,11 +989,13 @@ static inline void inc_ppu_addr(P* p) {
   p->v = (p->v + ((p->ppuctrl & 4) ? 32 : 1)) & 0x3fff;
 }
 
-static inline void read_joyp(E *e, bool write) {
+static inline void read_joyp(E *e, bool write, u8 val) {
   if (e->joypad_info.callback && (write || e->s.j.S)) {
+    bool strobe = write && val == 1;
+    e->s.c.read_input = true;
     JoypadButtons btns[2];
     ZERO_MEMORY(btns);
-    e->joypad_info.callback(btns, e->joypad_info.user_data);
+    e->joypad_info.callback(btns, e->joypad_info.user_data, strobe);
     for (int i = 0; i < 2; ++i) {
       e->s.j.joyp[i] = (btns[i].right << 7) | (btns[i].left << 6) |
                        (btns[i].down << 5) | (btns[i].up << 4) |
@@ -1059,13 +1061,13 @@ static u8 cpu_read(E *e, u16 addr) {
         return result;
       }
       case 0x16: { // JOY1
-        read_joyp(e, false);
+        read_joyp(e, false, 0);
         u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[0] & 1);
         e->s.j.joyp[0] >>= 1;
         return result;
       }
       case 0x17: { // JOY2
-        read_joyp(e, false);
+        read_joyp(e, false, 0);
         u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[1] & 1);
         e->s.j.joyp[1] >>= 1;
         return result;
@@ -1273,7 +1275,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         break;
       }
       case 0x16: {  // JOY1
-        read_joyp(e, true);
+        read_joyp(e, true, val & 1);
         e->s.j.S = val & 1;
         break;
       }

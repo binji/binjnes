@@ -68,6 +68,32 @@ void joypad_init_file_data(JoypadBuffer*, FileData*);
 Result joypad_write(JoypadBuffer*, FileData*);
 Result joypad_read(const FileData*, JoypadBuffer** out_buffer);
 
+typedef struct {
+  u32 latch;
+  u8 buttons[2];
+  u8 padding[2];
+} JoypadMovieFrame;
+
+typedef struct {
+  JoypadMovieFrame* frames;
+  u32 size;
+} JoypadMovieBuffer;
+
+typedef struct {
+  struct Emulator* e;
+  JoypadBuffer* buffer;
+  JoypadMovieBuffer* movie_buffer;
+  u32 current;
+  u32 latch_count;
+  JoypadButtons last_buttons;
+} JoypadMoviePlayback;
+
+Result joypad_read_movie(const FileData *, JoypadMovieBuffer **out_buffer);
+void emulator_set_joypad_movie_playback_callback(struct Emulator *,
+                                                 JoypadBuffer *,
+                                                 JoypadMovieBuffer *,
+                                                 JoypadMoviePlayback *);
+
 #ifdef __cplusplus
 }
 #endif

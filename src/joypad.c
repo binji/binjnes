@@ -258,7 +258,8 @@ Result joypad_read(const FileData* file_data, JoypadBuffer** out_buffer) {
 }
 
 static void joypad_playback_callback(struct JoypadButtons* joyp,
-                                     void* user_data) {
+                                     void* user_data,
+                                     bool strobe) {
   bool changed = false;
   JoypadPlayback* playback = user_data;
   Ticks ticks = emulator_get_ticks(playback->e);
@@ -303,4 +304,99 @@ void emulator_set_joypad_playback_callback(Emulator* e, JoypadBuffer* buffer,
                                            JoypadPlayback* playback) {
   init_joypad_playback_state(playback, buffer, e);
   emulator_set_joypad_callback(e, joypad_playback_callback, playback);
+}
+
+Result joypad_read_movie(const FileData *file_data,
+                         JoypadMovieBuffer **out_buffer) {
+  CHECK_MSG(file_data->size % sizeof(JoypadMovieFrame) == 0,
+            "Expected joypad file size to be multiple of %zu\n",
+            sizeof(JoypadState));
+  size_t size = file_data->size / sizeof(JoypadMovieFrame);
+  size_t i;
+  Ticks last_ticks = 0;
+  for (i = 0; i < size; ++i) {
+    JoypadMovieFrame* frame = (JoypadMovieFrame*)file_data->data + i;
+    size_t j;
+    CHECK_MSG(frame->latch != 0, "Expected latch to be non-zero at index %zu\n",
+              i);
+    for (j = 0; j < ARRAY_SIZE(frame->padding); ++j) {
+      CHECK_MSG(frame->padding[j] == 0, "Expected padding to be zero, got %u\n",
+                frame->padding[j]);
+    }
+  }
+
+  JoypadMovieBuffer* buffer = xcalloc(1, sizeof(JoypadMovieBuffer));
+  buffer->size = size;
+  buffer->frames = xcalloc(size, sizeof(JoypadMovieFrame));
+  memcpy(buffer->frames, file_data->data,
+         buffer->size * sizeof(JoypadMovieFrame));
+  *out_buffer = buffer;
+  return OK;
+  ON_ERROR_RETURN;
+}
+
+static void init_joypad_movie_playback_state(JoypadMoviePlayback *playback,
+                                             JoypadBuffer *buffer,
+                                             JoypadMovieBuffer *movie_buffer,
+                                             Emulator *e) {
+  playback->e = e;
+  playback->buffer = buffer;
+  playback->movie_buffer = movie_buffer;
+  playback->current = 0;
+  playback->latch_count = 0;
+  memset(&playback->last_buttons, 0, sizeof(JoypadButtons));
+}
+
+static void joypad_movie_playback_callback(struct JoypadButtons *joyp,
+                                           void *user_data,
+                                           bool strobe) {
+  bool changed = false;
+  JoypadMoviePlayback* playback = user_data;
+
+  if (playback->current < playback->movie_buffer->size && strobe) {
+    printf("[#%u] movie playback (%u/%u): latch=%u=>%u (==%u) ",
+           playback->e->s.p.frame, playback->current,
+           playback->movie_buffer->size, playback->latch_count,
+           playback->latch_count + 1,
+           playback->movie_buffer->frames[playback->current].latch);
+    if (++playback->latch_count ==
+        playback->movie_buffer->frames[playback->current].latch) {
+      changed = true;
+      playback->last_buttons = joypad_unpack_buttons(
+          playback->movie_buffer->frames[playback->current].buttons[0]);
+      ++playback->current;
+      playback->latch_count = 0;
+      printf("buttons=%c%c%c%c%c%c%c%c\n",
+             playback->last_buttons.down ? 'D' : '_',
+             playback->last_buttons.up ? 'U' : '_',
+             playback->last_buttons.left ? 'L' : '_',
+             playback->last_buttons.right ? 'R' : '_',
+             playback->last_buttons.start ? 'T' : '_',
+             playback->last_buttons.select ? 'E' : '_',
+             playback->last_buttons.B ? 'B' : '_',
+             playback->last_buttons.A ? 'A' : '_');
+      joypad_append_if_new(playback->buffer, &playback->last_buttons,
+                           emulator_get_ticks(playback->e));
+    } else {
+      printf("\n");
+    }
+  }
+
+#if DEBUG_JOYPAD_BUTTONS
+  if (changed) {
+    print_joypad_buttons(emulator_get_ticks(playback->e),
+                         playback->last_buttons);
+  }
+#else
+  (void)changed;
+#endif
+
+  *joyp = playback->last_buttons;
+}
+
+void emulator_set_joypad_movie_playback_callback(
+    struct Emulator *e, JoypadBuffer *buffer, JoypadMovieBuffer *movie_buffer,
+    JoypadMoviePlayback *playback) {
+  init_joypad_movie_playback_state(playback, buffer, movie_buffer, e);
+  emulator_set_joypad_callback(e, joypad_movie_playback_callback, playback);
 }

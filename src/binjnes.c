@@ -56,6 +56,7 @@ typedef struct StatusText {
 
 static const char *s_rom_filename;
 static const char *s_read_joypad_filename;
+static const char *s_read_joypad_movie_filename;
 static const char *s_write_joypad_filename;
 static const char *s_save_filename;
 static const char *s_save_state_filename;
@@ -74,6 +75,8 @@ static atomic_size_t s_audio_buffer_write = 0;
 static bool s_key_state[KEYCODE_COUNT];
 static JoypadBuffer *s_joypad_buffer;
 static JoypadPlayback s_joypad_playback;
+static JoypadMovieBuffer *s_joypad_movie_buffer;
+static JoypadMoviePlayback s_joypad_movie_playback;
 static RewindBuffer *s_rewind_buffer;
 static RewindState s_rewind_state;
 static Ticks s_last_ticks;
@@ -176,6 +179,7 @@ static void usage(int argc, char** argv) {
   PRINT_ERROR(
       "usage: %s [options] <file.nes>\n"
       "  -h,--help               help\n"
+      "  -m,--read-movie FILE    read movie input from FILE\n"
       "  -j,--read-joypad FILE   read joypad input from FILE\n"
       "  -J,--write-joypad FILE  write joypad input to FILE\n"
       "  -s,--seed SEED          random seed used for initializing RAM\n"
@@ -186,6 +190,7 @@ static void usage(int argc, char** argv) {
 static void parse_arguments(int argc, char** argv) {
   static const Option options[] = {
     {'h', "help", 0},
+    {'m', "read-movie", 1},
     {'j', "read-joypad", 1},
     {'J', "write-joypad", 1},
     {'s', "seed", 1},
@@ -221,6 +226,10 @@ static void parse_arguments(int argc, char** argv) {
 
           case 'j':
             s_read_joypad_filename = result.value;
+            break;
+
+          case 'm':
+            s_read_joypad_movie_filename = result.value;
             break;
 
           case 'J':
@@ -381,7 +390,7 @@ static void init_audio(void) {
   });
 }
 
-static void joypad_callback(JoypadButtons* joyp, void* user_data) {
+static void joypad_callback(JoypadButtons *joyp, void *user_data, bool strobe) {
   joyp->up = s_key_state[SAPP_KEYCODE_UP];
   joyp->down = s_key_state[SAPP_KEYCODE_DOWN];
   joyp->left = s_key_state[SAPP_KEYCODE_LEFT];
@@ -412,6 +421,14 @@ static void init_emulator(void) {
     file_data_delete(&file_data);
     emulator_set_joypad_playback_callback(e, s_joypad_buffer,
                                           &s_joypad_playback);
+  } else if (s_read_joypad_movie_filename) {
+    FileData file_data;
+    CHECK(SUCCESS(file_read(s_read_joypad_movie_filename, &file_data)));
+    CHECK(SUCCESS(joypad_read_movie(&file_data, &s_joypad_movie_buffer)));
+    file_data_delete(&file_data);
+    s_joypad_buffer = joypad_new();
+    emulator_set_joypad_movie_playback_callback(
+        e, s_joypad_buffer, s_joypad_movie_buffer, &s_joypad_movie_playback);
   } else {
     emulator_set_joypad_callback(e, joypad_callback, NULL);
     s_joypad_buffer = joypad_new();
@@ -582,7 +599,7 @@ static void rewind_end(void) {
                          s_rewind_state.joypad_playback.current);
       /* Append the current joypad state. */
       JoypadButtons buttons;
-      joypad_callback(&buttons, NULL);
+      joypad_callback(&buttons, NULL, false);
     }
     s_last_ticks = emulator_get_ticks(e);
   }
