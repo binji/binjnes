@@ -172,6 +172,10 @@ typedef struct {
   bool C, Z, I, D, V, N; // Flags.
   bool req_nmi, has_nmi, has_irq;
   u64 set_vec_cy;
+
+  // XXX
+  u32 lag_frames;
+  bool read_input;
 } C;
 
 typedef struct {

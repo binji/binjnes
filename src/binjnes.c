@@ -154,6 +154,14 @@ static void draw_str(int x, int y, RGBA color, const char* s) {
   }
 }
 
+static void draw_rect_str(int x, int y, RGBA rectcolor, RGBA strcolor,
+                          const char *s) {
+  size_t len = strlen(s);
+  fill_rect(x - 1, y - 1, x + len * (GLYPH_WIDTH + 1) + 1, y + GLYPH_HEIGHT + 1,
+            rectcolor);
+  draw_str(x, y, strcolor, s);
+}
+
 static void set_status_text(const char* fmt, ...) {
   va_list args;
   va_start(args, fmt);
@@ -165,13 +173,16 @@ static void set_status_text(const char* fmt, ...) {
 
 static void update_overlay(void) {
   clear_overlay();
+
+  char buf[128];
+  snprintf(buf, sizeof(buf), "f%u lag:%u", e->s.p.frame + 1, e->s.c.lag_frames);
+  draw_rect_str(STATUS_TEXT_X, STATUS_TEXT_Y - GLYPH_HEIGHT - 2,
+                MAKE_RGBA(224, 224, 224, 255), STATUS_TEXT_RGBA, buf);
+
   if (s_status_text.timeout) {
     --s_status_text.timeout;
-    fill_rect(STATUS_TEXT_X - 1, STATUS_TEXT_Y - 1,
-              STATUS_TEXT_X + s_status_text.len * (GLYPH_WIDTH + 1) + 1,
-              STATUS_TEXT_Y + GLYPH_HEIGHT + 1, MAKE_RGBA(224, 224, 224, 255));
-    draw_str(STATUS_TEXT_X, STATUS_TEXT_Y, STATUS_TEXT_RGBA,
-             s_status_text.data);
+    draw_rect_str(STATUS_TEXT_X, STATUS_TEXT_Y, MAKE_RGBA(224, 224, 224, 255),
+                  STATUS_TEXT_RGBA, s_status_text.data);
   }
 }
 

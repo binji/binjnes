@@ -373,6 +373,10 @@ static void ppu2(E *e) {
   if (e->s.cy != e->s.p.read_status_cy) {
     e->s.p.ppustatus |= 0x80;
   }
+  if (!e->s.c.read_input) {
+    e->s.c.lag_frames++;
+  }
+  e->s.c.read_input = false;
   e->s.event |= EMULATOR_EVENT_NEW_FRAME;
   DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
         e->s.p.ppustatus);
