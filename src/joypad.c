@@ -241,7 +241,7 @@ Result joypad_read(const FileData* file_data, JoypadBuffer** out_buffer) {
     size_t j;
     for (j = 0; j < ARRAY_SIZE(state->padding); ++j) {
       CHECK_MSG(state->padding[j] == 0, "Expected padding to be zero, got %u\n",
-                state->padding[i]);
+                state->padding[j]);
     }
     last_ticks = ticks;
   }
