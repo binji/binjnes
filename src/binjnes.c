@@ -497,6 +497,9 @@ static void run_until_ticks(Ticks until_ticks) {
       if (!s_rewind_state.rewinding) {
         rewind_append(s_rewind_buffer, e);
       }
+      if (s_step_frame) {
+        break;
+      }
     }
 
     if (event & EMULATOR_EVENT_AUDIO_BUFFER_FULL) {
