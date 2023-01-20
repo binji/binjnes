@@ -99,14 +99,16 @@ void joypad_delete(Joypad* joypad) {
   if (!joypad) {
     return;
   }
-  JoypadChunk* current = joypad->buffer->sentinel.next;
-  while (current != &joypad->buffer->sentinel) {
-    JoypadChunk* next = current->next;
-    xfree(current->data);
-    xfree(current);
-    current = next;
+  if (joypad->buffer) {
+    JoypadChunk *current = joypad->buffer->sentinel.next;
+    while (current != &joypad->buffer->sentinel) {
+      JoypadChunk *next = current->next;
+      xfree(current->data);
+      xfree(current);
+      current = next;
+    }
+    xfree(joypad->buffer);
   }
-  xfree(joypad->buffer);
   if (joypad->movie_buffer) {
     xfree(joypad->movie_buffer->frames);
     xfree(joypad->movie_buffer);
