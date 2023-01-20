@@ -191,6 +191,13 @@ static u8 ppu_read(E *e, u16 addr) {
   return result;
 }
 
+static void update_rgbapal(E *e) {
+  u8 mask = e->s.p.ppumask & 1 ? 0x30 : 0x3f;
+  for (int addr = 0; addr < 32; ++addr) {
+    e->s.p.rgbapal[addr] = s_nespal[e->s.p.palram[addr & 3 ? addr : 0] & mask];
+  }
+}
+
 static void ppu_write(E *e, u16 addr, u8 val) {
   do_a12_access(e, addr);
   switch ((addr >> 10) & 15) {
@@ -207,14 +214,10 @@ static void ppu_write(E *e, u16 addr, u8 val) {
         val &= 0x3f; addr &= 0x1f;
         if ((addr & 3) == 0) {
           palram[addr] = palram[addr ^ 0x10] = val;
-          if ((addr & 0xf) == 0) {
-            rgbapal[0] = rgbapal[4] = rgbapal[8] = rgbapal[12] = rgbapal[16] =
-                rgbapal[20] = rgbapal[24] = rgbapal[28] = s_nespal[val];
-          }
         } else {
           palram[addr] = val;
-          rgbapal[addr] = s_nespal[val];
         }
+        update_rgbapal(e);
         break;
       }
       // Fallthrough.
@@ -1126,6 +1129,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
       p->ppumask = val;
       p->next_enabled = !!(val & 0x18);
+      update_rgbapal(e);
       break;
     case 3: p->oamaddr = val; break;
     case 4:

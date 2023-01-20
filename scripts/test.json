@@ -113,10 +113,10 @@
   "dmc_tests": {
     "dir": "nes-test-roms/dmc_tests/",
     "tests": [
-      ["buffer_retained.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
-      ["latency.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
-      ["status_irq.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"],
-      ["status.nes", 100, "!59749e57702bdcefa183a25906d7d262960c33ef"]
+      ["buffer_retained.nes", 100, "!5f55ae884138a4f5fd1f743a1392ac445b716806"],
+      ["latency.nes", 100, "!5f55ae884138a4f5fd1f743a1392ac445b716806"],
+      ["status_irq.nes", 100, "!5f55ae884138a4f5fd1f743a1392ac445b716806"],
+      ["status.nes", 100, "!5f55ae884138a4f5fd1f743a1392ac445b716806"]
     ]
   },
 
