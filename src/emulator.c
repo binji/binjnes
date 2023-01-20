@@ -427,7 +427,7 @@ static void ppu31(E *e) {
   e->s.p.frame++;
 
   if ((e->s.p.oddframe ^= 1) &&
-      !!(e->s.p.ppumask & 8) == (e->s.cy - e->s.p.bg_changed_cy >= 2)) {
+      !!(e->s.p.ppumask & 0x18) == (e->s.cy - e->s.p.enabled_changed_cy >= 2)) {
     DEBUG("(%" PRIu64 "): skipping cycle\n", e->s.cy);
     ppu_step(e);
   }
@@ -1124,8 +1124,8 @@ static void cpu_write(E *e, u16 addr, u8 val) {
     case 1:
       DEBUG("(%" PRIu64 ") [%3u:%3u]: ppumask: %02x=>%02x\n", e->s.cy,
             p->state % 341, p->state / 341, p->ppumask, val);
-      if ((val ^ p->ppumask) & 8) {
-        p->bg_changed_cy = e->s.cy;
+      if ((val ^ p->ppumask) & 0x18) {
+        p->enabled_changed_cy = e->s.cy;
       }
       p->ppumask = val;
       p->next_enabled = !!(val & 0x18);

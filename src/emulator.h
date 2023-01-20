@@ -198,7 +198,7 @@ typedef struct {
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
   Spr spr;
   u64 read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy, a12_low_count,
-      bg_changed_cy;
+      enabled_changed_cy;
   Mirror mirror;
 } P;
 
