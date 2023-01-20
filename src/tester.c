@@ -225,9 +225,9 @@ int main(int argc, char** argv) {
               s_output_audio);
   }
 
-  u32 total_ticks = (u32)(s_frames * PPU_FRAME_TICKS);
-  u32 until_ticks = emulator_get_ticks(e) + total_ticks;
-  printf("frames = %u total_ticks = %u\n", s_frames, total_ticks);
+  Ticks total_ticks = (Ticks)s_frames * PPU_FRAME_TICKS;
+  Ticks until_ticks = emulator_get_ticks(e) + total_ticks;
+  printf("frames = %u total_ticks = %" PRIu64 "\n", s_frames, total_ticks);
   bool finish_at_next_frame = false;
   u32 animation_frame = 0; /* Will likely differ from PPU frame. */
   u32 next_input_frame = 0;
