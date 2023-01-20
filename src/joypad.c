@@ -15,6 +15,12 @@
 
 #define DEBUG_JOYPAD_BUTTONS 0
 
+#if 0
+#define LOG(...) printf(__VA_ARGS__)
+#else
+#define LOG(...) (void)0
+#endif
+
 #define JOYPAD_CHUNK_DEFAULT_CAPACITY 4096
 
 typedef struct {
@@ -431,11 +437,10 @@ static void init_joypad_movie_playback_state(JoypadMoviePlayback *playback,
 static void joypad_movie_playback_callback(struct JoypadButtons *joyp,
                                            void *user_data,
                                            bool strobe) {
-  bool changed = false;
   JoypadMoviePlayback* playback = user_data;
 
   Ticks ticks = emulator_get_ticks(playback->e);
-  if (ticks < playback->movie_buffer->ticks[playback->current_total_latch]) {
+  if (ticks <= playback->movie_buffer->ticks[playback->current_total_latch]) {
 #define GET_TICKS(x) (x)
 #define CMP_LT(x, y) ((x) < (y))
     Ticks* begin = playback->movie_buffer->ticks;
@@ -462,53 +467,42 @@ static void joypad_movie_playback_callback(struct JoypadButtons *joyp,
       last_buttons = frame->buttons[0];
     }
 
-    printf("> Resync %" PRIu64 ". New frame=%u, latch=%u\n", ticks,
-           playback->current_frame, playback->current_frame_latch);
-    changed = true;
+    LOG("   *** Resync %" PRIu64 ". New frame=%u, latch=%u total=%u\n", ticks,
+        playback->current_frame, playback->current_frame_latch,
+        playback->current_total_latch);
+    assert(playback->movie_buffer->ticks[playback->current_total_latch] == ticks);
   } else if (playback->current_frame < playback->movie_buffer->frame_count &&
              strobe) {
     JoypadMovieFrame *frame =
         &playback->movie_buffer->frames[playback->current_frame];
-    printf("[#%u] (%10" PRIu64
-           ") movie playback (%u/%u): latch=>%u (==%u) [total:%u] ",
-           playback->e->s.p.frame, ticks, playback->current_frame,
-           playback->movie_buffer->frame_count,
-           playback->current_frame_latch + 1, frame->latch,
-           playback->current_total_latch + 1);
+    LOG("[#%u] (%10" PRIu64
+        ") movie playback (%u/%u): latch=>%u (==%u) [total:%u] ",
+        playback->e->s.p.frame, ticks, playback->current_frame,
+        playback->movie_buffer->frame_count, playback->current_frame_latch + 1,
+        frame->latch, playback->current_total_latch + 1);
     if (++playback->current_total_latch > playback->max_latches) {
       playback->movie_buffer->ticks[++playback->max_latches] = ticks;
+    } else {
+      assert(playback->movie_buffer->ticks[playback->current_total_latch] ==
+             ticks);
     }
-    if (++playback->current_frame_latch == frame->latch) {
-      changed = true;
+    if (++playback->current_frame_latch >= frame->latch) {
+      assert(playback->current_frame_latch <= frame->latch);
       playback->last_buttons = joypad_unpack_buttons(frame->buttons[0]);
       ++playback->current_frame;
       playback->current_frame_latch = 0;
-      printf("buttons=%c%c%c%c%c%c%c%c\n",
-             playback->last_buttons.down ? 'D' : '_',
-             playback->last_buttons.up ? 'U' : '_',
-             playback->last_buttons.left ? 'L' : '_',
-             playback->last_buttons.right ? 'R' : '_',
-             playback->last_buttons.start ? 'T' : '_',
-             playback->last_buttons.select ? 'E' : '_',
-             playback->last_buttons.B ? 'B' : '_',
-             playback->last_buttons.A ? 'A' : '_');
-#if 0
-        joypad_append_if_new(playback->movie_buffer, &playback->last_buttons,
-                             emulator_get_ticks(playback->e));
-#endif
+      LOG("buttons=%c%c%c%c%c%c%c%c\n", playback->last_buttons.down ? 'D' : '_',
+          playback->last_buttons.up ? 'U' : '_',
+          playback->last_buttons.left ? 'L' : '_',
+          playback->last_buttons.right ? 'R' : '_',
+          playback->last_buttons.start ? 'T' : '_',
+          playback->last_buttons.select ? 'E' : '_',
+          playback->last_buttons.B ? 'B' : '_',
+          playback->last_buttons.A ? 'A' : '_');
     } else {
-      printf("\n");
+      LOG("\n");
     }
   }
-
-#if DEBUG_JOYPAD_BUTTONS
-  if (changed) {
-    print_joypad_buttons(emulator_get_ticks(playback->e),
-                         playback->last_buttons);
-  }
-#else
-  (void)changed;
-#endif
 
   *joyp = playback->last_buttons;
 }
