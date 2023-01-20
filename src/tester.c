@@ -183,7 +183,7 @@ error:
 int main(int argc, char** argv) {
   int result = 1;
   Emulator* e = NULL;
-  JoypadBuffer* joypad_buffer = NULL;
+  struct Joypad* joypad = NULL;
   FILE* output_audio_file = NULL;
 
   parse_options(argc, argv);
@@ -200,13 +200,11 @@ int main(int argc, char** argv) {
   e = emulator_new(&emulator_init);
   CHECK(e != NULL);
 
-  JoypadPlayback joypad_playback;
   if (s_joypad_filename) {
     FileData file_data;
     CHECK(SUCCESS(file_read(s_joypad_filename, &file_data)));
-    CHECK(SUCCESS(joypad_read(&file_data, &joypad_buffer)));
+    CHECK(SUCCESS(joypad_new_for_playback(e, &file_data, &joypad)));
     file_data_delete(&file_data);
-    emulator_set_joypad_playback_callback(e, joypad_buffer, &joypad_playback);
   }
 
   if (s_output_audio) {
@@ -275,8 +273,8 @@ error:
   if (s_output_audio) {
     fclose(output_audio_file);
   }
-  if (joypad_buffer) {
-    joypad_delete(joypad_buffer);
+  if (joypad) {
+    joypad_delete(joypad);
   }
   if (e) {
     emulator_delete(e);

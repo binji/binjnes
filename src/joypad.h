@@ -4,8 +4,8 @@
  * This software may be modified and distributed under the terms
  * of the MIT license.  See the LICENSE file for details.
  */
-#ifndef BINJGB_JOYPAD_H_
-#define BINJGB_JOYPAD_H_
+#ifndef BINJNES_JOYPAD_H_
+#define BINJNES_JOYPAD_H_
 
 #include "common.h"
 
@@ -14,88 +14,38 @@ extern "C" {
 #endif
 
 struct Emulator;
+typedef void (*JoypadCallback)(struct JoypadButtons joyp[2], void *user_data,
+                               bool strobe);
 
-typedef struct {
-  Ticks ticks;
-  u8 buttons;
-  u8 padding[7];
-} JoypadState;
+typedef struct Joypad Joypad;
 
-typedef struct JoypadChunk {
-  JoypadState* data;
-  size_t size;
-  size_t capacity;
-  struct JoypadChunk *next, *prev;
-} JoypadChunk;
-
-typedef struct {
-  JoypadChunk* chunk;
-  JoypadState* state;
-} JoypadStateIter;
-
-typedef struct {
-  JoypadChunk sentinel;
-  JoypadButtons last_buttons;
-} JoypadBuffer;
+typedef enum {
+  JOYPAD_MODE_USER,
+  JOYPAD_MODE_PLAYBACK,
+  JOYPAD_MODE_MOVIE,
+} JoypadMode;
 
 typedef struct {
   size_t used_bytes;
   size_t capacity_bytes;
 } JoypadStats;
 
-typedef struct {
-  struct Emulator* e;
-  JoypadBuffer* buffer;
-  JoypadStateIter current;
-  JoypadStateIter next;
-} JoypadPlayback;
+struct Joypad *joypad_new_for_user(struct Emulator *, JoypadCallback,
+                                   void *user_data);
+Result joypad_new_for_playback(struct Emulator *, FileData *,
+                               struct Joypad **out);
+Result joypad_new_for_movie(struct Emulator *, FileData *, struct Joypad **out);
+void joypad_delete(struct Joypad*);
 
-JoypadBuffer* joypad_new(void);
-void joypad_delete(JoypadBuffer*);
-void joypad_append(JoypadBuffer*, JoypadButtons*, Ticks);
-void joypad_append_if_new(JoypadBuffer*, JoypadButtons*, Ticks);
-JoypadStateIter joypad_find_state(JoypadBuffer*, Ticks);
-void joypad_truncate_to(JoypadBuffer*, JoypadStateIter);
-JoypadStateIter joypad_get_next_state(JoypadStateIter);
-u8 joypad_pack_buttons(JoypadButtons*);
-JoypadButtons joypad_unpack_buttons(u8);
-JoypadStats joypad_get_stats(JoypadBuffer*);
-
-void emulator_set_joypad_playback_callback(struct Emulator*, JoypadBuffer*,
-                                           JoypadPlayback*);
-
-void joypad_init_file_data(JoypadBuffer*, FileData*);
-Result joypad_write(JoypadBuffer*, FileData*);
-Result joypad_read(const FileData*, JoypadBuffer** out_buffer);
-
-typedef struct {
-  u32 latch;
-  u8 buttons[2];
-  u8 padding[2];
-} JoypadMovieFrame;
-
-typedef struct {
-  JoypadMovieFrame* frames;
-  u32 size;
-} JoypadMovieBuffer;
-
-typedef struct {
-  struct Emulator* e;
-  JoypadBuffer* buffer;
-  JoypadMovieBuffer* movie_buffer;
-  u32 current;
-  u32 latch_count;
-  JoypadButtons last_buttons;
-} JoypadMoviePlayback;
-
-Result joypad_read_movie(const FileData *, JoypadMovieBuffer **out_buffer);
-void emulator_set_joypad_movie_playback_callback(struct Emulator *,
-                                                 JoypadBuffer *,
-                                                 JoypadMovieBuffer *,
-                                                 JoypadMoviePlayback *);
+void joypad_append_if_new(struct Joypad *, JoypadButtons *, Ticks);
+void joypad_begin_rewind_playback(struct Joypad *);
+void joypad_end_rewind_playback(struct Joypad *);
+void joypad_truncate_to_current(struct Joypad *);
+void joypad_write(struct Joypad *, FileData *);
+JoypadStats joypad_get_stats(Joypad*);
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif /* BINJGB_JOYPAD_H_ */
+#endif /* BINJNES_JOYPAD_H_ */

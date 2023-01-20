@@ -44,7 +44,6 @@
 
 typedef struct {
   RewindResult result;
-  JoypadPlayback joypad_playback;
   bool rewinding;
 } RewindState;
 
@@ -73,10 +72,7 @@ static f32 s_audio_buffer[AUDIO_FRAMES * AUDIO_CHANNELS * 5 + 1];
 static atomic_size_t s_audio_buffer_read = 0;
 static atomic_size_t s_audio_buffer_write = 0;
 static bool s_key_state[KEYCODE_COUNT];
-static JoypadBuffer *s_joypad_buffer;
-static JoypadPlayback s_joypad_playback;
-static JoypadMovieBuffer *s_joypad_movie_buffer;
-static JoypadMoviePlayback s_joypad_movie_playback;
+static Joypad *s_joypad;
 static RewindBuffer *s_rewind_buffer;
 static RewindState s_rewind_state;
 static Ticks s_last_ticks;
@@ -412,7 +408,7 @@ static void joypad_callback(JoypadButtons *joyp, void *user_data, bool strobe) {
   joyp->select = s_key_state[SAPP_KEYCODE_TAB];
 
   Ticks ticks = emulator_get_ticks(e);
-  joypad_append_if_new(s_joypad_buffer, joyp, ticks);
+  joypad_append_if_new(s_joypad, joyp, ticks);
 }
 
 static void init_emulator(void) {
@@ -428,21 +424,15 @@ static void init_emulator(void) {
   if (s_read_joypad_filename) {
     FileData file_data;
     CHECK(SUCCESS(file_read(s_read_joypad_filename, &file_data)));
-    CHECK(SUCCESS(joypad_read(&file_data, &s_joypad_buffer)));
+    CHECK(SUCCESS(joypad_new_for_playback(e, &file_data, &s_joypad)));
     file_data_delete(&file_data);
-    emulator_set_joypad_playback_callback(e, s_joypad_buffer,
-                                          &s_joypad_playback);
   } else if (s_read_joypad_movie_filename) {
     FileData file_data;
     CHECK(SUCCESS(file_read(s_read_joypad_movie_filename, &file_data)));
-    CHECK(SUCCESS(joypad_read_movie(&file_data, &s_joypad_movie_buffer)));
+    CHECK(SUCCESS(joypad_new_for_movie(e, &file_data, &s_joypad)));
     file_data_delete(&file_data);
-    s_joypad_buffer = joypad_new();
-    emulator_set_joypad_movie_playback_callback(
-        e, s_joypad_buffer, s_joypad_movie_buffer, &s_joypad_movie_playback);
   } else {
-    emulator_set_joypad_callback(e, joypad_callback, NULL);
-    s_joypad_buffer = joypad_new();
+    s_joypad = joypad_new_for_user(e, joypad_callback, NULL);
   }
 
   s_rewind_buffer = rewind_new(
@@ -568,11 +558,9 @@ static void rewind_by(Ticks delta) {
     assert(emulator_get_ticks(e) == s_rewind_state.result.info->ticks);
 
     if (emulator_get_ticks(e) < then) {
-      JoypadCallbackInfo old_jci = emulator_get_joypad_callback(e);
-      emulator_set_joypad_playback_callback(e, s_joypad_buffer,
-                                            &s_rewind_state.joypad_playback);
+      joypad_begin_rewind_playback(s_joypad);
       run_until_ticks(then);
-      emulator_set_joypad_callback(e, old_jci.callback, old_jci.user_data);
+      joypad_end_rewind_playback(s_joypad);
     }
   }
 
@@ -608,13 +596,7 @@ static void rewind_end(void) {
 
   if (s_rewind_state.result.info) {
     rewind_truncate_to(s_rewind_buffer, e, &s_rewind_state.result);
-    if (!s_read_joypad_filename) {
-      joypad_truncate_to(s_joypad_buffer,
-                         s_rewind_state.joypad_playback.current);
-      /* Append the current joypad state. */
-      JoypadButtons buttons;
-      joypad_callback(&buttons, NULL, false);
-    }
+    joypad_truncate_to_current(s_joypad);
     s_last_ticks = emulator_get_ticks(e);
   }
 
@@ -665,8 +647,7 @@ static void frame(void)  {
 static void cleanup(void) {
   if (s_write_joypad_filename) {
     FileData file_data;
-    joypad_init_file_data(s_joypad_buffer, &file_data);
-    joypad_write(s_joypad_buffer, &file_data);
+    joypad_write(s_joypad, &file_data);
     file_write(s_write_joypad_filename, &file_data);
     file_data_delete(&file_data);
   } else {
