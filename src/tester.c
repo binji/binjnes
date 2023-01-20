@@ -27,6 +27,7 @@
 #define PPU_FRAME_TICKS 89342
 
 static const char* s_joypad_filename;
+static const char *s_joypad_movie_filename;
 static int s_frames = DEFAULT_FRAMES;
 static const char* s_output_ppm;
 static const char* s_output_audio;
@@ -65,6 +66,7 @@ void usage(int argc, char** argv) {
   static const char usage[] =
       "usage: %s [options] <in.nes>\n"
       "  -h,--help                help\n"
+      "  -m,--movie FILE          read movie input from FILE\n"
       "  -j,--joypad FILE         read joypad input from FILE\n"
       "  -f,--frames N            run for N frames (default: %u)\n"
       "  -o,--output FILE         output PPM file to FILE\n"
@@ -90,6 +92,7 @@ static f64 get_time_sec(void) {
 void parse_options(int argc, char**argv) {
   static const Option options[] = {
     {'h', "help", 0},
+    {'m', "read-movie", 1},
     {'j', "joypad", 1},
     {'f', "frames", 1},
     {'o', "output", 1},
@@ -128,6 +131,10 @@ void parse_options(int argc, char**argv) {
 
           case 'j':
             s_joypad_filename = result.value;
+            break;
+
+          case 'm':
+            s_joypad_movie_filename = result.value;
             break;
 
           case 'f':
@@ -204,6 +211,11 @@ int main(int argc, char** argv) {
     FileData file_data;
     CHECK(SUCCESS(file_read(s_joypad_filename, &file_data)));
     CHECK(SUCCESS(joypad_new_for_playback(e, &file_data, &joypad)));
+    file_data_delete(&file_data);
+  } else if (s_joypad_movie_filename) {
+    FileData file_data;
+    CHECK(SUCCESS(file_read(s_joypad_movie_filename, &file_data)));
+    CHECK(SUCCESS(joypad_new_for_movie(e, &file_data, &joypad)));
     file_data_delete(&file_data);
   }
 
