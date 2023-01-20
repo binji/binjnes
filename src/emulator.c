@@ -203,7 +203,7 @@ static void ppu_write(E *e, u16 addr, u8 val) {
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      e->ppu_map_write[addr >> 10][addr & 0x3ff] = val;
+      e->ppu_map_write[(addr >> 10) & 15][addr & 0x3ff] = val;
       break;
 
     case 15:
@@ -223,7 +223,7 @@ static void ppu_write(E *e, u16 addr, u8 val) {
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
-      e->ppu_map_write[addr >> 10][addr & 0x3ff] = val;
+      e->ppu_map_write[(addr >> 10) & 15][addr & 0x3ff] = val;
       DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%3u:%3u)\n", e->s.cy,
              addr, val, e->s.p.state % 341, e->s.p.state / 341);
       break;
