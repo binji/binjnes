@@ -37,16 +37,16 @@ EmulatorEvent emulator_run_until_f64(Emulator* e, f64 until_ticks_f64) {
   return emulator_run_until(e, (Ticks)until_ticks_f64);
 }
 
-static void default_joypad_callback(JoypadButtons* joyp, void* user_data) {
-  JoypadBuffer* joypad_buffer = user_data;
+static void default_joypad_callback(JoypadButtons *joyp, void *user_data,
+                                    bool strobe) {
+  Joypad* joypad = user_data;
   *joyp = s_buttons;
   Ticks ticks = emulator_get_ticks(e);
-  joypad_append_if_new(joypad_buffer, joyp, ticks);
+  joypad_append_if_new(joypad, joyp, ticks);
 }
 
-void emulator_set_default_joypad_callback(Emulator* e,
-                                          JoypadBuffer* joypad_buffer) {
-  emulator_set_joypad_callback(e, default_joypad_callback, joypad_buffer);
+Joypad* joypad_new_simple(Emulator *e) {
+  return joypad_new_for_user(e, default_joypad_callback, NULL);
 }
 
 #define DEFINE_JOYP_SET(name) \

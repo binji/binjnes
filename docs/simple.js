@@ -94,9 +94,7 @@ class Emulator {
     this.audio = new Audio(module, this.e);
     this.video = new Video(module, this.e, $('canvas'));
 
-    this.joypadBufferPtr = this.module._joypad_new();
-    this.module._emulator_set_default_joypad_callback(this.e,
-                                                      this.joypadBufferPtr);
+    this.joypadPtr = this.module._joypad_new_simple(this.e);
 
     this.lastRafSec = 0;
     this.leftoverTicks = 0;
@@ -108,7 +106,7 @@ class Emulator {
   destroy() {
     this.unbindKeys();
     this.cancelAnimationFrame();
-    this.module._joypad_delete(this.joypadBufferPtr);
+    this.module._joypad_delete(this.joypadPtr);
     this.module._emulator_delete(this.e);
     this.module._free(this.romDataPtr);
   }
@@ -235,9 +233,10 @@ class Emulator {
 class Audio {
   constructor(module, e) {
     this.module = module;
-    this.buffer = makeWasmBuffer(
-        this.module, this.module._get_audio_buffer_ptr(e),
-        this.module._get_audio_buffer_capacity(e));
+
+    this.buffer = new Float32Array(module.HEAP8.buffer,
+      this.module._get_audio_buffer_ptr(e),
+      this.module._get_audio_buffer_capacity(e));
     this.startSec = 0;
     this.resume();
   }
@@ -250,12 +249,10 @@ class Audio {
     const volume = vm.volume;
     this.startSec = (this.startSec || nowPlusLatency);
     if (this.startSec >= nowSec) {
-      const buffer = Audio.ctx.createBuffer(2, AUDIO_FRAMES, this.sampleRate);
-      const channel0 = buffer.getChannelData(0);
-      const channel1 = buffer.getChannelData(1);
+      const buffer = Audio.ctx.createBuffer(1, AUDIO_FRAMES, this.sampleRate);
+      const channel = buffer.getChannelData(0);
       for (let i = 0; i < AUDIO_FRAMES; i++) {
-        channel0[i] = this.buffer[2 * i] * volume / 255;
-        channel1[i] = this.buffer[2 * i + 1] * volume / 255;
+        channel[i] = this.buffer[i] * volume;
       }
       const bufferSource = Audio.ctx.createBufferSource();
       bufferSource.buffer = buffer;
