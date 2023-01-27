@@ -43,19 +43,17 @@ static u32 s_random_seed = 0xcabba6e5;
 Result write_frame_ppm(Emulator* e, const char* filename) {
   FILE* f = fopen(filename, "wb");
   CHECK_MSG(f, "unable to open file \"%s\".\n", filename);
-  CHECK_MSG(fprintf(f, "P3\n%u %u\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT) >= 0,
+  CHECK_MSG(fprintf(f, "P6\n%u %u\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT) >= 0,
             "fprintf failed.\n");
   int x, y;
   RGBA* data = *emulator_get_frame_buffer(e);
   for (y = 0; y < SCREEN_HEIGHT; ++y) {
     for (x = 0; x < SCREEN_WIDTH; ++x) {
       RGBA pixel = *data++;
-      u8 b = (pixel >> 16) & 0xff;
-      u8 g = (pixel >> 8) & 0xff;
-      u8 r = (pixel >> 0) & 0xff;
-      CHECK_MSG(fprintf(f, "%3u %3u %3u ", r, g, b) >= 0, "fprintf failed.\n");
+      u8 channel[3] = {(pixel >> 0) & 0xff, (pixel >> 8) & 0xff,
+                       (pixel >> 16) & 0xff};
+      CHECK_MSG(fwrite(channel, sizeof(u8), 3, f) == 3, "fwrite failed.\n");
     }
-    CHECK_MSG(fputs("\n", f) >= 0, "fputs failed.\n");
   }
   fclose(f);
   return OK;
