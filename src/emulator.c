@@ -1070,13 +1070,13 @@ static u8 cpu_read(E *e, u16 addr) {
       case 0x16: { // JOY1
         read_joyp(e, false, 0);
         u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[0] & 1);
-        e->s.j.joyp[0] >>= 1;
+        e->s.j.joyp[0] = (e->s.j.joyp[0] >> 1) | 0x80;
         return result;
       }
       case 0x17: { // JOY2
         read_joyp(e, false, 0);
         u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[1] & 1);
-        e->s.j.joyp[1] >>= 1;
+        e->s.j.joyp[1] = (e->s.j.joyp[1] >> 1) | 0x80;
         return result;
       }
     }
