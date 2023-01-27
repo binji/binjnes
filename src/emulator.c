@@ -1017,6 +1017,10 @@ static inline void read_joyp(E *e, bool write, u8 val) {
 
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
 
+static void oam_write(E* e, u8 addr, u8 val) {
+  e->s.p.oam[addr] = (addr & 3) == 2 ? val & 0xe3 : val;
+}
+
 static u8 cpu_read(E *e, u16 addr) {
   if (LIKELY(addr >= 0x8000)) {
     return e->prg_rom_map[(addr >> 13) & 3][addr & 0x1fff];
@@ -1134,7 +1138,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
     case 3: p->oamaddr = val; break;
     case 4:
       // TODO: handle writes during rendering.
-      p->oam[p->oamaddr++] = val;
+      oam_write(e, p->oamaddr++, val);
       break;
     case 5:
       if ((p->w ^= 1)) {
@@ -3658,7 +3662,7 @@ static void cpu113(E* e, u8 busval) {
 }
 static void cpu114(E* e, u8 busval) {
   C* c = &e->s.c;
-  e->s.p.oam[c->oam.lo++] = c->T.lo;
+  oam_write(e, c->oam.lo++, c->T.lo);
   ++c->bus.lo;
 }
 static void cpu115(E* e, u8 busval) {
@@ -3666,7 +3670,7 @@ static void cpu115(E* e, u8 busval) {
 }
 static void cpu116(E* e, u8 busval) {
   C* c = &e->s.c;
-  e->s.p.oam[c->oam.lo++] = c->T.lo;
+  oam_write(e, c->oam.lo++, c->T.lo);
   ++c->bus.lo;
   return cpu131(e, busval);
 }

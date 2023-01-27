@@ -199,7 +199,7 @@
   "oam_stress": {
     "dir": "nes-test-roms/oam_stress/",
     "tests": [
-      ["oam_stress.nes", 100, "!e9125d9557b8c3dd6215612eec9098e338822265"]
+      ["oam_stress.nes", 1800, "784be0e1d8cbe86a17346ab264ba6e1a5d7fc9a8"]
     ]
   },
 
