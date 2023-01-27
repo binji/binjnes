@@ -78,6 +78,7 @@ static RewindState s_rewind_state;
 static Ticks s_last_ticks;
 RGBA s_overlay_rgba[SCREEN_WIDTH * SCREEN_HEIGHT];
 static StatusText s_status_text;
+static bool s_show_frame_counter;
 
 sg_pass_action s_pass_action;
 sg_pipeline s_pipeline;
@@ -170,10 +171,13 @@ static void set_status_text(const char* fmt, ...) {
 static void update_overlay(void) {
   clear_overlay();
 
-  char buf[128];
-  snprintf(buf, sizeof(buf), "f%u lag:%u", e->s.p.frame + 1, e->s.c.lag_frames);
-  draw_rect_str(STATUS_TEXT_X, STATUS_TEXT_Y - GLYPH_HEIGHT - 2,
-                MAKE_RGBA(224, 224, 224, 255), STATUS_TEXT_RGBA, buf);
+  if (s_show_frame_counter) {
+    char buf[128];
+    snprintf(buf, sizeof(buf), "f%u lag:%u", e->s.p.frame + 1,
+             e->s.c.lag_frames);
+    draw_rect_str(STATUS_TEXT_X, STATUS_TEXT_Y - GLYPH_HEIGHT - 2,
+                  MAKE_RGBA(224, 224, 224, 255), STATUS_TEXT_RGBA, buf);
+  }
 
   if (s_status_text.timeout) {
     --s_status_text.timeout;
@@ -689,6 +693,7 @@ static void event(const sapp_event *event) {
       case SAPP_KEYCODE_MINUS: inc_audio_volume(-0.05f); break;
       case SAPP_KEYCODE_EQUAL: inc_audio_volume(+0.05f); break;
       case SAPP_KEYCODE_BACKSPACE: rewind_begin(); break;
+      case SAPP_KEYCODE_GRAVE_ACCENT: s_show_frame_counter ^= 1; break;
       default: break;
     }
     goto key;
