@@ -4282,6 +4282,7 @@ static Result init_mapper(E *e) {
   case BOARD_TXROM_MMC3A:
   case BOARD_TXROM_MMC3B:
   case BOARD_TXROM_MMC3C:
+  case BOARD_MC_ACC:
   case BOARD_HKROM:
     e->mapper_write = mapper4_write;
     e->ci.fourscreen = e->ci.ignore_mirror;
