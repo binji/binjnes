@@ -327,8 +327,8 @@ static void shift_en(E *e) {
 static void shift_dis(E *e) {
   P* p = &e->s.p;
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
-  // TODO: use p->v color if it is in the range [0x3f00,0x3f1f]
-  e->frame_buffer[p->fbidx++] = p->rgbapal[0];
+  e->frame_buffer[p->fbidx++] =
+      s_nespal[e->s.p.palram[p->v >= 0x3f00 ? p->v & 0x1f : 0]];
 }
 
 static inline void reload(E *e) {
