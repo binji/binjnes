@@ -89,9 +89,14 @@ typedef struct {
   Board board;
 } CartInfo;
 
+typedef enum {
+  PPU_BANK_CHR,
+  PPU_BANK_NTRAM,
+} PPUBankLoc;
+
 typedef struct {
    // Actual mapped bank indexes.
-  u16 chr1k_bank[8], chr1k_bg_bank[8], chr1k_spr_bank[8];
+  u16 ppu1k_bank[16], chr1k_bg_bank[8], chr1k_spr_bank[8];
   u16 prg8k_bank[4], prgram8k_bank;
    // Mapper's selected bank indexes.
   u16 chr_bank[8], chr_bg_bank[8], chr_spr_bank[8];
@@ -163,9 +168,9 @@ typedef struct {
       bool sound_enable, autoinc, update_audio;
     } namco163;
   };
+  PPUBankLoc ppu1k_loc[16];
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
       has_mmc2_latch, has_mmc5_irq;
-  bool chr_bank_is_ntram[8], nt_bank_is_chr[4];
   bool prg_bank_is_prgram[4];
 } M;
 

@@ -1354,32 +1354,40 @@ static void cpu_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void update_ppu_bank(E *e, int index, u16 bank, bool use_ntram) {
-  DEBUG("  update_ppu_bank ix:%u bank:%u use_ntram:%u\n", index, bank,
-        use_ntram);
-  if (use_ntram) {
-    u16 b = bank & 1;
-    e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (b << 10);
-  } else {
-    u16 b = bank & (e->ci.chr1k_banks - 1);
-    e->ppu_map[index] = e->ci.chr_data + (b << 10);
+static void update_ppu_bank(E *e, int index, u16 bank, PPUBankLoc loc) {
+  DEBUG("  update_ppu_bank ix:%u bank:%u loc:%s\n", index, bank,
+        loc == PPU_BANK_CHR ? "chr" : "ntram");
+  switch (loc) {
+  case PPU_BANK_CHR:
+    bank &= (e->ci.chr1k_banks - 1);
+    e->ppu_map[index] = e->ci.chr_data + (bank << 10);
     e->ppu_map_write[index] =
-        e->ci.chr_data_write + ((b & CHRRAM1K_MASK) << 10);
+        e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
+    break;
+  case PPU_BANK_NTRAM:
+    bank &= 1;
+    e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (bank << 10);
+    break;
   }
 }
 
 static void update_ppu_bg_spr_bank(E *e, int index, u16 bgbank, u16 sprbank,
-                                   bool use_ntram) {
+                                   PPUBankLoc loc) {
   DEBUG("  update_ppu_bg_spr_bank ix:%u bgbank:%u sprbank:%u use_ntram:%u\n",
         index, bank, use_ntram);
-  if (use_ntram) {
-    e->ppu_bg_map[index] = e->s.p.ram + ((bgbank & 1) << 10);
-    e->ppu_spr_map[index] = e->s.p.ram + ((sprbank & 1) << 10);
-  } else {
+  switch (loc) {
+  case PPU_BANK_CHR:
     e->ppu_bg_map[index] =
         e->ci.chr_data + ((bgbank & (e->ci.chr1k_banks - 1)) << 10);
     e->ppu_spr_map[index] =
         e->ci.chr_data + ((sprbank & (e->ci.chr1k_banks - 1)) << 10);
+    break;
+  case PPU_BANK_NTRAM:
+    bgbank &= 1;
+    sprbank &= 1;
+    e->ppu_bg_map[index] = e->s.p.ram + (bgbank << 10);
+    e->ppu_spr_map[index] = e->s.p.ram + (sprbank << 10);
+    break;
   }
 }
 
@@ -1402,20 +1410,19 @@ static void update_nt_map_mirror(E *e) {
     break;
   }
   for (int i = 8; i < 16; ++i) {
-    update_ppu_bank(e, i, bank[i & 3], true);
+    update_ppu_bank(e, i, bank[i & 3], PPU_BANK_NTRAM);
   }
 }
 
 static void update_nt_map_fourscreen(E *e) {
   for (int i = 8; i < 16; ++i) {
-    update_ppu_bank(e, i, i & 3, true);
+    update_ppu_bank(e, i, i & 3, PPU_BANK_NTRAM);
   }
 }
 
 static void update_nt_map_banking(E* e) {
-  for (int i = 0; i < 4; ++i) {
-    update_ppu_bank(e, 8 + i, e->s.m.nt_bank[i], !e->s.m.nt_bank_is_chr[i]);
-    update_ppu_bank(e, 12 + i, e->s.m.nt_bank[i], !e->s.m.nt_bank_is_chr[i]);
+  for (int i = 8; i < 16; ++i) {
+    update_ppu_bank(e, i, e->s.m.ppu1k_bank[i], e->s.m.ppu1k_loc[i]);
   }
 }
 
@@ -1426,13 +1433,12 @@ static void set_mirror(E *e, Mirror mirror) {
 
 static void update_chr1k_map(E* e) {
   for (size_t i = 0; i < 8; ++i) {
-    update_ppu_bank(e, i, e->s.m.chr1k_bank[i], e->s.m.chr_bank_is_ntram[i]);
+    update_ppu_bank(e, i, e->s.m.ppu1k_bank[i], e->s.m.ppu1k_loc[i]);
   }
 
   for (size_t i = 0; i < 8; ++i) {
     update_ppu_bg_spr_bank(e, i, e->s.m.chr1k_bg_bank[i],
-                           e->s.m.chr1k_spr_bank[i],
-                           e->s.m.chr_bank_is_ntram[i]);
+                           e->s.m.chr1k_spr_bank[i], e->s.m.ppu1k_loc[i]);
   }
 }
 
@@ -1442,9 +1448,9 @@ static void set_chr1k_map(E *e, u16 bank0, u16 bank1, u16 bank2, u16 bank3,
   for (int i = 0; i < 8; ++i) {
     banks[i] &= e->ci.chr1k_banks - 1;
   }
-  memcpy(e->s.m.chr1k_bank, banks, sizeof(e->s.m.chr1k_bank));
-  memcpy(e->s.m.chr1k_bg_bank, banks, sizeof(e->s.m.chr1k_bank));
-  memcpy(e->s.m.chr1k_spr_bank, banks, sizeof(e->s.m.chr1k_bank));
+  memcpy(e->s.m.ppu1k_bank, banks, sizeof(banks));
+  memcpy(e->s.m.chr1k_bg_bank, banks, sizeof(banks));
+  memcpy(e->s.m.chr1k_spr_bank, banks, sizeof(banks));
   update_chr1k_map(e);
 }
 
@@ -1481,9 +1487,9 @@ static void set_chr1k_bg_spr_map(E *e, u16 bank0, u16 bank1, u16 bank2,
     bg_banks[i] &= e->ci.chr1k_banks - 1;
     spr_banks[i] &= e->ci.chr1k_banks - 1;
   }
-  memcpy(e->s.m.chr1k_bank, banks, sizeof(e->s.m.chr1k_bank));
-  memcpy(e->s.m.chr1k_bg_bank, bg_banks, sizeof(e->s.m.chr1k_bank));
-  memcpy(e->s.m.chr1k_spr_bank, spr_banks, sizeof(e->s.m.chr1k_bank));
+  memcpy(e->s.m.ppu1k_bank, banks, sizeof(banks));
+  memcpy(e->s.m.chr1k_bg_bank, bg_banks, sizeof(bg_banks));
+  memcpy(e->s.m.chr1k_spr_bank, spr_banks, sizeof(spr_banks));
   update_chr1k_map(e);
 }
 
@@ -1951,10 +1957,19 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       LOG("✓  [%3u:%3u] Nametable mapping = %u:%u:%u:%u\n", e->s.p.state % 341,
           e->s.p.state / 341, (val >> 0) & 3, (val >> 2) & 3, (val >> 4) & 3,
           (val >> 6) & 3);
-      if (((val >> 0) & 3) <= 1) m->nt_bank[0] = (val >> 0) & 3;
-      if (((val >> 2) & 3) <= 1) m->nt_bank[1] = (val >> 2) & 3;
-      if (((val >> 4) & 3) <= 1) m->nt_bank[2] = (val >> 4) & 3;
-      if (((val >> 6) & 3) <= 1) m->nt_bank[3] = (val >> 6) & 3;
+      for (int i = 0; i < 4; ++i) {
+        u8 bits = (val >> (i * 2)) & 3;
+        switch (bits) {
+          case 0:
+          case 1:
+            m->ppu1k_bank[8 + i] = m->ppu1k_bank[12 + i] = bits;
+            m->ppu1k_loc[8 + i] = m->ppu1k_loc[12 + i] = PPU_BANK_NTRAM;
+            break;
+          case 2:
+          case 3:
+            break;
+        }
+      }
       update_nt_map_banking(e);
       break;
     case 0x5106:
@@ -2353,15 +2368,19 @@ static void mapper19_write(E *e, u16 addr, u8 val) {
 
     update_chr: {
       for (int i = 0; i < 4; ++i) {
-        m->chr_bank_is_ntram[i] =
-            m->namco163.use_ntram[0] && m->chr_bank[i] >= 0xe0;
+        m->ppu1k_loc[i] = m->namco163.use_ntram[0] && m->chr_bank[i] >= 0xe0
+                              ? PPU_BANK_NTRAM
+                              : PPU_BANK_CHR;
       }
       for (int i = 4; i < 8; ++i) {
-        m->chr_bank_is_ntram[i] =
-            m->namco163.use_ntram[1] && m->chr_bank[i] >= 0xe0;
+        m->ppu1k_loc[i] = m->namco163.use_ntram[1] && m->chr_bank[i] >= 0xe0
+                              ? PPU_BANK_NTRAM
+                              : PPU_BANK_CHR;
       }
-      for (int i = 0; i < 4; ++i) {
-        m->nt_bank_is_chr[i] = m->nt_bank[i] < 0xe0;
+      for (int i = 8; i < 16; ++i) {
+        m->ppu1k_bank[i] = m->nt_bank[i & 3];
+        m->ppu1k_loc[i] =
+            m->nt_bank[i & 3] >= 0xe0 ? PPU_BANK_NTRAM : PPU_BANK_CHR;
       }
       set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
                     m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
