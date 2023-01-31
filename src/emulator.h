@@ -92,6 +92,7 @@ typedef struct {
 typedef enum {
   PPU_BANK_CHR,
   PPU_BANK_NTRAM,
+  PPU_BANK_NTRAM_EXT,  // Access banks NTRAM banks >= 2.
 } PPUBankLoc;
 
 typedef struct {

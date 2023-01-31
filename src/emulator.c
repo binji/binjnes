@@ -1358,16 +1358,17 @@ static void update_ppu_bank(E *e, int index, u16 bank, PPUBankLoc loc) {
   DEBUG("  update_ppu_bank ix:%u bank:%u loc:%s\n", index, bank,
         loc == PPU_BANK_CHR ? "chr" : "ntram");
   switch (loc) {
-  case PPU_BANK_CHR:
-    bank &= (e->ci.chr1k_banks - 1);
-    e->ppu_map[index] = e->ci.chr_data + (bank << 10);
-    e->ppu_map_write[index] =
-        e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
-    break;
-  case PPU_BANK_NTRAM:
-    bank &= 1;
-    e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (bank << 10);
-    break;
+    case PPU_BANK_CHR:
+      bank &= (e->ci.chr1k_banks - 1);
+      e->ppu_map[index] = e->ci.chr_data + (bank << 10);
+      e->ppu_map_write[index] =
+          e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
+      break;
+    case PPU_BANK_NTRAM:     bank &= 1; goto ntram;
+    case PPU_BANK_NTRAM_EXT: bank &= 3; goto ntram;
+    ntram:
+      e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (bank << 10);
+      break;
   }
 }
 
@@ -1382,9 +1383,9 @@ static void update_ppu_bg_spr_bank(E *e, int index, u16 bgbank, u16 sprbank,
     e->ppu_spr_map[index] =
         e->ci.chr_data + ((sprbank & (e->ci.chr1k_banks - 1)) << 10);
     break;
-  case PPU_BANK_NTRAM:
-    bgbank &= 1;
-    sprbank &= 1;
+  case PPU_BANK_NTRAM:     bgbank &= 1; sprbank &= 1; goto ntram;
+  case PPU_BANK_NTRAM_EXT: bgbank &= 3; sprbank &= 3; goto ntram;
+  ntram:
     e->ppu_bg_map[index] = e->s.p.ram + (bgbank << 10);
     e->ppu_spr_map[index] = e->s.p.ram + (sprbank << 10);
     break;
@@ -1416,7 +1417,8 @@ static void update_nt_map_mirror(E *e) {
 
 static void update_nt_map_fourscreen(E *e) {
   for (int i = 8; i < 16; ++i) {
-    update_ppu_bank(e, i, i & 3, PPU_BANK_NTRAM);
+    update_ppu_bank(e, i, i & 3,
+                    (i & 3) >= 2 ? PPU_BANK_NTRAM_EXT : PPU_BANK_NTRAM);
   }
 }
 
