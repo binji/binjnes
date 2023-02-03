@@ -92,7 +92,9 @@ typedef struct {
 typedef enum {
   PPU_BANK_CHR,
   PPU_BANK_NTRAM,
-  PPU_BANK_NTRAM_EXT,  // Access banks NTRAM banks >= 2.
+  PPU_BANK_NTRAM_EXT, // Access banks NTRAM banks >= 2.
+  PPU_BANK_EXRAM,     // MMC5, always at bank=2
+  PPU_BANK_FILL,      // MMC5, Always at bank=3
 } PPUBankLoc;
 
 typedef struct {
@@ -123,7 +125,8 @@ typedef struct {
     struct {
       u16 chr_bg_bank[4];
       u16 lastaddr;
-      u8 prg_mode, chr_mode, scan, scan_cmp, match_count;
+      u8 ramprot[2];
+      u8 prg_mode, chr_mode, exram_mode, scan, scan_cmp, match_count;
       u8 mullo, mulhi;
       bool irq_enable, irq_pending, in_frame;
     } mmc5;
@@ -171,7 +174,7 @@ typedef struct {
   };
   PPUBankLoc ppu1k_loc[16];
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
-      has_mmc2_latch, has_mmc5_irq;
+      has_mmc2_latch, has_mmc5_irq, is_mmc5_ex_attr_mode;
   bool prg_bank_is_prgram[4];
 } M;
 

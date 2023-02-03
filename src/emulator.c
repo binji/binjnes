@@ -271,20 +271,31 @@ static inline void read_ntb(E *e) {
 }
 
 static inline void read_atb(E *e) {
-  u16 v = e->s.p.v;
-  u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
-  int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
-  u8 atb1 = (nt_read(e, at) >> shift) & 3;
+  u8 atb1;
+  if (e->s.m.is_mmc5_ex_attr_mode) {
+    atb1 = e->s.p.ram[(2 << 10) + (e->s.p.v & 0x3ff)] >> 6;
+  } else {
+    u16 v = e->s.p.v;
+    u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
+    int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
+    atb1 = (nt_read(e, at) >> shift) & 3;
+  }
   u8 atb2 = (atb1 << 2) | atb1;
   u8 atb4 = (atb2 << 4) | atb2;
   e->s.p.atb = (atb4 << 8) | atb4;
 }
 
 static inline u8 read_ptb(E *e, u8 addend) {
-  return chr_read(e, e->ppu_bg_map,
-                  (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
-                   (e->s.p.v >> 12)) +
-                      addend);
+  u16 addr = (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
+              (e->s.p.v >> 12)) +
+             addend;
+  if (e->s.m.is_mmc5_ex_attr_mode) {
+    u8 exbyte = e->s.p.ram[(2 << 10) + (e->s.p.v & 0x3ff)];
+    u8 bank = exbyte & 0x3f & (e->ci.chr4k_banks - 1);
+    do_mmc5_access(e, addr);
+    return e->ppu_bg_map[(addr >> 10) & 0x3][(bank << 12) + (addr & 0x3ff)];
+  }
+  return chr_read(e, e->ppu_bg_map, addr);
 }
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
@@ -340,6 +351,7 @@ static void shift_en(E *e) {
       //  * (sprite priority doesn't matter)
       if ((non0 & spr->spr0mask & p->bgsprleftmask[1]) && bgpx &&
           scanx(p) != 255) {
+        DEBUG("[%3u:%3u] sprite0\n", p->state % 341, p->state / 341);
         p->ppustatus |= 0x40;
       }
 
@@ -1354,9 +1366,17 @@ static void cpu_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static const char* s_loc_names[] = {
+  "chr",
+  "ntram",
+  "ntram_ext",
+  "exram",
+  "fill",
+};
+
 static void update_ppu_bank(E *e, int index, u16 bank, PPUBankLoc loc) {
   DEBUG("  update_ppu_bank ix:%u bank:%u loc:%s\n", index, bank,
-        loc == PPU_BANK_CHR ? "chr" : "ntram");
+        s_loc_names[loc]);
   switch (loc) {
     case PPU_BANK_CHR:
       bank &= (e->ci.chr1k_banks - 1);
@@ -1366,6 +1386,8 @@ static void update_ppu_bank(E *e, int index, u16 bank, PPUBankLoc loc) {
       break;
     case PPU_BANK_NTRAM:     bank &= 1; goto ntram;
     case PPU_BANK_NTRAM_EXT: bank &= 3; goto ntram;
+    case PPU_BANK_EXRAM:     bank =  2; goto ntram;
+    case PPU_BANK_FILL:      bank =  3; goto ntram;
     ntram:
       e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (bank << 10);
       break;
@@ -1374,8 +1396,8 @@ static void update_ppu_bank(E *e, int index, u16 bank, PPUBankLoc loc) {
 
 static void update_ppu_bg_spr_bank(E *e, int index, u16 bgbank, u16 sprbank,
                                    PPUBankLoc loc) {
-  DEBUG("  update_ppu_bg_spr_bank ix:%u bgbank:%u sprbank:%u use_ntram:%u\n",
-        index, bank, use_ntram);
+  DEBUG("  update_ppu_bg_spr_bank ix:%u bgbank:%u sprbank:%u loc:%s\n",
+        index, bgbank, sprbank, s_loc_names[loc]);
   switch (loc) {
   case PPU_BANK_CHR:
     e->ppu_bg_map[index] =
@@ -1385,6 +1407,8 @@ static void update_ppu_bg_spr_bank(E *e, int index, u16 bgbank, u16 sprbank,
     break;
   case PPU_BANK_NTRAM:     bgbank &= 1; sprbank &= 1; goto ntram;
   case PPU_BANK_NTRAM_EXT: bgbank &= 3; sprbank &= 3; goto ntram;
+  case PPU_BANK_EXRAM:     bgbank =     sprbank  = 2; goto ntram;
+  case PPU_BANK_FILL:      bgbank =     sprbank  = 3; goto ntram;
   ntram:
     e->ppu_bg_map[index] = e->s.p.ram + (bgbank << 10);
     e->ppu_spr_map[index] = e->s.p.ram + (sprbank << 10);
@@ -1471,62 +1495,17 @@ static void set_chr8k_map(E *e, u16 bank) {
                 bank * 8 + 4, bank * 8 + 5, bank * 8 + 6, bank * 8 + 7);
 }
 
-static void set_chr1k_bg_spr_map(E *e, u16 bank0, u16 bank1, u16 bank2,
-                                 u16 bank3, u16 bank4, u16 bank5, u16 bank6,
-                                 u16 bank7, u16 bg_bank0, u16 bg_bank1,
-                                 u16 bg_bank2, u16 bg_bank3, u16 bg_bank4,
-                                 u16 bg_bank5, u16 bg_bank6, u16 bg_bank7,
-                                 u16 spr_bank0, u16 spr_bank1, u16 spr_bank2,
-                                 u16 spr_bank3, u16 spr_bank4, u16 spr_bank5,
-                                 u16 spr_bank6, u16 spr_bank7) {
-  u16 banks[] = {bank0, bank1, bank2, bank3, bank4, bank5, bank6, bank7};
-  u16 bg_banks[] = {bg_bank0, bg_bank1, bg_bank2, bg_bank3,
-                    bg_bank4, bg_bank5, bg_bank6, bg_bank7};
-  u16 spr_banks[] = {spr_bank0, spr_bank1, spr_bank2, spr_bank3,
-                     spr_bank4, spr_bank5, spr_bank6, spr_bank7};
+static void set_chr1k_bg_spr_map(E *e, u16 bank[8], u16 bg_bank[8],
+                                 u16 spr_bank[8]) {
   for (int i = 0; i < 8; ++i) {
-    banks[i] &= e->ci.chr1k_banks - 1;
-    bg_banks[i] &= e->ci.chr1k_banks - 1;
-    spr_banks[i] &= e->ci.chr1k_banks - 1;
+    bank[i] &= e->ci.chr1k_banks - 1;
+    bg_bank[i] &= e->ci.chr1k_banks - 1;
+    spr_bank[i] &= e->ci.chr1k_banks - 1;
   }
-  memcpy(e->s.m.ppu1k_bank, banks, sizeof(banks));
-  memcpy(e->s.m.chr1k_bg_bank, bg_banks, sizeof(bg_banks));
-  memcpy(e->s.m.chr1k_spr_bank, spr_banks, sizeof(spr_banks));
+  memcpy(e->s.m.ppu1k_bank, bank, sizeof(u16[8]));
+  memcpy(e->s.m.chr1k_bg_bank, bg_bank, sizeof(u16[8]));
+  memcpy(e->s.m.chr1k_spr_bank, spr_bank, sizeof(u16[8]));
   update_chr1k_map(e);
-}
-
-static void set_chr2k_bg_spr_map(E *e, u16 bank0, u16 bank1, u16 bank2,
-                                 u16 bank3, u16 bg_bank0, u16 bg_bank1,
-                                 u16 bg_bank2, u16 bg_bank3, u16 spr_bank0,
-                                 u16 spr_bank1, u16 spr_bank2, u16 spr_bank3) {
-  set_chr1k_bg_spr_map(
-      e, bank0 * 2, bank0 * 2 + 1, bank1 * 2, bank1 * 2 + 1, bank2 * 2,
-      bank2 * 2 + 1, bank3 * 2, bank3 * 2 + 1, bg_bank0 * 2, bg_bank0 * 2 + 1,
-      bg_bank1 * 2, bg_bank1 * 2 + 1, bg_bank2 * 2, bg_bank2 * 2 + 1,
-      bg_bank3 * 2, bg_bank3 * 2 + 1, spr_bank0 * 2, spr_bank0 * 2 + 1,
-      spr_bank1 * 2, spr_bank1 * 2 + 1, spr_bank2 * 2, spr_bank2 * 2 + 1,
-      spr_bank3 * 2, spr_bank3 * 2 + 1);
-}
-
-static void set_chr4k_bg_spr_map(E *e, u16 bank0, u16 bank1, u16 bg_bank0,
-                                 u16 bg_bank1, u16 spr_bank0, u16 spr_bank1) {
-  set_chr1k_bg_spr_map(
-      e, bank0 * 4, bank0 * 4 + 1, bank0 * 4 + 2, bank0 * 4 + 3, bank1 * 4,
-      bank1 * 4 + 1, bank1 * 4 + 2, bank1 * 4 + 3, bg_bank0 * 4,
-      bg_bank0 * 4 + 1, bg_bank0 * 4 + 2, bg_bank0 * 4 + 3, bg_bank1 * 4,
-      bg_bank1 * 4 + 1, bg_bank1 * 4 + 2, bg_bank1 * 4 + 3, spr_bank0 * 4,
-      spr_bank0 * 4 + 1, spr_bank0 * 4 + 2, spr_bank0 * 4 + 3, spr_bank1 * 4,
-      spr_bank1 * 4 + 1, spr_bank1 * 4 + 2, spr_bank1 * 4 + 3);
-}
-
-static void set_chr8k_bg_spr_map(E *e, u16 bank, u16 bg_bank, u16 spr_bank) {
-  set_chr1k_bg_spr_map(
-      e, bank * 8, bank * 8 + 1, bank * 8 + 2, bank * 8 + 3, bank * 8 + 4,
-      bank * 8 + 5, bank * 8 + 6, bank * 8 + 7, bg_bank * 8, bg_bank * 8 + 1,
-      bg_bank * 8 + 2, bg_bank * 8 + 3, bg_bank * 8 + 4, bg_bank * 8 + 5,
-      bg_bank * 8 + 6, bg_bank * 8 + 7, spr_bank * 8, spr_bank * 8 + 1,
-      spr_bank * 8 + 2, spr_bank * 8 + 3, spr_bank * 8 + 4, spr_bank * 8 + 5,
-      spr_bank * 8 + 6, spr_bank * 8 + 7);
 }
 
 static void update_prg8k_map(E* e) {
@@ -1867,54 +1846,30 @@ static void mapper4_hkrom_prg_ram_write(E* e, u16 addr, u8 val) {
 
 static void mapper5_update_chr(E* e) {
   M* m = &e->s.m;
-  bool sprite8x16 = e->s.p.ppuctrl & 0x20;
-  switch (m->mmc5.chr_mode) {
-  case 0:
-    if (sprite8x16) {
-      set_chr8k_bg_spr_map(e, m->chr_bank[7], m->chr_bg_bank[7],
-                           m->chr_spr_bank[7]);
+  u16 chr_bank[8], bg_bank[8], spr_bank[8];
+
+  for (int i = 0; i < 8; ++i) {
+    u8 mode = m->mmc5.chr_mode;
+    u8 mask = (8 >> mode) - 1;
+    u8 next = ((i + mask + 1) & ~mask) - 1;
+    u8 offset = i & mask;
+    u8 shift = 3 - mode;
+
+    if (e->s.p.ppuctrl & 0x20) {
+      chr_bank[i] = (m->chr_bank[next] << shift) + offset;
+      bg_bank[i] = (m->chr_bg_bank[next] << shift) + offset;
+      spr_bank[i] = (m->chr_spr_bank[next] << shift) + offset;
     } else {
-      set_chr8k_map(e, m->chr_bank[7]);
+      m->chr_bank[i] = chr_bank[i] = bg_bank[i] = spr_bank[i] =
+          (m->chr_spr_bank[next] << shift) + offset;
     }
-    break;
-  case 1:
-    if (sprite8x16) {
-      set_chr4k_bg_spr_map(e, m->chr_bank[3], m->chr_bank[7], m->chr_bg_bank[3],
-                           m->chr_bg_bank[7], m->chr_spr_bank[3],
-                           m->chr_spr_bank[7]);
-    } else {
-      set_chr4k_map(e, m->chr_bank[3], m->chr_bank[7]);
-    }
-    break;
-  case 2:
-    if (sprite8x16) {
-      set_chr2k_bg_spr_map(e, m->chr_bank[1], m->chr_bank[3], m->chr_bank[5],
-                           m->chr_bank[7], m->chr_bg_bank[1], m->chr_bg_bank[3],
-                           m->chr_bg_bank[5], m->chr_bg_bank[7],
-                           m->chr_spr_bank[1], m->chr_spr_bank[3],
-                           m->chr_spr_bank[5], m->chr_spr_bank[7]);
-    } else {
-      set_chr2k_map(e, m->chr_bank[1], m->chr_bank[3], m->chr_bank[5],
-                    m->chr_bank[7]);
-    }
-    break;
-  case 3:
-    if (sprite8x16) {
-      set_chr1k_bg_spr_map(
-          e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2], m->chr_bank[3],
-          m->chr_bank[4], m->chr_bank[5], m->chr_bank[6], m->chr_bank[7],
-          m->chr_bg_bank[0], m->chr_bg_bank[1], m->chr_bg_bank[2],
-          m->chr_bg_bank[3], m->chr_bg_bank[4], m->chr_bg_bank[5],
-          m->chr_bg_bank[6], m->chr_bg_bank[7], m->chr_spr_bank[0],
-          m->chr_spr_bank[1], m->chr_spr_bank[2], m->chr_spr_bank[3],
-          m->chr_spr_bank[4], m->chr_spr_bank[5], m->chr_spr_bank[6],
-          m->chr_spr_bank[7]);
-    } else {
-      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
-                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
-                    m->chr_bank[6], m->chr_bank[7]);
+
+    if (e->s.m.is_mmc5_ex_attr_mode) {
+      bg_bank[i] = i;
     }
   }
+
+  set_chr1k_bg_spr_map(e, chr_bank, bg_bank, spr_bank);
 }
 
 static void mapper5_write(E *e, u16 addr, u8 val) {
@@ -1922,10 +1877,10 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
   LOG("mapper5_write(%04x, %02x)\n", addr, val);
   switch (addr) {
     case 0x5000 ... 0x5003:
-      printf("✓  Pulse 1 audio = %u (%02x)\n", val, val);
+      LOG("✓  Pulse 1 audio = %u (%02x)\n", val, val);
       break;
     case 0x5004 ... 0x5007:
-      printf("✓  Pulse 2 audio = %u (%02x)\n", val, val);
+      LOG("✓  Pulse 2 audio = %u (%02x)\n", val, val);
       break;
     case 0x5010:
       printf("✓  PCM Mode/IRQ = %02x\n", val);
@@ -1942,18 +1897,26 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       m->mmc5.prg_mode = val & 3;
       goto update_prg;
     case 0x5101:
-      LOG("✓  CHR mode = %u\n", val & 3);
+      printf("✓  CHR mode = %u\n", val & 3);
       m->mmc5.chr_mode = val & 3;
       mapper5_update_chr(e);
       break;
     case 0x5102:
-      printf("✓  PRG ram protect 1 = %u\n", val & 3);
-      break;
+      LOG("✓  PRG ram protect 1 = %u\n", val & 3);
+      m->mmc5.ramprot[0] = val & 3;
+      goto ramprotect;
     case 0x5103:
-      printf("✓  PRG ram protect 2 = %u\n", val & 3);
+      LOG("✓  PRG ram protect 2 = %u\n", val & 3);
+      m->mmc5.ramprot[1] = val & 3;
+      goto ramprotect;
+    ramprotect:
+      m->prg_ram_write_en = m->mmc5.ramprot[0] == 2 && m->mmc5.ramprot[1] == 1;
       break;
     case 0x5104:
       printf("✓  Extended RAM mode = %u\n", val & 3);
+      m->mmc5.exram_mode = val & 3;
+      m->is_mmc5_ex_attr_mode = m->mmc5.exram_mode == 1;
+      mapper5_update_chr(e);
       break;
     case 0x5105:
       LOG("✓  [%3u:%3u] Nametable mapping = %u:%u:%u:%u\n", e->s.p.state % 341,
@@ -1968,7 +1931,10 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
             m->ppu1k_loc[8 + i] = m->ppu1k_loc[12 + i] = PPU_BANK_NTRAM;
             break;
           case 2:
+            m->ppu1k_loc[8 + i] = m->ppu1k_loc[12 + i] = PPU_BANK_EXRAM;
+            break;
           case 3:
+            m->ppu1k_loc[8 + i] = m->ppu1k_loc[12 + i] = PPU_BANK_FILL;
             break;
         }
       }
@@ -1976,9 +1942,13 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       break;
     case 0x5106:
       printf("✓  Fill-mode tile = %u (%02x)\n", val, val);
+      memset(e->s.p.ram + (3 << 10), val, 0x3c0);
       break;
     case 0x5107:
-      printf("✓  Fill-mode color = %u\n", val & 3);
+      val &= 3;
+      printf("✓  Fill-mode color = %u\n", val);
+      memset(e->s.p.ram + (3 << 10) + 0x3c0,
+             val | (val << 2) | (val << 4) | (val << 6), 0x40);
       break;
     case 0x5113:
       LOG("  PRG RAM bankswitching %04x..%04x = %02x\n",
@@ -2001,16 +1971,17 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       LOG("✓  CHR bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
           bankidx * 0x400 + 0x3ff, val);
       m->chr_bank[bankidx] = m->chr_spr_bank[bankidx] = val;
+      memcpy(m->chr_bank, m->chr_spr_bank, sizeof(m->chr_bank));
       mapper5_update_chr(e);
       break;
     }
 
     case 0x5128 ... 0x512b: {
       u8 bankidx = addr - 0x5128;
-      LOG("✓  CHR BG bankswitching %04x..%04x = %02x\n",
-          bankidx * 0x400, bankidx * 0x400 + 0x3ff, val);
-      m->chr_bank[bankidx] = m->chr_bank[bankidx + 4] = val;
+      LOG("✓  CHR BG bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
+          bankidx * 0x400 + 0x3ff, val);
       m->chr_bg_bank[bankidx] = m->chr_bg_bank[bankidx + 4] = val;
+      memcpy(m->chr_bank, m->chr_bg_bank, sizeof(m->chr_bank));
       mapper5_update_chr(e);
       break;
     }
@@ -2068,9 +2039,12 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       break;
 
     case 0x5c00 ... 0x5fff: {
-      u16 ramaddr = 0x1000 + (addr - 0x5c00);
-      e->s.p.ram[0x1000 + (addr - 0x5c00)] = val;
-      LOG("✓  Write internal RAM %04x <= %02x\n", ramaddr, val);
+      if (m->mmc5.exram_mode != 3) {
+        u16 ramaddr = (2 << 10) + (addr & 0x3ff);
+        e->s.p.ram[ramaddr] = val;
+        LOG("✓  [%3u: %3u] Write internal RAM %04x <= %02x\n",
+            e->s.p.state % 341, e->s.p.state / 341, ramaddr, val);
+      }
       break;
     }
 
@@ -2148,11 +2122,27 @@ static u8 mapper5_read(E* e, u16 addr) {
       break;
 
     case 0x5c00 ... 0x5fff: {
-      u16 ramaddr = 0x1000 + (addr - 0x5c00);
-      u8 result = e->s.p.ram[ramaddr];
-      LOG("✓  Read internal RAM %04x >= %02x\n", ramaddr, result);
-      return result;
+      u16 ramaddr = (2<<10) + (addr & 0x3ff);
+      if (m->mmc5.exram_mode & 2) {
+        u8 result = e->s.p.ram[ramaddr];
+        LOG("✓  Read internal RAM %04x >= %02x\n", ramaddr, result);
+        return result;
+      } else {
+        LOG("✓  Read internal RAM %04x >= zero\n", ramaddr);
+        return 0;
+      }
     }
+
+    case 0x5000 ... 0x5007:
+    case 0x5011:
+    case 0x5100 ... 0x5107:
+    case 0x5113 ... 0x5117:
+    case 0x5120 ... 0x512b:
+    case 0x5130:
+    case 0x5200 ... 0x5203:
+    case 0x5207 ... 0x5208:
+    case 0x520a:
+      break;
 
     default:
       if (addr > 0x4017) {
@@ -4794,6 +4784,7 @@ static Result init_mapper(E *e) {
     e->mapper_update_nt_map = update_nt_map_banking;
     e->s.m.has_mmc5_irq = true;
     e->s.m.prg_bank[3] = 0xff;
+    e->s.m.mmc5.prg_mode = 3;
     e->s.m.mmc5.lastaddr = ~0;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
