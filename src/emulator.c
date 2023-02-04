@@ -4750,7 +4750,11 @@ static const char* s_opcode_mnemonic[256];
 static const u8 s_opcode_bytes[256];
 
 void disasm(E *e, u16 addr) {
-  printf("$%02x:%04x: ", e->s.m.prg_bank[0], addr); // TODO: correct bank
+  char bank[5] = "??";
+  if ((addr >> 13) >= 4) {
+    snprintf(bank, sizeof(bank), "%02x", e->s.m.prg8k_bank[(addr >> 13) & 3]);
+  }
+  printf("$%s:%04x: ", bank, addr);
   u8 opcode = cpu_read(e, addr);
   const char* fmt = s_opcode_mnemonic[opcode];
   u8 bytes = s_opcode_bytes[opcode];
