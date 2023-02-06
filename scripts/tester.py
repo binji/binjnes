@@ -139,8 +139,8 @@ def MDTestName(rom, prefix):
 def MDTestResult(passed):
   return ':ok:' if passed else ':x:'
 
-def SuiteHeader(out_file, name, url):
-  out_file.write('%s:\n\n' % MDLink(name, url))
+def SuiteHeader(out_file, name):
+  out_file.write('%s:\n\n' % name)
   out_file.write(MDTableRow('Test', 'Result'))
   out_file.write(MDTableRow('---', '---'))
 
@@ -153,14 +153,40 @@ def Suite(out_file, results, suite, prefix):
   out_file.write('\n')
 
 def GenerateTestResults(results):
-  # TODO
-  SUITES = [ ]
+  SUITES = [
+    {'name': 'apu_test', 'prefix': 'nes-test-roms/apu_test/rom_singles/'},
+    {'name': 'blargg_apu', 'prefix': 'nes-test-roms/blargg_apu_2005.07.30/'},
+    {'name': 'blargg_nes_cpu_test5', 'prefix': 'nes-test-roms/blargg_nes_cpu_test5/'},
+    {'name': 'blargg_ppu_tests', 'prefix': 'nes-test-roms/blargg_ppu_tests_2005.09.15b/'},
+    {'name': 'branch_timing_tests', 'prefix': 'nes-test-roms/branch_timing_tests/'},
+    {'name': 'cpu_dummy_reads', 'prefix': 'nes-test-roms/cpu_dummy_reads/'},
+    {'name': 'cpu_dummy_writes', 'prefix': 'nes-test-roms/cpu_dummy_writes/'},
+    {'name': 'cpu_exec_space', 'prefix': 'nes-test-roms/cpu_exec_space/'},
+    {'name': 'cpu_interrupts_v2', 'prefix': 'nes-test-roms/cpu_interrupts_v2/rom_singles/'},
+    {'name': 'cpu_timing_test6', 'prefix': 'nes-test-roms/cpu_timing_test6/'},
+    {'name': 'dmc_dma_during_read4', 'prefix': 'nes-test-roms/dmc_dma_during_read4/'},
+    {'name': 'dmc_tests', 'prefix': 'nes-test-roms/dmc_tests/'},
+    {'name': 'instr_misc', 'prefix': 'nes-test-roms/instr_misc/rom_singles/'},
+    {'name': 'instr_test-v5', 'prefix': 'nes-test-roms/instr_test-v5/rom_singles/'},
+    {'name': 'instr_timing', 'prefix': 'nes-test-roms/instr_timing/rom_singles/'},
+    {'name': 'mmc3_test', 'prefix': 'nes-test-roms/mmc3_test_2/rom_singles/'},
+    {'name': 'nes_instr_test', 'prefix': 'nes-test-roms/nes_instr_test/rom_singles/'},
+    {'name': 'oam_read', 'prefix': 'nes-test-roms/oam_read/'},
+    {'name': 'oam_stress', 'prefix': 'nes-test-roms/oam_stress/'},
+    {'name': 'ppu_open_bus', 'prefix': 'nes-test-roms/ppu_open_bus/'},
+    {'name': 'ppu_read_buffer', 'prefix': 'nes-test-roms/ppu_read_buffer/'},
+    {'name': 'ppu_vbl_nmi', 'prefix': 'nes-test-roms/ppu_vbl_nmi/rom_singles/'},
+    {'name': 'sprdma_and_dmc_dma', 'prefix': 'nes-test-roms/sprdma_and_dmc_dma/'},
+    {'name': 'sprite_hit_tests', 'prefix': 'nes-test-roms/sprite_hit_tests_2005.10.05/'},
+    {'name': 'sprite_overflow_tests', 'prefix': 'nes-test-roms/sprite_overflow_tests/'},
+    {'name': 'vbl_nmi_timing', 'prefix': 'nes-test-roms/vbl_nmi_timing/'},
+  ]
 
   with open(TEST_RESULTS_MD, 'w') as out_file:
     out_file.write('# Test status\n\n')
     for suite in SUITES:
-      SuiteHeader(out_file, suite['name'], suite['url'])
-      Suite(out_file, results, suite['suite'], suite['prefix'])
+      SuiteHeader(out_file, suite['name'])
+      Suite(out_file, results, suite['name'], suite['prefix'])
 
 
 def main(args):
