@@ -5,11 +5,21 @@
  * of the MIT license.  See the LICENSE file for details.
  */
 #include <assert.h>
+#include <inttypes.h>
+#include <stdio.h>
 #include <stdlib.h>
 
 #include "emulator.h"
 #include "joypad.h"
 #include "memory.h"
+#include "rewind.h"
+
+typedef struct {
+  Emulator* e;
+  RewindBuffer* rewind_buffer;
+  Joypad* joypad;
+  RewindResult rewind_result;
+} RewindState;
 
 static Emulator* e;
 
@@ -37,6 +47,14 @@ EmulatorEvent emulator_run_until_f64(Emulator* e, f64 until_ticks_f64) {
   return emulator_run_until(e, (Ticks)until_ticks_f64);
 }
 
+f64 rewind_get_newest_ticks_f64(RewindBuffer* buf) {
+  return (f64)rewind_get_newest_ticks(buf);
+}
+
+f64 rewind_get_oldest_ticks_f64(RewindBuffer* buf) {
+  return (f64)rewind_get_oldest_ticks(buf);
+}
+
 static void default_joypad_callback(JoypadButtons *joyp, void *user_data,
                                     bool strobe) {
   Joypad* joypad = user_data;
@@ -46,7 +64,10 @@ static void default_joypad_callback(JoypadButtons *joyp, void *user_data,
 }
 
 Joypad* joypad_new_simple(Emulator *e) {
-  return joypad_new_for_user(e, default_joypad_callback, NULL);
+  Joypad *result = joypad_new_for_user(e, default_joypad_callback, NULL);
+  // TODO: This is nasty, should just pass Joypad* to the callback.
+  emulator_set_joypad_callback(e, default_joypad_callback, result);
+  return result;
 }
 
 #define DEFINE_JOYP_SET(name) \
@@ -91,5 +112,49 @@ size_t get_file_data_size(FileData* file_data) {
 
 void file_data_delete(FileData* file_data) {
   xfree(file_data->data);
+  file_data->data = NULL;
+  file_data->size = 0;
+}
+
+void file_data_delete2(FileData* file_data) {
+  xfree(file_data->data);
   xfree(file_data);
 }
+
+RewindBuffer* rewind_new_simple(Emulator* e, int frames_per_base_state,
+                                size_t buffer_capacity) {
+  RewindInit init;
+  init.frames_per_base_state = frames_per_base_state;
+  init.buffer_capacity = buffer_capacity;
+  return rewind_new(&init, e);
+}
+
+static RewindState s_rewind_state;
+
+RewindState *rewind_begin(Emulator *e, RewindBuffer *rewind_buffer,
+                          Joypad *joypad) {
+  s_rewind_state.e = e;
+  s_rewind_state.rewind_buffer = rewind_buffer;
+  s_rewind_state.joypad = joypad;
+  return &s_rewind_state;
+}
+
+Result rewind_to_ticks_wrapper(RewindState* state, f64 ticks_f64) {
+  Ticks ticks = (Ticks)ticks_f64;
+  CHECK(SUCCESS(
+      rewind_to_ticks(state->rewind_buffer, ticks, &state->rewind_result)));
+  CHECK(SUCCESS(emulator_read_state(e, &state->rewind_result.file_data)));
+  assert(emulator_get_ticks(e) == state->rewind_result.info->ticks);
+  return OK;
+  ON_ERROR_RETURN;
+}
+
+void rewind_end(RewindState* state) {
+  if (state->rewind_result.info) {
+    rewind_truncate_to(state->rewind_buffer, state->e, &state->rewind_result);
+    joypad_truncate_to_current(state->joypad);
+  }
+
+  memset(&state->rewind_result, 0, sizeof(state->rewind_result));
+}
+
