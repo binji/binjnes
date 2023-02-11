@@ -173,8 +173,7 @@ typedef struct {
     } namco163;
   };
   PPUBankLoc ppu1k_loc[16];
-  bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, has_a12_irq,
-      has_mmc2_latch, has_mmc5_irq, is_mmc5_ex_attr_mode;
+  bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, is_mmc5_ex_attr_mode;
   bool prg_bank_is_prgram[4];
 } M;
 
@@ -267,6 +266,8 @@ typedef struct Emulator {
   void (*mapper_cpu_step)(struct Emulator*);
   void (*mapper_update_nt_map)(struct Emulator*);
   void (*mapper_apu_tick)(struct Emulator*, bool update);
+  void (*mapper_on_ppu_addr_updated)(struct Emulator*, u16);
+  void (*mapper_on_chr_read)(struct Emulator*, u16);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
