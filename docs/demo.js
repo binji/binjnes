@@ -458,7 +458,7 @@ class Emulator {
         this.rewind.pushBuffer();
         this.video.uploadTexture();
       }
-      if ((event & EVENT_AUDIO_BUFFER_FULL) & !this.isRewinding) {
+      if ((event & EVENT_AUDIO_BUFFER_FULL) && !this.isRewinding) {
         this.audio.pushBuffer();
       }
       if (event & EVENT_UNTIL_TICKS) {
