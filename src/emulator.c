@@ -2820,6 +2820,16 @@ static void mapper28_write(E* e, u16 addr, u8 val) {
   }
 }
 
+static void mapper30_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  //set_mirror(e, MIRROR_SINGLE_0 + !!(val & 0x80));
+  set_chr8k_map(e,
+                (m->chr_bank[0] = (val >> 5) & 0x3 & (e->ci.chr8k_banks - 1)));
+  set_prg16k_map(e, (m->prg_bank[0] = val & 0x1f & (e->ci.prg16k_banks - 1)),
+                 e->ci.prg16k_banks - 1);
+}
+
 static void mapper34_bnrom_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
@@ -4893,6 +4903,20 @@ static Result init_mapper(E *e) {
 
   case BOARD_MAPPER_28:
     e->mapper_write = mapper28_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_30:
+    e->mapper_write = mapper30_write;
+    if (e->ci.chr_data == e->s.p.chr_ram) {
+      // Bump it up from 8k -> 32k.
+      e->ci.chr8k_banks = 4;
+      e->ci.chr4k_banks = 8;
+      e->ci.chr2k_banks = 16;
+      e->ci.chr1k_banks = 32;
+    }
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
