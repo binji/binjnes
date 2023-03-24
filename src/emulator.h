@@ -210,8 +210,8 @@ typedef struct {
 typedef struct {
   RGBA rgbapal[32];
   u8 ram[0x2000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
-  u32x2 bgatshift, bgatpreshift;
-  u16x2 bgsprleftmask;
+  u32x4 shifter;  // [0:1] bg/at [2:3] left mask bg/spr
+  u32 bgshift, atshift;
   u32 state, fbidx, frame;
   u16 v, t, atb, last_a12;
   u8 x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
