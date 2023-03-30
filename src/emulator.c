@@ -218,7 +218,7 @@ static inline u8 scany(P* p) { return p->fbidx >> 8; }
 static void shift_en(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-  int palidx = 0, bgpx = 0;
+  int palidx = 0;
 
   // Decrement inactive counters. Active counters are always 0.
   u8x16 active;
@@ -228,8 +228,7 @@ static void shift_en(E *e) {
   }
 
   if (p->ppumask & 8) { // Show BG.
-    bgpx = p->shifter[0] & ~p->shifter[2] & 3;
-    palidx = ((p->shifter[1] & 3) << 2) | bgpx;
+    palidx = ((p->shifter[1] & 3) << 2) | (p->shifter[0] & ~p->shifter[2] & 3);
   }
 
   if (spr->any_active && any_true_u8x16(active) &&
@@ -246,6 +245,7 @@ static void shift_en(E *e) {
       //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
       //  * When x!=255
       //  * (sprite priority doesn't matter)
+      u8 bgpx = palidx & 3;
       if ((non0 & spr->spr0mask & ~p->shifter[3]) && bgpx &&
           scanx(p) != 255) {
         DEBUG("[%3u:%3u] sprite0\n", p->state % 341, p->state / 341);
