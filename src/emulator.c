@@ -227,8 +227,8 @@ static void shift_en(E *e) {
     spr->counter -= 1 & ~active;
   }
 
-  if (p->ppumask & 8) { // Show BG.
-    palidx = ((p->shifter[1] & 3) << 2) | (p->shifter[0] & ~p->shifter[2] & 3);
+  if (LIKELY(p->ppumask & 8)) { // Show BG.
+    palidx = (p->shifter[1] & 0xc) | (p->shifter[0] & ~p->shifter[2] & 3);
   }
 
   if (spr->any_active && any_true_u8x16(active) &&
@@ -282,7 +282,7 @@ static inline void reload(E *e) {
       (reverse_interleave(p->ptbh, p->ptbl) << 16) | (p->bgshift >> 16);
   p->atshift = (p->atb << 16) | (p->atshift >> 16);
   p->shifter[0] = p->bgshift >> (p->x * 2);
-  p->shifter[1] = p->atshift >> (p->x * 2);
+  p->shifter[1] = p->atshift >> (p->x * 2) << 2;
 }
 
 static inline void sprclear(E *e) {
@@ -1097,7 +1097,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         p->t = (p->t & 0xffe0) | (val >> 3);
         u8 shamt = (p->x + (p->fbidx & 7)) * 2;
         p->shifter[0] = p->bgshift >> shamt;
-        p->shifter[1] = p->atshift >> shamt;
+        p->shifter[1] = p->atshift >> shamt << 2;
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx x=%02hhx w=0\n",
               e->s.cy, p->state % 341, p->state / 341, val, p->t, p->x);
       } else {
