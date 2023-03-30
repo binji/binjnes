@@ -38,7 +38,7 @@ static bool s_profile;
 static u32 s_profile_limit = 30;
 static const char* s_rom_filename;
 static u32 s_random_seed = 0xcabba6e5;
-
+static RGBAFrameBuffer s_frame_buffer;
 
 Result write_frame_ppm(Emulator* e, const char* filename) {
   FILE* f = fopen(filename, "wb");
@@ -46,7 +46,8 @@ Result write_frame_ppm(Emulator* e, const char* filename) {
   CHECK_MSG(fprintf(f, "P6\n%u %u\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT) >= 0,
             "fprintf failed.\n");
   int x, y;
-  RGBA* data = *emulator_get_frame_buffer(e);
+  emulator_convert_frame_buffer(e, s_frame_buffer);
+  RGBA* data = s_frame_buffer;
   for (y = 0; y < SCREEN_HEIGHT; ++y) {
     for (x = 0; x < SCREEN_WIDTH; ++x) {
       RGBA pixel = *data++;

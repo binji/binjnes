@@ -76,7 +76,8 @@ static Joypad *s_joypad;
 static RewindBuffer *s_rewind_buffer;
 static RewindState s_rewind_state;
 static Ticks s_last_ticks;
-RGBA s_overlay_rgba[SCREEN_WIDTH * SCREEN_HEIGHT];
+RGBAFrameBuffer s_overlay_rgba;
+RGBAFrameBuffer s_frame_buffer;
 static StatusText s_status_text;
 static bool s_show_frame_counter;
 
@@ -528,9 +529,10 @@ static void run_until_ticks(Ticks until_ticks) {
                       EMULATOR_EVENT_INVALID_OPCODE)));
 
   if (new_frame) {
-    sg_update_image(s_bindings[0].fs_images[0],
-                    &(sg_image_data){.subimage[0][0] = SG_RANGE(
-                                         *emulator_get_frame_buffer(e))});
+    emulator_convert_frame_buffer(e, s_frame_buffer);
+    sg_update_image(
+        s_bindings[0].fs_images[0],
+        &(sg_image_data){.subimage[0][0] = SG_RANGE(s_frame_buffer)});
   }
 
   if (event & EMULATOR_EVENT_INVALID_OPCODE) {

@@ -124,10 +124,10 @@ static u8 ppu_read(E *e, u16 addr) {
   return result;
 }
 
-static void update_rgbapal(E *e) {
+static void update_palette(E *e) {
   u8 mask = e->s.p.ppumask & 1 ? 0x30 : 0x3f;
   for (int addr = 0; addr < 32; ++addr) {
-    e->s.p.rgbapal[addr] = s_nespal[e->s.p.palram[addr & 3 ? addr : 0] & mask];
+    e->s.p.palette[addr] = e->s.p.palram[addr & 3 ? addr : 0] & mask;
   }
 }
 
@@ -144,14 +144,12 @@ static void ppu_write(E *e, u16 addr, u8 val) {
       if (addr >= 0x3f00) {
         // Palette ram.
         u8 *palram = e->s.p.palram;
-        RGBA* rgbapal = e->s.p.rgbapal;
         val &= 0x3f; addr &= 0x1f;
+        palram[addr] = val;
         if ((addr & 3) == 0) {
-          palram[addr] = palram[addr ^ 0x10] = val;
-        } else {
-          palram[addr] = val;
+          palram[addr ^ 0x10] = val;
         }
-        update_rgbapal(e);
+        update_palette(e);
         break;
       }
       // Fallthrough.
@@ -268,14 +266,14 @@ static void shift_en(E *e) {
   p->shifter >>= 2;
 
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
-  e->frame_buffer[p->fbidx++] = p->rgbapal[palidx];
+  e->frame_buffer[p->fbidx++] = p->emphasis | p->palette[palidx];
 }
 
 static void shift_dis(E *e) {
   P* p = &e->s.p;
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   e->frame_buffer[p->fbidx++] =
-      s_nespal[e->s.p.palram[p->v >= 0x3f00 ? p->v & 0x1f : 0]];
+      p->emphasis | p->palram[p->v >= 0x3f00 ? p->v & 0x1f : 0];
 }
 
 static inline void reload(E *e) {
@@ -1082,7 +1080,8 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
       p->ppumask = val;
       p->next_enabled = !!(val & 0x18);
-      update_rgbapal(e);
+      p->emphasis = (val << 3) & 0x1c0;
+      update_palette(e);
       goto io;
     case 3: p->oamaddr = val; goto io;
     case 4:
@@ -5080,6 +5079,13 @@ FrameBuffer *emulator_get_frame_buffer(E *e) { return &e->frame_buffer; }
 AudioBuffer *emulator_get_audio_buffer(E *e) { return &e->audio_buffer; }
 
 Ticks emulator_get_ticks(E *e) { return e->s.cy; }
+
+void emulator_convert_frame_buffer(Emulator *e, RGBAFrameBuffer fb) {
+  for (int i = 0; i < SCREEN_WIDTH * SCREEN_HEIGHT; ++i) {
+    // TODO: handle emphasis bits.
+    fb[i] = s_nespal[e->frame_buffer[i] & 0x3f];
+  }
+}
 
 u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
   return audio_buffer->position - audio_buffer->data;

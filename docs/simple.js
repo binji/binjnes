@@ -18,6 +18,22 @@ const EVENT_NEW_FRAME = 1;
 const EVENT_AUDIO_BUFFER_FULL = 2;
 const EVENT_UNTIL_TICKS = 4;
 
+// From FrakenGraphics, based on FBX Smooth:
+// https://www.patreon.com/posts/nes-palette-for-47391225
+const NESPAL = [
+  0xff616161, 0xff880000, 0xff990d1f, 0xff791337, 0xff601256, 0xff10005d,
+  0xff000e52, 0xff08233a, 0xff0c3521, 0xff0e410d, 0xff174417, 0xff1f3a00,
+  0xff572f00, 0xff000000, 0xff000000, 0xff000000, 0xffaaaaaa, 0xffc44d0d,
+  0xffde244b, 0xffcf1269, 0xffad1490, 0xff481c9d, 0xff043492, 0xff055073,
+  0xff13695d, 0xff117a16, 0xff088013, 0xff497612, 0xff91661c, 0xff000000,
+  0xff000000, 0xff000000, 0xfffcfcfc, 0xfffc9a63, 0xfffc7e8a, 0xfffc6ab0,
+  0xfff26ddd, 0xffab71e7, 0xff5886e3, 0xff229ecc, 0xff00b1a8, 0xff00c172,
+  0xff4ecd5a, 0xff8ec234, 0xffcebe4f, 0xff424242, 0xff000000, 0xff000000,
+  0xfffcfcfc, 0xfffcd4be, 0xfffccaca, 0xfffcc4d9, 0xfffcc1ec, 0xffe7c3fa,
+  0xffc3cef7, 0xffa7cde2, 0xff9cdbda, 0xff9ee3c8, 0xffb8e5bf, 0xffc8ebb2,
+  0xffebe5b7, 0xffacacac, 0xff000000, 0xff000000,
+];
+
 const $ = document.querySelector.bind(document);
 let emulator = null;
 
@@ -290,9 +306,9 @@ class Video {
       console.log(`Error creating WebGLRenderer: ${error}`);
       this.renderer = new Canvas2DRenderer(el);
     }
-    this.buffer = makeWasmBuffer(
-        this.module, this.module._get_frame_buffer_ptr(e),
-        this.module._get_frame_buffer_size(e));
+    this.buffer = new Uint16Array(module.HEAP16.buffer,
+        this.module._get_frame_buffer_ptr(e),
+        this.module._get_frame_buffer_size(e) >> 1);
   }
 
   uploadTexture() {
@@ -321,7 +337,7 @@ class Canvas2DRenderer {
 
 class WebGLRenderer {
   constructor(el) {
-    const gl = this.gl = el.getContext('webgl', {preserveDrawingBuffer: true});
+    const gl = this.gl = el.getContext('webgl2', {preserveDrawingBuffer: true});
     if (gl === null) {
       throw new Error('unable to create webgl context');
     }
@@ -340,7 +356,7 @@ class WebGLRenderer {
     const texture = gl.createTexture();
     gl.bindTexture(gl.TEXTURE_2D, texture);
     gl.texImage2D(
-        gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+        gl.TEXTURE_2D, 0, gl.R16UI, 256, 256, 0, gl.RED_INTEGER, gl.UNSIGNED_SHORT, null);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
     gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
 
@@ -355,18 +371,29 @@ class WebGLRenderer {
     }
 
     const vertexShader = compileShader(gl.VERTEX_SHADER,
-       `attribute vec2 aPos;
-        attribute vec2 aTexCoord;
-        varying highp vec2 vTexCoord;
+       `#version 300 es
+        in vec2 aPos;
+        in vec2 aTexCoord;
+        out vec2 vTexCoord;
         void main(void) {
           gl_Position = vec4(aPos, 0.0, 1.0);
           vTexCoord = aTexCoord;
         }`);
     const fragmentShader = compileShader(gl.FRAGMENT_SHADER,
-       `varying highp vec2 vTexCoord;
-        uniform sampler2D uSampler;
+       `#version 300 es
+        precision highp float;
+        in vec2 vTexCoord;
+        out vec4 outColor;
+        uniform highp usampler2D uSampler;
+        uniform uint uPalette[64];
         void main(void) {
-          gl_FragColor = texture2D(uSampler, vTexCoord);
+          uint color = uPalette[texture(uSampler, vTexCoord).r & 63u];
+          outColor = vec4(
+            float((color >> 0) & 0xffu) / 255.5f,
+            float((color >> 8) & 0xffu) / 255.5f,
+            float((color >> 16) & 0xffu) / 255.5f,
+            1.0f
+          );
         }`);
 
     const program = gl.createProgram();
@@ -380,6 +407,7 @@ class WebGLRenderer {
 
     const aPos = gl.getAttribLocation(program, 'aPos');
     const aTexCoord = gl.getAttribLocation(program, 'aTexCoord');
+    const uPalette = gl.getUniformLocation(program, 'uPalette');
     const uSampler = gl.getUniformLocation(program, 'uSampler');
 
     gl.enableVertexAttribArray(aPos);
@@ -387,6 +415,7 @@ class WebGLRenderer {
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, gl.FALSE, 16, 0);
     gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, gl.FALSE, 16, 8);
     gl.uniform1i(uSampler, 0);
+    gl.uniform1uiv(uPalette, NESPAL);
   }
 
   renderTexture() {
@@ -397,7 +426,7 @@ class WebGLRenderer {
 
   uploadTexture(buffer) {
     this.gl.texSubImage2D(
-        this.gl.TEXTURE_2D, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT, this.gl.RGBA,
-        this.gl.UNSIGNED_BYTE, buffer);
+        this.gl.TEXTURE_2D, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
+        this.gl.RED_INTEGER, this.gl.UNSIGNED_SHORT, buffer);
   }
 }

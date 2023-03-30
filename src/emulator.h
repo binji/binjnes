@@ -32,7 +32,8 @@ typedef struct JoypadCallbackInfo {
   void* user_data;
 } JoypadCallbackInfo;
 
-typedef RGBA FrameBuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+typedef u16 FrameBuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
+typedef RGBA RGBAFrameBuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
 
 typedef struct AudioBuffer {
   u32 frequency;    /* Sample frequency, as N samples per second */
@@ -208,12 +209,11 @@ typedef struct {
 } Spr;
 
 typedef struct {
-  RGBA rgbapal[32];
   u8 ram[0x2000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
   u32x4 shifter;  // [0:1] bg/at [2:3] left mask bg/spr
   u32 bgshift, atshift;
   u32 state, fbidx, frame;
-  u16 v, t, atb, last_a12;
+  u16 v, t, atb, last_a12, emphasis, palette[32];
   u8 x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
   bool enabled, next_enabled, w, oddframe, a12_low;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
@@ -285,6 +285,7 @@ FrameBuffer* emulator_get_frame_buffer(Emulator*);
 AudioBuffer* emulator_get_audio_buffer(Emulator*);
 u32 audio_buffer_get_frames(AudioBuffer*);
 Ticks emulator_get_ticks(Emulator*);
+void emulator_convert_frame_buffer(Emulator*, RGBAFrameBuffer);
 
 void emulator_init_state_file_data(FileData*);
 Result emulator_read_state(Emulator*, const FileData*);
