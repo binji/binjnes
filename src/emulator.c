@@ -85,6 +85,14 @@ static inline u16 reverse_interleave(u8 h, u8 l) {
          (((h * A & B) * C >> 42) & 0xAAAA);
 }
 
+static inline u32 interleave2(u16 h, u16 l) {
+  u32 result = 0;
+  for (int i = 0; i < 16; i += 2) {
+    result |= ((l << i) & (3 << (2 * i))) | ((h << (i + 2)) & (0xc << (2 * i)));
+  }
+  return result;
+}
+
 static void set_chr4k_map(E *, u16, u16);
 
 static inline u8 chr_read(E *e, u8 *map[16], u16 addr) {
@@ -210,7 +218,7 @@ static inline void incv(P* p) {
        : (p->v & ~0x73e0) | ((p->v + 0x20) & 0x3e0);
 }
 
-static void shift_bg(E *e) { e->s.p.shifter >>= 2; }
+static void shift_bg(E *e) { e->s.p.bgatshift >>= 4; }
 
 static inline u8 scanx(P* p) { return p->fbidx & 255; }
 static inline u8 scany(P* p) { return p->fbidx >> 8; }
@@ -228,7 +236,7 @@ static void shift_en(E *e) {
   }
 
   if (LIKELY(p->ppumask & 8)) { // Show BG.
-    palidx = (p->shifter[1] & 0xc) | (p->shifter[0] & ~p->shifter[2] & 3);
+    palidx = p->bgatshift & 0xf;
   }
 
   if (spr->any_active && any_true_u8x16(active) &&
@@ -246,8 +254,7 @@ static void shift_en(E *e) {
       //  * When x!=255
       //  * (sprite priority doesn't matter)
       u8 bgpx = palidx & 3;
-      if ((non0 & spr->spr0mask & ~p->shifter[3]) && bgpx &&
-          scanx(p) != 255) {
+      if ((non0 & spr->spr0mask) && bgpx && scanx(p) != 255) {
         DEBUG("[%3u:%3u] sprite0\n", p->state % 341, p->state / 341);
         p->ppustatus |= 0x40;
       }
@@ -256,14 +263,14 @@ static void shift_en(E *e) {
       if (!bgpx || (non0 & (-non0) & spr->pri)) {
         int sidx = __builtin_ctzll(non0) >> 3;
         u8 sprpx = ((spr->shift[sidx + 8] << 1) & 2) | (spr->shift[sidx] & 1);
-        palidx = spr->pal[sidx] | (sprpx & ~p->shifter[3]);
+        palidx = spr->pal[sidx] | sprpx;
       }
     }
 
     spr->shift = blendv_u8x16(spr->shift, spr->shift >> 1, active);
   }
 
-  p->shifter >>= 2;
+  p->bgatshift >>= 4;
 
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   e->frame_buffer[p->fbidx++] = p->emphasis | p->palette[palidx];
@@ -276,20 +283,19 @@ static void shift_dis(E *e) {
       p->emphasis | p->palram[p->v >= 0x3f00 ? p->v & 0x1f : 0];
 }
 
-static inline void reload(E *e) {
+static inline void reload(E *e, bool col0) {
   P* p = &e->s.p;
   p->bgshift =
       (reverse_interleave(p->ptbh, p->ptbl) << 16) | (p->bgshift >> 16);
   p->atshift = (p->atb << 16) | (p->atshift >> 16);
-  p->shifter[0] = p->bgshift >> (p->x * 2);
-  p->shifter[1] = p->atshift >> (p->x * 2) << 2;
+  u32 bgmask = !(p->ppumask & 2) && col0 ? 0xffff0000 : ~0u;
+  p->bgatshift = interleave2(p->atshift >> (p->x * 2),
+                             (p->bgshift & bgmask) >> (p->x * 2));
 }
 
 static inline void sprclear(E *e) {
   P* p = &e->s.p;
   Spr* spr = &p->spr;
-  p->shifter[2] = (p->ppumask & 2) ? 0 : 0xffff;
-  p->shifter[3] = (p->ppumask & 4) ? 0 : 0xffff;
   memset(p->oam2, 0xff, sizeof(p->oam2));
   spr->spr0 = false;
   spr->any_active = spr->next_any_active;
@@ -353,13 +359,13 @@ static void ppu16(E *e) { read_atb(e); }
 static void ppu17(E *e) { read_atb(e); shift_bg(e); }
 static void ppu18(E *e) { read_atb(e); shift_en(e); spr_step(e); }
 static void ppu19(E *e) { read_ntb(e); }
-static void ppu20(E *e) { read_ntb(e); shift_bg(e); reload(e); }
-static void ppu21(E *e) { read_ntb(e); shift_en(e); reload(e); spr_step(e); }
+static void ppu20(E *e) { read_ntb(e); shift_bg(e); reload(e, true); }
+static void ppu21(E *e) { read_ntb(e); shift_en(e); reload(e, false); spr_step(e); }
 static void ppu22(E *e) { read_ntb(e); spr_step(e); }
 static void ppu23(E *e) { shift_bg(e); }
 static void ppu24(E *e) { shift_dis(e); }
 static void ppu25(E *e) { shift_dis(e); sprfetch(e); }
-static void ppu26(E *e) { shift_en(e); reload(e); sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu26(E *e) { shift_en(e); reload(e, false); sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
 static void ppu27(E *e) { shift_en(e); spr_step(e); }
 static void ppu28(E *e) { spr_step(e); }
 static void ppu29(E *e) { spr_step(e); ppu_t_to_v(&e->s.p, 0x7be0); }
@@ -388,7 +394,7 @@ static void ppu38(E *e) { read_atb(e); shift_en(e); }
 static void ppu39(E *e) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); }
 static void ppu40(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); }
 static void ppu41(E *e) { inch(&e->s.p); shift_en(e); }
-static void ppu42(E *e) { read_ntb(e); shift_en(e); reload(e); }
+static void ppu42(E *e) { read_ntb(e); shift_en(e); reload(e, false); }
 
 #define LINE0 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
 #define LINE1 0,0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,32,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,15
@@ -544,8 +550,9 @@ static void spr12(E *e) {
       spr->ptbl = reverse(spr->ptbl);
       ptbh = reverse(ptbh);
     }
-    spr->shift[idx] = spr->ptbl;
-    spr->shift[idx + 8] = ptbh;
+    u8 sprmask = !(p->ppumask & 4) && x < 8 ? 0xff << (8 - x) : 0xff;
+    spr->shift[idx] = spr->ptbl & sprmask;
+    spr->shift[idx + 8] = ptbh & sprmask;
     spr->pal[idx] = ((spr->at & 3) + 4) << 2;
     shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
     shift_in(&spr->spr0mask, (spr->s == 0 && spr->spr0) ? 0xff : 0);
@@ -1096,8 +1103,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         p->x = val & 7;
         p->t = (p->t & 0xffe0) | (val >> 3);
         u8 shamt = (p->x + (p->fbidx & 7)) * 2;
-        p->shifter[0] = p->bgshift >> shamt;
-        p->shifter[1] = p->atshift >> shamt << 2;
+        p->bgatshift = interleave2(p->atshift >> shamt, p->bgshift >> shamt);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx x=%02hhx w=0\n",
               e->s.cy, p->state % 341, p->state / 341, val, p->t, p->x);
       } else {
