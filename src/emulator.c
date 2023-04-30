@@ -753,6 +753,16 @@ static void apu_tick(E *e) {
   }
 
   if (a->dmcfetch) {
+    if (a->dmc_fetch_cy != e->s.cy) {
+      printf("!!! Incorrectly predicted DMC fetch (predicted: %" PRIu64
+             " actual: %" PRIu64 " diff: %" PRId64
+             " period: %u seq: %u timer: %u odd: %u a->state: %u).\n",
+             a->dmc_fetch_cy, e->s.cy, e->s.cy - a->dmc_fetch_cy, a->period[4],
+             a->seq[4], a->timer[4], (u32)((e->s.cy / 3) & 1), a->state & 1);
+      abort();
+    }
+    u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4] + 1) * 6;
+    a->dmc_fetch_cy = e->s.cy + next;
     u16 step = e->s.c.step - 1;
     if (step < s_dmc) {
       e->s.c.dmc_step = step; // TODO: Should finish writes first?
@@ -765,6 +775,15 @@ static void apu_tick(E *e) {
       DEBUG(" dmcfetch skipped (cy: %" PRIu64 "):\n", e->s.cy);
     }
     a->dmcfetch = false;
+  } else {
+    if (a->dmc_fetch_cy && a->dmc_fetch_cy < e->s.cy) {
+      printf("!!! Incorrectly predicted DMC fetch (predicted: %" PRIu64
+             " current: %" PRIu64 " diff: %" PRId64
+             " period: %u seq: %u timer: %u odd: %u a->state: %u).\n",
+             a->dmc_fetch_cy, e->s.cy, e->s.cy - a->dmc_fetch_cy, a->period[4],
+             a->seq[4], a->timer[4], (u32)((e->s.cy / 3) & 1), a->state & 1);
+      abort();
+    }
   }
 
   bool update = a->update;
@@ -912,10 +931,30 @@ static void apu_step(E *e) {
       if (!(a->reg[0x17] & 0xc0)) {
         DEBUG("     [%" PRIu64 "] frame irq\n", e->s.cy);
         e->s.c.irq |= IRQ_FRAME;
+        if (a->intr_cy != e->s.cy) {
+          printf("!!! Incorrectly predicted frame IRQ (predicted: %" PRIu64
+                 " actual: %" PRIu64 " diff: %" PRId64
+                 " reg: %u odd: %u a->state: %u).\n",
+                 a->intr_cy, e->s.cy, e->s.cy - a->intr_cy,
+                 a->reg[0x17], (u32)((e->s.cy / 3) & 1), a->state & 1);
+          abort();
+        }
+        a->intr_cy =
+            e->s.cy +
+            (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6 : 3);
+        DEBUG("apu_step => predicting %" PRIu64 "\n", a->intr_cy);
       }
       break;
     case 37284: apu_quarter(e); apu_half(e); goto irq;
     case 37285: a->state = 4; goto irq;
+  }
+  if (a->intr_cy && a->intr_cy < e->s.cy) {
+    printf("!!! Incorrectly predicted frame IRQ (predicted: %" PRIu64
+           " actual: %" PRIu64 " diff: %" PRId64
+           " reg: %u odd: %u a->state: %u).\n",
+           a->intr_cy, e->s.cy, e->s.cy - a->intr_cy, a->reg[0x17],
+           (u32)((e->s.cy / 3) & 1), a->state & 1);
+    abort();
   }
 }
 
@@ -1179,6 +1218,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       // DMC
       case 0x10:
         a->period[4] = dmcrate[val & 15];
+        u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
+        if (a->dmcen) {
+          a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
+        } else {
+          a->dmc_fetch_cy = 0;
+        }
         if (!(val & 0x80)) { c->irq &= ~IRQ_DMC; }
         goto apu;
       case 0x11: a->dmcout = val & 0x7f; goto apu;
@@ -1192,14 +1237,18 @@ static void cpu_write(E *e, u16 addr, u8 val) {
                     ") (bufstate=%u) (seq=%u)\n",
                     e->s.cy, a->dmcbufstate, a->seq[4]);
               a->dmcfetch = true;
+              a->dmc_fetch_cy = e->s.cy + !(a->state & 1) * 3;
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
                     e->s.cy, a->seq[4]);
+              u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
+              a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
             }
             start_dmc(a);
           }
         } else {
           a->dmcen = false;
+          a->dmc_fetch_cy = 0;
         }
         for (int i = 0; i < 4; ++i) {
           if (!(val & (1 << i))) { a->len[i] = 0; }
@@ -1208,12 +1257,18 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         c->irq &= ~IRQ_DMC;
         goto apu;
 
-      case 0x17:                                    // Frame counter
+      case 0x17: {  // Frame counter
+        u8 odd = (e->s.cy / 3) & 1;
         DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
-              (u32)((e->s.cy / 3) & 1));
+              (u32)odd);
         if (val & 0x40) { c->irq &= ~IRQ_FRAME; }
-        a->state = !((e->s.cy / 3) & 1); // 3/4 cycles
+        a->state &= 1; // 3/4 cycles
+        a->intr_cy = (val & 0xc0) ? 0
+                                  : e->s.cy + (val & 0x80 ? 18640 : 14914) * 6 +
+                                        (a->state ? 2 : 3) * 3;
+        DEBUG("$4017 write => predicting %" PRIu64 "\n", a->intr_cy);
         goto apu;
+      }
 
       apu: {
         static const char* bitnames[] = {
@@ -1242,7 +1297,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
 
       case 0x14: {   // OAMDMA
         c->oam.hi = val;
-        c->next_step = s_oamdma + (e->s.cy & 1); // 513/514 cycles
+        c->next_step = s_oamdma + !(e->s.cy & 1); // 513/514 cycles
         goto io;
       }
       case 0x16: {  // JOY1
@@ -4155,6 +4210,7 @@ static void cpu117(E* e, u8 busval) {
 }
 static void cpu118(E* e, u8 busval) {
   C* c = &e->s.c;
+  A* a = &e->s.a;
   e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
   c->step = c->dmc_step;
   e->s.a.dmcaddr = (e->s.a.dmcaddr + 1) | 0x8000;
@@ -4163,10 +4219,19 @@ static void cpu118(E* e, u8 busval) {
   } else {
     start_dmc(&e->s.a);
     if (e->s.a.reg[0x10] & 0x40) {
+#if 0
+      printf("DMC channel enabled (cy: %" PRIu64 ")\n", e->s.cy);
+#endif
       e->s.a.dmcen = true;
+      u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
+      a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
     } else {
       DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
+#if 0
+      printf("DMC channel disabled (cy: %" PRIu64 ") fetch=%u\n", e->s.cy, a->dmcfetch);
+#endif
       e->s.a.dmcen = false;
+      e->s.a.dmc_fetch_cy = 0;
       if (e->s.a.reg[0x10] & 0x80) {
         c->irq |= IRQ_DMC;
         DEBUG("  dmc irq!\n");
@@ -5020,17 +5085,18 @@ static Result init_emulator(E *e, const EInit *init) {
   s->c.next_step = s_cpu_decode;
   s->c.bits = s_opcode_bits[s->c.step++];
   // Triangle volume is always full; disabled by len counter or linear counter.
-  e->s.a.vol[2] = 1;
-  e->s.a.cvol[2] = ~0;
-  e->s.a.noise = 1;
+  s->a.vol[2] = 1;
+  s->a.cvol[2] = ~0;
+  s->a.noise = 1;
   // DMC channel should never have playback stopped.
-  e->s.a.period[4] = 213;
-  e->s.a.len[4] = 1;
-  e->s.a.halt[4] = ~0;
-  e->s.a.play_mask[4] = ~0;
+  s->a.period[4] = 213;
+  s->a.len[4] = 1;
+  s->a.halt[4] = ~0;
+  s->a.play_mask[4] = ~0;
   // Default to all channels unmuted. Using scalar - vector hack for broadcast.
-  e->s.a.swmute_mask = ~0 - (u16x8){};
-  e->s.a.state = 4;
+  s->a.swmute_mask = ~0 - (u16x8){};
+  s->a.state = 4;
+  s->a.intr_cy = 89481;
 
   return OK;
   ON_ERROR_RETURN;

@@ -254,7 +254,7 @@
       ["08.double_height.nes", 20, "96ddb0ca2362ce523d0e780e0bbfe3a9d60d86bc"],
       ["09.timing_basics.nes", 100, "ff8319f40fc69432fa86183f8c086de59e302a70"],
       ["10.timing_order.nes", 100, "0d3fb013a6c1a9be155da73129f0d8c05d8d8960"],
-      ["11.edge_timing.nes", 55, "22666618b933204e8370ae2798ccb34101c2c426"]
+      ["11.edge_timing.nes", 75, "22666618b933204e8370ae2798ccb34101c2c426"]
     ]
   },
 
@@ -264,7 +264,7 @@
       ["1.Basics.nes", 16, "9aaac9de36fc1c2c06ab0c90d79aaabde46cfe22"],
       ["2.Details.nes", 25, "3f03869fa36ef387ea6aa117f4665830b5fd31b6"],
       ["3.Timing.nes", 135, "afae7571c794532d3d00960cc99a13c6606473fd"],
-      ["4.Obscure.nes", 21, "d6b6078382debc847c2aa353ce033913165e5b4d"],
+      ["4.Obscure.nes", 22, "d6b6078382debc847c2aa353ce033913165e5b4d"],
       ["5.Emulator.nes", 15, "2f00fce3b188b309c597adcc4540622a4dba8d73"]
     ]
   },
