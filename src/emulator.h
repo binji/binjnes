@@ -229,7 +229,7 @@ typedef struct {
   u16x8 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
   f32x4 sample, vol, decay;
   f32 mixed, base_mixed;
-  u64 intr_cy, dmc_fetch_cy;
+  u64 cy, intr_cy, dmc_fetch_cy;
 
   u16 state, noise, dmcbytes, dmcaddr;
   u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate;

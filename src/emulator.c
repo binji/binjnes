@@ -700,6 +700,7 @@ static void apu_tick(E *e) {
                                6,  7,  8,  9,  10, 11, 12, 13, 14, 15};
 
   A* a = &e->s.a;
+  u64 cy = a->cy;
   AudioBuffer* ab = &e->audio_buffer;
 
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
@@ -731,19 +732,19 @@ static void apu_tick(E *e) {
     if (timer0[4]) {
       if (a->dmcbufstate) {
         DEBUG("   dmc timer overflow (cy: %" PRIu64 ") (seq=%u) (timer=>%u)\n",
-              e->s.cy, a->seq[4], a->timer[4]);
+              cy, a->seq[4], a->timer[4]);
         u8 newdmcout = a->dmcout + ((a->dmcshift & 1) << 2) - 2;
         if (newdmcout <= 127) { a->dmcout = newdmcout; }
         a->dmcshift >>= 1;
       }
       if (a->seq[4] == 0) {
         if (a->dmcen) {
-          DEBUG("  dmc output finished, fetch (cy: %" PRIu64 ")\n", e->s.cy);
+          DEBUG("  dmc output finished, fetch (cy: %" PRIu64 ")\n", cy);
           a->dmcfetch = true;
         }
         if (a->dmcbufstate) {
-          DEBUG("  copy buf -> sr (cy: %" PRIu64 ") (bufstate=%u=>%u)\n",
-                e->s.cy, a->dmcbufstate, a->dmcbufstate - 1);
+          DEBUG("  copy buf -> sr (cy: %" PRIu64 ") (bufstate=%u=>%u)\n", cy,
+                a->dmcbufstate, a->dmcbufstate - 1);
           a->dmcshift = a->dmcbuf;
           --a->dmcbufstate;
         }
@@ -753,16 +754,17 @@ static void apu_tick(E *e) {
   }
 
   if (a->dmcfetch) {
-    if (a->dmc_fetch_cy != e->s.cy) {
+    if (a->dmc_fetch_cy != cy) {
       printf("!!! Incorrectly predicted DMC fetch (predicted: %" PRIu64
              " actual: %" PRIu64 " diff: %" PRId64
              " period: %u seq: %u timer: %u odd: %u a->state: %u).\n",
-             a->dmc_fetch_cy, e->s.cy, e->s.cy - a->dmc_fetch_cy, a->period[4],
-             a->seq[4], a->timer[4], (u32)((e->s.cy / 3) & 1), a->state & 1);
+             a->dmc_fetch_cy, cy, cy - a->dmc_fetch_cy, a->period[4], a->seq[4],
+             a->timer[4], (u32)((cy / 3) & 1), a->state & 1);
       abort();
     }
     u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4] + 1) * 6;
-    a->dmc_fetch_cy = e->s.cy + next;
+    a->dmc_fetch_cy = cy + next;
+    DEBUG("DMC fetched => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
     u16 step = e->s.c.step - 1;
     if (step < s_dmc) {
       e->s.c.dmc_step = step; // TODO: Should finish writes first?
@@ -770,18 +772,18 @@ static void apu_tick(E *e) {
       e->s.c.step = s_dmc + (4 - stall);
       e->s.c.bits = s_opcode_bits[e->s.c.step++];
       DEBUG(" QUEUE dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
-            e->s.cy, stall, step, a->seq[4]);
+            cy, stall, step, a->seq[4]);
     } else {
-      DEBUG(" dmcfetch skipped (cy: %" PRIu64 "):\n", e->s.cy);
+      DEBUG(" dmcfetch skipped (cy: %" PRIu64 "):\n", cy);
     }
     a->dmcfetch = false;
   } else {
-    if (a->dmc_fetch_cy && a->dmc_fetch_cy < e->s.cy) {
+    if (a->dmc_fetch_cy < cy) {
       printf("!!! Incorrectly predicted DMC fetch (predicted: %" PRIu64
              " current: %" PRIu64 " diff: %" PRId64
              " period: %u seq: %u timer: %u odd: %u a->state: %u).\n",
-             a->dmc_fetch_cy, e->s.cy, e->s.cy - a->dmc_fetch_cy, a->period[4],
-             a->seq[4], a->timer[4], (u32)((e->s.cy / 3) & 1), a->state & 1);
+             a->dmc_fetch_cy, cy, cy - a->dmc_fetch_cy, a->period[4], a->seq[4],
+             a->timer[4], (u32)((cy / 3) & 1), a->state & 1);
       abort();
     }
   }
@@ -859,8 +861,8 @@ static void apu_tick(E *e) {
 }
 
 static void apu_quarter(E *e) {
-  DEBUG("    1/4 (cy: %" PRIu64")\n", e->s.cy);
   A* a = &e->s.a;
+  DEBUG("    1/4 (cy: %" PRIu64")\n", a->cy);
 
   // pulse 1, pulse 2, noise envelope
   const f32x4 ffff = {15, 15, 15, 15}, oldvol = a->vol;
@@ -897,8 +899,8 @@ static void apu_quarter(E *e) {
 }
 
 static void apu_half(E *e) {
-  DEBUG("    1/2 (cy: %" PRIu64")\n", e->s.cy);
   A* a = &e->s.a;
+  DEBUG("    1/2 (cy: %" PRIu64")\n", a->cy);
   // length counter
   u16x8 len0 = a->len == 0;
   a->len -= 1 & ~(len0 | a->halt);
@@ -917,6 +919,7 @@ static void apu_half(E *e) {
 
 static void apu_step(E *e) {
   A* a = &e->s.a;
+  u64 cy = a->cy;
   if (a->state & 1) { apu_tick(e); }
   switch (a->state++) {
     case 3: if (a->reg[0x17] & 0x80) { apu_quarter(e); apu_half(e); } break;
@@ -929,18 +932,18 @@ static void apu_step(E *e) {
     case 37283:
     irq:
       if (!(a->reg[0x17] & 0xc0)) {
-        DEBUG("     [%" PRIu64 "] frame irq\n", e->s.cy);
+        DEBUG("     [%" PRIu64 "] frame irq\n", cy);
         e->s.c.irq |= IRQ_FRAME;
-        if (a->intr_cy != e->s.cy) {
+        if (a->intr_cy != cy) {
           printf("!!! Incorrectly predicted frame IRQ (predicted: %" PRIu64
                  " actual: %" PRIu64 " diff: %" PRId64
                  " reg: %u odd: %u a->state: %u).\n",
-                 a->intr_cy, e->s.cy, e->s.cy - a->intr_cy,
-                 a->reg[0x17], (u32)((e->s.cy / 3) & 1), a->state & 1);
+                 a->intr_cy, cy, cy - a->intr_cy,
+                 a->reg[0x17], (u32)((cy / 3) & 1), a->state & 1);
           abort();
         }
         a->intr_cy =
-            e->s.cy +
+            cy +
             (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6 : 3);
         DEBUG("apu_step => predicting %" PRIu64 "\n", a->intr_cy);
       }
@@ -948,13 +951,21 @@ static void apu_step(E *e) {
     case 37284: apu_quarter(e); apu_half(e); goto irq;
     case 37285: a->state = 4; goto irq;
   }
-  if (a->intr_cy && a->intr_cy < e->s.cy) {
+  if (a->intr_cy < cy) {
     printf("!!! Incorrectly predicted frame IRQ (predicted: %" PRIu64
            " actual: %" PRIu64 " diff: %" PRId64
            " reg: %u odd: %u a->state: %u).\n",
-           a->intr_cy, e->s.cy, e->s.cy - a->intr_cy, a->reg[0x17],
-           (u32)((e->s.cy / 3) & 1), a->state & 1);
+           a->intr_cy, cy, cy - a->intr_cy, a->reg[0x17],
+           (u32)((cy / 3) & 1), a->state & 1);
     abort();
+  }
+  a->cy += 3;
+}
+
+static void apu_sync(E* e) {
+  A* a = &e->s.a;
+  while (a->cy + 1 <= e->s.cy) {
+    apu_step(e);
   }
 }
 
@@ -1055,6 +1066,7 @@ static u8 cpu_read(E *e, u16 addr) {
   case 4: // APU & I/O
     switch (addr - 0x4000) {
       case 0x15: {
+        apu_sync(e);
         u8 result = ((c->irq & (IRQ_FRAME | IRQ_DMC | IRQ_MAPPER)) << 6) |
                     (c->open_bus & 0x20) | (a->dmcen << 4) |
                     ((a->len[3] > 0) << 3) | ((a->len[2] > 0) << 2) |
@@ -1191,6 +1203,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
                                       100, 126, 189, 253, 380, 507, 1016, 2033};
     static const u16 dmcrate[] = {213, 189, 169, 159, 142, 126, 112, 106,
                                   94,  79,  70,  63,  52,  41,  35,  26};
+    apu_sync(e);
     A* a = &e->s.a;
     switch (addr - 0x4000) {
       // Pulse1
@@ -1221,8 +1234,10 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
         if (a->dmcen) {
           a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
+          DEBUG("DMC enabled via $4010 => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
         } else {
-          a->dmc_fetch_cy = 0;
+          a->dmc_fetch_cy = ~0;
+          DEBUG("DMC disabled via $4010 => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
         }
         if (!(val & 0x80)) { c->irq &= ~IRQ_DMC; }
         goto apu;
@@ -1238,17 +1253,22 @@ static void cpu_write(E *e, u16 addr, u8 val) {
                     e->s.cy, a->dmcbufstate, a->seq[4]);
               a->dmcfetch = true;
               a->dmc_fetch_cy = e->s.cy + !(a->state & 1) * 3;
+              DEBUG("start dmc w/ fetch => predicting %" PRIu64 "\n",
+                     a->dmc_fetch_cy);
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
                     e->s.cy, a->seq[4]);
               u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
               a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
+              DEBUG("start dmc w/o fetch => predicting %" PRIu64 "\n",
+                     a->dmc_fetch_cy);
             }
             start_dmc(a);
           }
         } else {
           a->dmcen = false;
-          a->dmc_fetch_cy = 0;
+          a->dmc_fetch_cy = ~0;
+          DEBUG("disabling dmc => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
         }
         for (int i = 0; i < 4; ++i) {
           if (!(val & (1 << i))) { a->len[i] = 0; }
@@ -1263,7 +1283,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
               (u32)odd);
         if (val & 0x40) { c->irq &= ~IRQ_FRAME; }
         a->state &= 1; // 3/4 cycles
-        a->intr_cy = (val & 0xc0) ? 0
+        a->intr_cy = (val & 0xc0) ? ~0ull
                                   : e->s.cy + (val & 0x80 ? 18640 : 14914) * 6 +
                                         (a->state ? 2 : 3) * 3;
         DEBUG("$4017 write => predicting %" PRIu64 "\n", a->intr_cy);
@@ -4219,19 +4239,15 @@ static void cpu118(E* e, u8 busval) {
   } else {
     start_dmc(&e->s.a);
     if (e->s.a.reg[0x10] & 0x40) {
-#if 0
-      printf("DMC channel enabled (cy: %" PRIu64 ")\n", e->s.cy);
-#endif
       e->s.a.dmcen = true;
       u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
       a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
+      DEBUG("DMC enabled => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
     } else {
       DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
-#if 0
-      printf("DMC channel disabled (cy: %" PRIu64 ") fetch=%u\n", e->s.cy, a->dmcfetch);
-#endif
       e->s.a.dmcen = false;
-      e->s.a.dmc_fetch_cy = 0;
+      e->s.a.dmc_fetch_cy = ~0;
+      DEBUG("DMC disabled => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
       if (e->s.a.reg[0x10] & 0x80) {
         c->irq |= IRQ_DMC;
         DEBUG("  dmc irq!\n");
@@ -5097,6 +5113,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.swmute_mask = ~0 - (u16x8){};
   s->a.state = 4;
   s->a.intr_cy = 89481;
+  s->a.dmc_fetch_cy = ~0;
 
   return OK;
   ON_ERROR_RETURN;
@@ -5166,23 +5183,19 @@ u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
 static void emulator_substep_loop(E *e, Ticks check_ticks) {
-  if (e->s.cy + 3 <= check_ticks) {
-    switch (e->s.cy % 3) { // Duff's device!
-      while (e->s.event == 0 && e->s.cy + 3 <= check_ticks) {
-        case 0: cpu_step(e); ppu_step(e); apu_step(e); ++e->s.cy;
-        case 1: ppu_step(e); ++e->s.cy;
-        case 2: ppu_step(e); ++e->s.cy;
+  while (e->s.event == 0 && e->s.cy < check_ticks) {
+    while (e->s.event == 0 &&
+           e->s.cy < check_ticks &&
+           e->s.cy <= e->s.a.intr_cy &&
+           e->s.cy <= e->s.a.dmc_fetch_cy) {
+      switch (e->s.cy % 3) {
+        case 0: cpu_step(e); ppu_step(e); ++e->s.cy; break;
+        case 1: ppu_step(e); ++e->s.cy; break;
+        case 2: ppu_step(e); ++e->s.cy; break;
       }
     }
-  }
-  // Unalign, if requested.
-  while (e->s.event == 0 && e->s.cy < check_ticks) {
-    switch (e->s.cy % 3) {
-      case 0: cpu_step(e); ppu_step(e); apu_step(e); ++e->s.cy; break;
-      case 1: ppu_step(e); ++e->s.cy; break;
-      case 2: ppu_step(e); ++e->s.cy; break;
-    }
-  }
+    apu_sync(e);
+   }
 }
 
 EEvent emulator_run_until(E *e, Ticks until_ticks) {
