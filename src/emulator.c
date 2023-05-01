@@ -123,24 +123,29 @@ static void sched_occurred(E* e, Sched sched) {
 }
 
 static void sched_run(E* e) {
-  u64 oldcy = e->s.cy;
-  while (e->s.cy < e->s.sc.next) {
-    switch (e->s.cy % 3) {
-      case 0: cpu_step(e); ppu_step(e); ++e->s.cy; break;
-      case 1: ppu_step(e); ++e->s.cy; break;
-      case 2: ppu_step(e); ++e->s.cy; break;
-    }
+  S* s = &e->s;
+  // Try to align.
+  switch (s->cy % 3) {
+  case 0: cpu_step(e); ppu_step(e); if (++s->cy >= s->sc.next) break;
+  case 1: ppu_step(e); if (++s->cy >= s->sc.next) break;
+  case 2: ppu_step(e); ++s->cy;
   }
-  if (e->s.sc.when[SCHED_DMC_FETCH] == e->s.cy ||
-      e->s.sc.when[SCHED_FRAME_IRQ] == e->s.cy) {
+  // Run aligned.
+  while (s->cy < s->sc.next) {
+    cpu_step(e); ppu_step(e); if (++s->cy >= s->sc.next) break;
+    ppu_step(e); if (++s->cy >= s->sc.next) break;
+    ppu_step(e); ++s->cy;
+  }
+  if (s->sc.when[SCHED_DMC_FETCH] == s->cy ||
+      s->sc.when[SCHED_FRAME_IRQ] == s->cy) {
     apu_sync(e);
   }
   for (int i = 0; i < SCHED_COUNT; ++i) {
-    if (e->s.sc.when[i] < e->s.cy) {
+    if (s->sc.when[i] < s->cy) {
       printf("!!! Failed to predict '%s' (predicted: %" PRIu64
              " actual: %" PRIu64 " diff: %" PRId64 ").\n",
-             s_sched_names[i], e->s.sc.when[i], e->s.cy,
-             e->s.cy - e->s.sc.when[i]);
+             s_sched_names[i], s->sc.when[i], s->cy,
+             s->cy - s->sc.when[i]);
       abort();
     }
   }
