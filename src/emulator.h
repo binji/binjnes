@@ -74,6 +74,14 @@ typedef enum {
   IRQ_MAPPER = 4,
 } Irq;
 
+typedef enum {
+  SCHED_EVENT,
+  SCHED_RUN_UNTIL,
+  SCHED_FRAME_IRQ,
+  SCHED_DMC_FETCH,
+  SCHED_COUNT,
+} Sched;
+
 typedef struct {
   u8 *prg_data;
   u8 *chr_data, *chr_data_write;
@@ -229,12 +237,11 @@ typedef struct {
   u16x8 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
   f32x4 sample, vol, decay;
   f32 mixed, base_mixed;
-  u64 cy, intr_cy, dmc_fetch_cy;
 
   u16 state, noise, dmcbytes, dmcaddr;
   u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate;
   bool update, trireload, dmcen, dmcfetch;
-  u64 resetcy; // XXX
+  u64 cy, resetcy; // XXX
 } A;
 
 typedef struct {
@@ -243,9 +250,15 @@ typedef struct {
 } J;
 
 typedef struct {
+  u64 when[SCHED_COUNT];
+  u64 next;
+} Sc;
+
+typedef struct {
   u32 header;
   u64 cy;
   EmulatorEvent event;
+  Sc sc;
   C c;
   P p;
   A a;

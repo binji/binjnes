@@ -62,11 +62,89 @@ static const RGBA s_nespal[] = {
 
 static void disasm(E *e, u16 addr);
 static void print_info(E *e);
+static void cpu_step(E *e);
+static void ppu_step(E *e);
+static void apu_sync(E *e);
 static void spr_step(E *e);
 
 static const u8 s_opcode_bits[], s_dmc_stall[];
 static const u16 s_cpu_decode, s_callvec, s_oamdma, s_dmc;
 static const u16 s_opcode_loc[];
+
+// Scheduler stuff /////////////////////////////////////////////////////////////
+
+static const char *s_sched_names[] = {
+    "event",
+    "run until",
+    "frame irq",
+    "dmc fetch",
+};
+_Static_assert(ARRAY_SIZE(s_sched_names) == SCHED_COUNT, "s_sched_names count mismatch");
+
+static void sched_init(E* e) {
+  for (int i = 0; i < SCHED_COUNT; ++i) {
+    e->s.sc.when[i] = ~0;
+  }
+  e->s.sc.next = ~0;
+}
+
+static void sched_update_next(E* e) {
+  u64 next = ~0;
+  for (int i = 0; i < SCHED_COUNT; ++i) {
+    next = MIN(next, e->s.sc.when[i]);
+  }
+  e->s.sc.next = next;
+}
+
+static void sched_at(E* e, Sched sched, u64 cy) {
+  assert(cy != ~0ull);
+  assert(cy >= e->s.cy);
+  ++cy;
+  u64 prev = e->s.sc.when[sched];
+  e->s.sc.when[sched] = cy;
+  sched_update_next(e);
+}
+
+static void sched_clear(E* e, Sched sched) {
+  u64 prev = e->s.sc.when[sched];
+  e->s.sc.when[sched] = ~0;
+  sched_update_next(e);
+}
+
+static void sched_occurred(E* e, Sched sched) {
+  if (e->s.sc.when[sched] != e->s.cy) {
+    fprintf(stderr,
+            "!!! Incorrectly predicted '%s' (predicted: %" PRIu64
+            " actual: %" PRIu64 " diff: %" PRId64 ").\n",
+            s_sched_names[sched], e->s.sc.when[sched], e->s.cy,
+            e->s.cy - e->s.sc.when[sched]);
+    abort();
+  }
+}
+
+static void sched_run(E* e) {
+  u64 oldcy = e->s.cy;
+  while (e->s.cy < e->s.sc.next) {
+    switch (e->s.cy % 3) {
+      case 0: cpu_step(e); ppu_step(e); ++e->s.cy; break;
+      case 1: ppu_step(e); ++e->s.cy; break;
+      case 2: ppu_step(e); ++e->s.cy; break;
+    }
+  }
+  if (e->s.sc.when[SCHED_DMC_FETCH] == e->s.cy ||
+      e->s.sc.when[SCHED_FRAME_IRQ] == e->s.cy) {
+    apu_sync(e);
+  }
+  for (int i = 0; i < SCHED_COUNT; ++i) {
+    if (e->s.sc.when[i] < e->s.cy) {
+      printf("!!! Failed to predict '%s' (predicted: %" PRIu64
+             " actual: %" PRIu64 " diff: %" PRId64 ").\n",
+             s_sched_names[i], e->s.sc.when[i], e->s.cy,
+             e->s.cy - e->s.sc.when[i]);
+      abort();
+    }
+  }
+}
 
 // PPU stuff ///////////////////////////////////////////////////////////////////
 
@@ -332,6 +410,7 @@ static void ppu2(E *e) {
   }
   e->s.c.read_input = false;
   e->s.event |= EMULATOR_EVENT_NEW_FRAME;
+  sched_at(e, SCHED_EVENT, e->s.cy);
   DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
         e->s.p.ppustatus);
 }
@@ -754,17 +833,9 @@ static void apu_tick(E *e) {
   }
 
   if (a->dmcfetch) {
-    if (a->dmc_fetch_cy != cy) {
-      printf("!!! Incorrectly predicted DMC fetch (predicted: %" PRIu64
-             " actual: %" PRIu64 " diff: %" PRId64
-             " period: %u seq: %u timer: %u odd: %u a->state: %u).\n",
-             a->dmc_fetch_cy, cy, cy - a->dmc_fetch_cy, a->period[4], a->seq[4],
-             a->timer[4], (u32)((cy / 3) & 1), a->state & 1);
-      abort();
-    }
-    u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4] + 1) * 6;
-    a->dmc_fetch_cy = cy + next;
-    DEBUG("DMC fetched => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
+    sched_occurred(e, SCHED_DMC_FETCH);
+    sched_at(e, SCHED_DMC_FETCH,
+             cy + ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4] + 1) * 6);
     u16 step = e->s.c.step - 1;
     if (step < s_dmc) {
       e->s.c.dmc_step = step; // TODO: Should finish writes first?
@@ -777,15 +848,6 @@ static void apu_tick(E *e) {
       DEBUG(" dmcfetch skipped (cy: %" PRIu64 "):\n", cy);
     }
     a->dmcfetch = false;
-  } else {
-    if (a->dmc_fetch_cy < cy) {
-      printf("!!! Incorrectly predicted DMC fetch (predicted: %" PRIu64
-             " current: %" PRIu64 " diff: %" PRId64
-             " period: %u seq: %u timer: %u odd: %u a->state: %u).\n",
-             a->dmc_fetch_cy, cy, cy - a->dmc_fetch_cy, a->period[4], a->seq[4],
-             a->timer[4], (u32)((cy / 3) & 1), a->state & 1);
-      abort();
-    }
   }
 
   bool update = a->update;
@@ -856,7 +918,13 @@ static void apu_tick(E *e) {
       accum4 += *h4++ * *buf4++;
     }
     *ab->position++ = accum4[0] + accum4[1] + accum4[2] + accum4[3];
-    assert(ab->position <= ab->end);
+    if (ab->position > ab->end) {
+      fprintf(stderr,
+              "ab->position > ab->end (%zu > %zu). a.cy=%" PRIu64
+              ", cy=%" PRIu64 "\n",
+              ab->position - ab->data, ab->end - ab->data, cy, e->s.cy);
+      abort();
+    }
   }
 }
 
@@ -934,30 +1002,14 @@ static void apu_step(E *e) {
       if (!(a->reg[0x17] & 0xc0)) {
         DEBUG("     [%" PRIu64 "] frame irq\n", cy);
         e->s.c.irq |= IRQ_FRAME;
-        if (a->intr_cy != cy) {
-          printf("!!! Incorrectly predicted frame IRQ (predicted: %" PRIu64
-                 " actual: %" PRIu64 " diff: %" PRId64
-                 " reg: %u odd: %u a->state: %u).\n",
-                 a->intr_cy, cy, cy - a->intr_cy,
-                 a->reg[0x17], (u32)((cy / 3) & 1), a->state & 1);
-          abort();
-        }
-        a->intr_cy =
-            cy +
-            (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6 : 3);
-        DEBUG("apu_step => predicting %" PRIu64 "\n", a->intr_cy);
+        sched_occurred(e, SCHED_FRAME_IRQ);
+        sched_at(e, SCHED_FRAME_IRQ,
+                 cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6
+                                     : 3));
       }
       break;
     case 37284: apu_quarter(e); apu_half(e); goto irq;
     case 37285: a->state = 4; goto irq;
-  }
-  if (a->intr_cy < cy) {
-    printf("!!! Incorrectly predicted frame IRQ (predicted: %" PRIu64
-           " actual: %" PRIu64 " diff: %" PRId64
-           " reg: %u odd: %u a->state: %u).\n",
-           a->intr_cy, cy, cy - a->intr_cy, a->reg[0x17],
-           (u32)((cy / 3) & 1), a->state & 1);
-    abort();
   }
   a->cy += 3;
 }
@@ -1233,11 +1285,9 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         a->period[4] = dmcrate[val & 15];
         u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
         if (a->dmcen) {
-          a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
-          DEBUG("DMC enabled via $4010 => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
+          sched_at(e, SCHED_DMC_FETCH, e->s.cy + next + !(a->state & 1) * 3);
         } else {
-          a->dmc_fetch_cy = ~0;
-          DEBUG("DMC disabled via $4010 => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
+          sched_clear(e, SCHED_DMC_FETCH);
         }
         if (!(val & 0x80)) { c->irq &= ~IRQ_DMC; }
         goto apu;
@@ -1252,23 +1302,21 @@ static void cpu_write(E *e, u16 addr, u8 val) {
                     ") (bufstate=%u) (seq=%u)\n",
                     e->s.cy, a->dmcbufstate, a->seq[4]);
               a->dmcfetch = true;
-              a->dmc_fetch_cy = e->s.cy + !(a->state & 1) * 3;
-              DEBUG("start dmc w/ fetch => predicting %" PRIu64 "\n",
-                     a->dmc_fetch_cy);
+              sched_at(e, SCHED_DMC_FETCH, e->s.cy + !(a->state & 1) * 3);
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
                     e->s.cy, a->seq[4]);
-              u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
-              a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
-              DEBUG("start dmc w/o fetch => predicting %" PRIu64 "\n",
-                     a->dmc_fetch_cy);
+              sched_at(
+                  e, SCHED_DMC_FETCH,
+                  e->s.cy +
+                      ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6 +
+                      !(a->state & 1) * 3);
             }
             start_dmc(a);
           }
         } else {
           a->dmcen = false;
-          a->dmc_fetch_cy = ~0;
-          DEBUG("disabling dmc => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
+          sched_clear(e, SCHED_DMC_FETCH);
         }
         for (int i = 0; i < 4; ++i) {
           if (!(val & (1 << i))) { a->len[i] = 0; }
@@ -1283,10 +1331,13 @@ static void cpu_write(E *e, u16 addr, u8 val) {
               (u32)odd);
         if (val & 0x40) { c->irq &= ~IRQ_FRAME; }
         a->state &= 1; // 3/4 cycles
-        a->intr_cy = (val & 0xc0) ? ~0ull
-                                  : e->s.cy + (val & 0x80 ? 18640 : 14914) * 6 +
-                                        (a->state ? 2 : 3) * 3;
-        DEBUG("$4017 write => predicting %" PRIu64 "\n", a->intr_cy);
+        if (val & 0xc0) {
+          sched_clear(e, SCHED_FRAME_IRQ);
+        } else {
+          sched_at(e, SCHED_FRAME_IRQ,
+                   e->s.cy + (val & 0x80 ? 18640 : 14914) * 6 +
+                       (a->state ? 2 : 3) * 3);
+        }
         goto apu;
       }
 
@@ -4240,14 +4291,14 @@ static void cpu118(E* e, u8 busval) {
     start_dmc(&e->s.a);
     if (e->s.a.reg[0x10] & 0x40) {
       e->s.a.dmcen = true;
-      u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
-      a->dmc_fetch_cy = e->s.cy + next + !(a->state & 1) * 3;
-      DEBUG("DMC enabled => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
+      sched_at(e, SCHED_DMC_FETCH,
+               e->s.cy +
+                   ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6 +
+                   !(a->state & 1) * 3);
     } else {
       DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
       e->s.a.dmcen = false;
-      e->s.a.dmc_fetch_cy = ~0;
-      DEBUG("DMC disabled => predicting %" PRIu64 "\n", a->dmc_fetch_cy);
+      sched_clear(e, SCHED_DMC_FETCH);
       if (e->s.a.reg[0x10] & 0x80) {
         c->irq |= IRQ_DMC;
         DEBUG("  dmc irq!\n");
@@ -5112,8 +5163,8 @@ static Result init_emulator(E *e, const EInit *init) {
   // Default to all channels unmuted. Using scalar - vector hack for broadcast.
   s->a.swmute_mask = ~0 - (u16x8){};
   s->a.state = 4;
-  s->a.intr_cy = 89481;
-  s->a.dmc_fetch_cy = ~0;
+  sched_init(e);
+  sched_at(e, SCHED_FRAME_IRQ, 89481);
 
   return OK;
   ON_ERROR_RETURN;
@@ -5183,19 +5234,12 @@ u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
 static void emulator_substep_loop(E *e, Ticks check_ticks) {
+  sched_clear(e, SCHED_EVENT);
+  sched_at(e, SCHED_RUN_UNTIL, check_ticks);
   while (e->s.event == 0 && e->s.cy < check_ticks) {
-    while (e->s.event == 0 &&
-           e->s.cy < check_ticks &&
-           e->s.cy <= e->s.a.intr_cy &&
-           e->s.cy <= e->s.a.dmc_fetch_cy) {
-      switch (e->s.cy % 3) {
-        case 0: cpu_step(e); ppu_step(e); ++e->s.cy; break;
-        case 1: ppu_step(e); ++e->s.cy; break;
-        case 2: ppu_step(e); ++e->s.cy; break;
-      }
-    }
-    apu_sync(e);
-   }
+    sched_run(e);
+  }
+  apu_sync(e);
 }
 
 EEvent emulator_run_until(E *e, Ticks until_ticks) {
