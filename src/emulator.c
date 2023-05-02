@@ -775,7 +775,7 @@ static void set_period_hi(A* a, int chan, u8 val) {
   start_chan(a, chan, val);
 }
 
-static void apu_tick(E *e) {
+static void apu_tick(E *e, u64 cy) {
   static const u16x8 timer_diff = {1, 1, 2, 1, 1};
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
                                 {0, 1, 1, 0, 0, 0, 0, 0},
@@ -786,7 +786,6 @@ static void apu_tick(E *e) {
                                6,  7,  8,  9,  10, 11, 12, 13, 14, 15};
 
   A* a = &e->s.a;
-  u64 cy = a->cy;
   AudioBuffer* ab = &e->audio_buffer;
 
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
@@ -935,10 +934,7 @@ static void apu_tick(E *e) {
   }
 }
 
-static void apu_quarter(E *e) {
-  A* a = &e->s.a;
-  DEBUG("    1/4 (cy: %" PRIu64")\n", a->cy);
-
+static void apu_quarter(A *a) {
   // pulse 1, pulse 2, noise envelope
   const f32x4 ffff = {15, 15, 15, 15}, oldvol = a->vol;
   u32x4 env0 = a->envdiv == 0, env0_start = env0 | a->start,
@@ -973,9 +969,7 @@ static void apu_quarter(E *e) {
   }
 }
 
-static void apu_half(E *e) {
-  A* a = &e->s.a;
-  DEBUG("    1/2 (cy: %" PRIu64")\n", a->cy);
+static void apu_half(A *a) {
   // length counter
   u16x8 len0 = a->len == 0;
   a->len -= 1 & ~(len0 | a->halt);
@@ -992,40 +986,36 @@ static void apu_half(E *e) {
   get_sweep_target_or_mute(a);
 }
 
-static void apu_step(E *e) {
-  A* a = &e->s.a;
-  u64 cy = a->cy;
-  if (a->state & 1) { apu_tick(e); }
-  switch (a->state++) {
-    case 3: if (a->reg[0x17] & 0x80) { apu_quarter(e); apu_half(e); } break;
-    case 7460: apu_quarter(e); break;
-    case 14916: apu_quarter(e); apu_half(e); break;
-    case 22374:
-      apu_quarter(e);
-      if (!(a->reg[0x17] & 0x80)) { a->state += (7455 - 3729)*2; }
-      break;
-    case 37283:
-    irq:
-      if (!(a->reg[0x17] & 0xc0)) {
-        DEBUG("     [%" PRIu64 "] frame irq\n", cy);
-        e->s.c.irq |= IRQ_FRAME;
-        sched_occurred(e, SCHED_FRAME_IRQ);
-        sched_at(e, SCHED_FRAME_IRQ,
-                 cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6
-                                     : 3));
-      }
-      break;
-    case 37284: apu_quarter(e); apu_half(e); goto irq;
-    case 37285: a->state = 4; goto irq;
-  }
-  a->cy += 3;
-}
-
 static void apu_sync(E* e) {
   A* a = &e->s.a;
-  while (a->cy + 1 <= e->s.cy) {
-    apu_step(e);
+  u64 cy = a->cy;
+  while (cy + 1 <= e->s.cy) {
+    if (a->state & 1) { apu_tick(e, cy); }
+    switch (a->state++) {
+      case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(a); } break;
+      case 7460: apu_quarter(a); break;
+      case 14916: apu_quarter(a); apu_half(a); break;
+      case 22374:
+        apu_quarter(a);
+        if (!(a->reg[0x17] & 0x80)) { a->state += (7455 - 3729)*2; }
+        break;
+      case 37283:
+      irq:
+        if (!(a->reg[0x17] & 0xc0)) {
+          DEBUG("     [%" PRIu64 "] frame irq\n", cy);
+          e->s.c.irq |= IRQ_FRAME;
+          sched_occurred(e, SCHED_FRAME_IRQ);
+          sched_at(e, SCHED_FRAME_IRQ,
+                   cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6
+                                       : 3));
+        }
+        break;
+      case 37284: apu_quarter(a); apu_half(a); goto irq;
+      case 37285: a->state = 4; goto irq;
+    }
+    cy += 3;
   }
+  a->cy = cy;
 }
 
 // CPU stuff ///////////////////////////////////////////////////////////////////
