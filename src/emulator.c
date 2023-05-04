@@ -775,10 +775,10 @@ static void apu_tick(E *e, u64 cy) {
     a->seq = (a->seq + (1 & timer0)) & (u16x8){7, 7, 31, 0, 7};
 
     if (timer0[0]) {
-      a->sample[0] = pduty[a->reg[2] >> 6][a->seq[0]];
+      a->sample[0] = pduty[a->reg[0] >> 6][a->seq[0]];
     }
     if (timer0[1]) {
-      a->sample[1] = pduty[a->reg[6] >> 6][a->seq[1]];
+      a->sample[1] = pduty[a->reg[4] >> 6][a->seq[1]];
     }
     if (timer0[2]) {
       a->sample[2] = trisamp[a->seq[2]];
