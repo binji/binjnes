@@ -7,6 +7,7 @@ project(binjnes)
 set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
 
 option(WERROR "Build with warnings as errors" OFF)
+option(WASM_SIMD "Use SIMD" OFF)
 
 if (UNIX AND NOT APPLE)
   set(LINUX TRUE)
@@ -105,6 +106,14 @@ else (EMSCRIPTEN)
   set(EXPORTED_JSON ${PROJECT_SOURCE_DIR}/src/emscripten/exported.json)
   target_include_directories(binjnes PUBLIC ${PROJECT_SOURCE_DIR}/src)
 
+  if (WASM_SIMD)
+    set(EXPORT_NAME "BinjnesSimd")
+    set_target_properties(binjnes PROPERTIES OUTPUT_NAME "binjnes-simd")
+    target_compile_options(binjnes PUBLIC -msimd128)
+  else ()
+    set(EXPORT_NAME "Binjnes")
+  endif ()
+
   set(LINK_FLAGS
     --memory-init-file 0
     -s EXPORTED_FUNCTIONS=\"@${EXPORTED_JSON}\"
@@ -114,7 +123,7 @@ else (EMSCRIPTEN)
     -s FILESYSTEM=0
     -s EXIT_RUNTIME=0
     -s MODULARIZE=1
-    -s EXPORT_NAME="Binjnes"
+    -s EXPORT_NAME="${EXPORT_NAME}"
   )
 
   string(REPLACE ";" " " LINK_FLAGS_STR "${LINK_FLAGS}")

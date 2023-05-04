@@ -372,7 +372,7 @@ static inline v128 v128_blendv(v128 a, v128 b, v128 mask) {
   return (v128){.vi128 = _mm_or_si128(_mm_andnot_si128(mask.vi128, a.vi128),
                                       _mm_and_si128(b.vi128, mask.vi128))};
 #elif BINJNES_VEC_WASM128
-  return wasm_v128_bitselect(b, a, mask);
+  return (v128){.vu8 = wasm_v128_bitselect(b.vu8, a.vu8, mask.vu8)};
 #elif BINJNES_VEC_EXTENSIONS
   return (v128)((a.vu8 & ~mask.vu8) | (b.vu8 & mask.vu8));
 #else
@@ -389,7 +389,7 @@ static inline bool v128_any_true(v128 a) {
 #elif BINJNES_VEC_SSE2
   return !!_mm_movemask_epi8(a.vi128);
 #elif BINJNES_VEC_WASM128
-  return wasm_v128_any_true(a);
+  return wasm_v128_any_true(a.vu8);
 #elif BINJNES_VEC_EXTENSIONS
   return !!(a.vu64[0] | a.vu64[1]);
 #else

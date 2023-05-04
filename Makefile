@@ -27,15 +27,19 @@ out/$1/Makefile: | out/$1
 	cd out/$1 && \
 		cmake ../.. -DCMAKE_TOOLCHAIN_FILE=$(EMSCRIPTEN_CMAKE) \
 								-DCMAKE_BUILD_TYPE=Release \
+								-DWASM_SIMD=$3
 								-DWERROR=ON
 .PHONY: $2
 $2: out/$1/Makefile
 	$(MAKE) --no-print-directory -C out/$1
 endef
 
-$(eval $(call EMSCRIPTEN_BUILD,Wasm,wasm))
+$(eval $(call EMSCRIPTEN_BUILD,Wasm,wasm,OFF))
+$(eval $(call EMSCRIPTEN_BUILD,WasmSimd,wasm-simd,ON))
 
 .PHONY: demo
-demo: wasm
+demo: wasm wasm-simd
 	cp out/Wasm/binjnes.js docs/
 	cp out/Wasm/binjnes.wasm docs/
+	cp out/WasmSimd/binjnes-simd.js docs/binjnes-simd.js
+	cp out/WasmSimd/binjnes-simd.wasm docs/binjnes-simd.wasm
