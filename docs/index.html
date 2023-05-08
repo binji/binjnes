@@ -59,6 +59,38 @@
       border-radius: 3px;
       padding: 1em;
     }
+    .input {
+      display: flex;
+      flex-direction: column;
+      width: 800px;
+      height: 70%;
+      background-color: white;
+      border: 1px solid gray;
+      border-radius: 3px;
+      padding: 1em;
+    }
+    .input td {
+      padding: 12px 8px;
+    }
+    .input-button {
+      cursor: pointer;
+    }
+    .input-button:hover {
+      background-color: rgba(192, 192, 192, 0.8);
+      border-radius: 10px;
+      cursor: pointer;
+    }
+    .setting {
+      background-color: white;
+      border: 1px solid gray;
+      border-radius: 3px;
+      padding: 1em;
+    }
+    .setting-text {
+      font-size: 110%;
+      padding-bottom: 16px;
+      margin: 0 auto;
+    }
     .close-button {
       position: absolute;
       top: 16px;
@@ -69,13 +101,13 @@
       background-color: rgba(192, 192, 192, 0.8);
       border-radius: 10px;
     }
-    .files-header {
+    .overlap-header {
       font-size: 125%;
       font-weight: bold;
       padding-bottom: 8px;
       margin: 0 auto;
     }
-    .files-content {
+    .content {
       flex-grow: 1;
       overflow: auto;
     }
@@ -85,7 +117,8 @@
       align-items: center;
       justify-content: center;
     }
-    .files-content > table {
+    table {
+      width: 100%;
       border-collapse: collapse;
       border-spacing: 12px;
     }
@@ -99,8 +132,11 @@
       margin: 8px 0;
       overflow: auto;
     }
-    .files thead {
+    table thead {
       border-bottom: 1px solid gray;
+    }
+    .file td {
+      padding: 4px 0;
     }
     .file:hover {
       background-color: rgba(192, 192, 192, 0.8);
@@ -109,11 +145,22 @@
     .file.selected {
       background-color: rgba(128, 128, 192, 0.8);
     }
-    .file-name {
-      width: 100%;
-      padding: 4px;
+    .input-name {
+      width: 40%;
     }
-    .file-size, .file-date {
+    .input-button {
+      width: 20%;
+    }
+    .file-name {
+      width: 60%;
+    }
+    .file-size {
+      width: 20%;
+    }
+    .file-modified {
+      width: 20%;
+    }
+    thead td {
       padding: 4px;
     }
     .file-image {
@@ -169,10 +216,39 @@
     </canvas>
     <div class="sidebar" hidden>
     </div>
+    <div class="input overlap" v-if="input.show">
+      <label class="close-button" @click="toggleInputDialog">&times;</label>
+      <div class="overlap-header">Input</div>
+      <div class="content">
+        <table>
+          <thead>
+            <td class="input-name">Name</td>
+            <td class="input-button">button1</td>
+            <td class="input-button">button2</td>
+            <td class="input-button">button3</td>
+          </thead>
+            <tbody id="input-list">
+              <tr
+                  v-for="(key, index) in input.list">
+                <td class="name">{{key.name}}</td>
+                <td class="input-button"
+                  v-for="(_,optionIndex) in key.options"
+                  @click="beginSettingInputKey(index, optionIndex)">
+                  {{inputKeyName(key.options[optionIndex])}}
+                </td>
+              </tr>
+            </tbody>
+        </table>
+      </div>
+    </div>
+    <div class="setting overlap" v-if="input.setting">
+      <div class="setting-text">Press key for {{input.list[input.key].name}}...</div>
+      <button @click="unsetInputKey(input.key, input.button)">Unset</button>
+    </div>
     <div class="files overlap" v-if="files.show">
-      <div class="files-header">Files</div>
+      <div class="overlap-header">Files</div>
       <label class="close-button" @click="toggleOpenDialog">&times;</label>
-      <div class="files-content"
+      <div class="content"
           @drop="fileContentDrop"
           @dragover="fileContentDragOver"
           v-bind:class="{empty:isFilesListEmpty}">
@@ -180,7 +256,7 @@
           <thead>
             <td class="file-name">Name</td>
             <td class="file-size">Size</td>
-            <td class="file-date">Modified</td>
+            <td class="file-modified"> Modified</td>
           </thead>
           <tbody id="files-list">
             <tr class="file"
@@ -233,6 +309,10 @@
           <button
               v-bind:disabled="files.show"
               @click="toggleOpenDialog">open
+          </button>
+          <button
+              v-bind:disabled="input.show"
+              @click="toggleInputDialog">input
           </button>
           <button v-for="scale in [1,2,3,4]"
               v-show="loaded"
