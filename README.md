@@ -8,7 +8,7 @@ A simple NES emulator.
 
 * Cycle accurate, passes many timing tests (see below)
 * Supports quite a few mappers
-  * 0, 1, 2, 3, 4, 7, 9, 10, 11, 19, 21, 23, 24, 25, 26, 28, 34, 66, 69, 71, 87, 206
+  * 0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 19, 21, 23, 24, 25, 26, 28, 34, 66, 69, 71, 87, 206
   * Has built-in cart database
   * Supports additional audio channels for mapper 19, 24, 26
 * Save/load battery backup
