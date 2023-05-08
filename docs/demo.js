@@ -207,20 +207,31 @@ let vm = new Vue({
         Emulator.stop();
       }
     },
+    fileContentDrop: function(event) {
+      event.preventDefault();
+      this.loadRomFiles(event.dataTransfer.files);
+    },
+    fileContentDragOver: function(event) {
+      event.preventDefault();
+    },
     uploadRomClicked: function() {
       $('#uploadRom').click();
     },
     uploadRom: async function(event) {
-      const file = event.target.files[0];
-      const [db, buffer] = await Promise.all([dbPromise, readFile(file)]);
-      const sha1 = SHA1Digest(buffer);
-      const name = file.name;
-      const rom = new Blob([buffer]);
-      const data = {sha1, name, rom, modified: new Date};
-      const tx = db.transaction('games', 'readwrite');
-      tx.objectStore('games').add(data)
-      await tx.complete;
-      this.files.list.push(data);
+      this.loadRomFiles(event.target.files);
+    },
+    loadRomFiles: async function(files) {
+      for (let file of files) {
+        const [db, buffer] = await Promise.all([dbPromise, readFile(file)]);
+        const sha1 = SHA1Digest(buffer);
+        const name = file.name;
+        const rom = new Blob([buffer]);
+        const data = {sha1, name, rom, modified: new Date};
+        const tx = db.transaction('games', 'readwrite');
+        tx.objectStore('games').add(data)
+        await tx.complete;
+        this.files.list.push(data);
+      }
     },
     downloadSave: async function(file) {
       if (file.extRam) {

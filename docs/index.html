@@ -172,7 +172,10 @@
     <div class="files overlap" v-if="files.show">
       <div class="files-header">Files</div>
       <label class="close-button" @click="toggleOpenDialog">&times;</label>
-      <div class="files-content" v-bind:class="{empty:isFilesListEmpty}">
+      <div class="files-content"
+          @drop="fileContentDrop"
+          @dragover="fileContentDragOver"
+          v-bind:class="{empty:isFilesListEmpty}">
         <table v-if="!isFilesListEmpty">
           <thead>
             <td class="file-name">Name</td>
