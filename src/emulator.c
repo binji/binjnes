@@ -2503,6 +2503,7 @@ static void mapper19_cpu_step(E* e) {
 
   if (m->namco163.sound_enable) {
     if (++m->namco163.chantick == 15) {
+      apu_sync(e);
       m->namco163.chantick = 0;
       ++m->namco163.curchan;
       if (m->namco163.curchan >= m->namco163.numchans) {
