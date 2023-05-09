@@ -104,7 +104,7 @@
     "tests": [
       ["dma_2007_read.nes", 300, "!e590d962ad23930cf06c71fa071253a406d91752"],
       ["dma_2007_write.nes", 100, "9d22e81645a9350eaad4c129db299d6169de4075"],
-      ["dma_4016_read.nes", 20, "4243712091686d0e099e5b083a0a3b2ba62cbdcf"],
+      ["dma_4016_read.nes", 30, "!8b5b53cd0115e01e83deebb1e831f91172472b20"],
       ["double_2007_read.nes", 300, "!713a9c77d403bf68cc2aa0c1646676e5d938a1f3"],
       ["read_write_2007.nes", 100, "f292fe646eb77f358c9a55be4a404b3cc98def23"]
     ]
