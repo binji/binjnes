@@ -285,7 +285,8 @@
   "little-things-nes": {
     "dir": "test/little-things-nes/",
     "tests": [
-      ["boing2k7/boing2k7.nes", 115, "a71554a1aefe9bfe62d84424af1723ed7e88a5b8"]
+      ["boing2k7/boing2k7.nes", 115, "a71554a1aefe9bfe62d84424af1723ed7e88a5b8"],
+      ["fme7ramtest/fme7ramtest.nes", 15, "4939d16e0c82255c40e4b4b153f1277089aa8cbc"]
     ]
   }
 }

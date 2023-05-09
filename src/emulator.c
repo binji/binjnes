@@ -3001,7 +3001,7 @@ void mapper69_write(E *e, u16 addr, u8 val) {
           if (m->prg_ram_to_rom) {
             m->prgram_bank = val & 0x3f & (e->ci.prg8k_banks - 1);
           } else {
-            m->prgram_bank = 0;
+            m->prgram_bank = val & 0x3f & (e->ci.prgram8k_banks - 1);
           }
           set_prgram8k_map(e, m->prgram_bank);
           break;
