@@ -280,6 +280,13 @@
       ["6.nmi_disable.nes", 300, "6e87d800c13fde0c3a2b0efeab82319b2c1e960b"],
       ["7.nmi_timing.nes", 150, "55e5f17e10d63d71d18145a96074c4cf66cbc1a1"]
     ]
+  },
+
+  "little-things-nes": {
+    "dir": "test/little-things-nes/",
+    "tests": [
+      ["boing2k7/boing2k7.nes", 115, "a71554a1aefe9bfe62d84424af1723ed7e88a5b8"]
+    ]
   }
 }
 

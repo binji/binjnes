@@ -1021,7 +1021,12 @@ static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
 }
 
 static inline void inc_ppu_addr(P* p) {
-  p->v = (p->v + ((p->ppuctrl & 4) ? 32 : 1)) & 0x3fff;
+  if (p->enabled && p->state < 341 * 241) {
+    incv(p);
+    inch(p);
+  } else {
+    p->v = (p->v + ((p->ppuctrl & 4) ? 32 : 1)) & 0x3fff;
+  }
 }
 
 static inline void read_joyp(E *e, bool write, u8 val) {
