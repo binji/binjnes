@@ -2922,17 +2922,29 @@ static void mapper28_write(E* e, u16 addr, u8 val) {
         break;
       }
 
-      u16 outer_bank = m->m28.outer_bank << 1;
-      u8 bank_mode = m->m28.bank_mode;
-      u16 current_bank = m->m28.inner_bank << (bank_mode & 2 ? 0 : 1);
-      u16 bank_mask = (2 << ((bank_mode >> 2) & 3)) - 1;
-      u16 bank = (current_bank & bank_mask) | (outer_bank & ~bank_mask);
-      set_prg16k_map(
-          e,
-          (m->prg_bank[0] = ((bank_mode & 3) == 2 ? outer_bank : bank) &
-                            (e->ci.prg16k_banks - 1)),
-          (m->prg_bank[1] = (((bank_mode & 3) == 3 ? outer_bank : bank) | 1) &
-                            (e->ci.prg16k_banks - 1)));
+      u16 bank_mode = e->s.m.m28.bank_mode;
+      u16 outer_bank = e->s.m.m28.outer_bank << 1;
+      u16 current_bank = e->s.m.m28.inner_bank;
+      u16 mask = (2 << ((bank_mode >> 2) & 3)) - 1;
+      u16 bank0, bank1;
+      switch (bank_mode & 3) {
+        case 0: case 1:
+          current_bank <<= 1;
+          bank0 = (current_bank & mask) | (outer_bank & ~mask);
+          bank1 = ((current_bank | 1) & mask) | (outer_bank & ~mask);
+          break;
+        case 2:
+          bank0 = outer_bank & ~1;
+          bank1 = (current_bank & mask) | (outer_bank & ~mask);
+          break;
+        case 3:
+          bank0 = (current_bank & mask) | (outer_bank & ~mask);
+          bank1 = outer_bank | 1;
+          break;
+      }
+
+      set_prg16k_map(e, (m->prg_bank[0] = bank0 & (e->ci.prg16k_banks - 1)),
+                     (m->prg_bank[1] = bank1 & (e->ci.prg16k_banks - 1)));
       break;
   }
 }
