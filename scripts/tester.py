@@ -24,7 +24,7 @@ OK      = '[OK] '
 FAIL    = '[X]  '
 UNKNOWN = '[?]  '
 
-Test = collections.namedtuple('Test', ['suite', 'rom', 'frames', 'hash'])
+Test = collections.namedtuple('Test', ['suite', 'rom', 'frames', 'hash', 'joyp'])
 TestResult = collections.namedtuple('TestResult',
                                     ['test', 'passed', 'ok', 'message',
                                      'duration'])
@@ -35,7 +35,8 @@ def RunTest(test, options):
   ppm = os.path.join(TEST_RESULT_DIR,
                      os.path.basename(os.path.splitext(test.rom)[0]) + '.ppm')
   try:
-    common.RunTester(test.rom, test.frames, ppm, exe=options.exe)
+    common.RunTester(test.rom, test.frames, ppm, controller_input=test.joyp,
+                     exe=options.exe)
     actual = common.HashFile(ppm)
 
     if test.hash.startswith('!'):
@@ -211,7 +212,8 @@ def main(args):
   for suite_name, suite in json.load(open(TEST_JSON)).items():
     dir_ = suite['dir']
     for test in suite['tests']:
-      tests.append(Test(suite_name, os.path.join(dir_, test[0]), test[1], test[2]))
+      joyp = os.path.join(dir_, test[3]) if len(test) == 4 else None
+      tests.append(Test(suite_name, os.path.join(dir_, test[0]), test[1], test[2], joyp))
 
   tests = [test for test in tests if pattern_re.match(test.rom)]
 
