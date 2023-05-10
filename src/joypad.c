@@ -25,8 +25,8 @@
 
 typedef struct {
   Ticks ticks;
-  u8 buttons;
-  u8 padding[7];
+  u16 buttons;
+  u8 padding[6];
 } JoypadState;
 
 typedef struct JoypadChunk {
@@ -85,8 +85,8 @@ typedef struct Joypad {
 } Joypad;
 
 static void joypad_append(JoypadBuffer *, JoypadButtons *, Ticks);
-static u8 joypad_pack_buttons(JoypadButtons*);
-static JoypadButtons joypad_unpack_buttons(u8 packed);
+static u16 joypad_pack_buttons(JoypadButtons*);
+static JoypadButtons joypad_unpack_buttons(u16 packed);
 
 static JoypadBuffer* joypad_buffer_new(void) {
   JoypadBuffer* buffer = xcalloc(1, sizeof(JoypadBuffer));
@@ -147,15 +147,16 @@ static bool buttons_are_equal(JoypadButtons* lhs, JoypadButtons* rhs) {
   return lhs->down == rhs->down && lhs->up == rhs->up &&
          lhs->left == rhs->left && lhs->right == rhs->right &&
          lhs->start == rhs->start && lhs->select == rhs->select &&
-         lhs->B == rhs->B && lhs->A == rhs->A;
+         lhs->B == rhs->B && lhs->A == rhs->A && lhs->reset == rhs->reset;
 }
 
 static void print_joypad_buttons(Ticks ticks, JoypadButtons buttons) {
-  printf("joyp: %" PRIu64 " %c%c%c%c %c%c%c%c\n", ticks,
+  printf("joyp: %" PRIu64 " %c%c%c%c %c%c%c%c%s\n", ticks,
          buttons.down ? 'D' : '_', buttons.up ? 'U' : '_',
          buttons.left ? 'L' : '_', buttons.right ? 'R' : '_',
          buttons.start ? 'S' : '_', buttons.select ? 's' : '_',
-         buttons.B ? 'B' : '_', buttons.A ? 'A' : '_');
+         buttons.B ? 'B' : '_', buttons.A ? 'A' : '_',
+         buttons.reset ? " [R]" : "");
 }
 
 void joypad_append_if_new(Joypad *joypad, JoypadButtons *buttons, Ticks ticks) {
@@ -165,6 +166,12 @@ void joypad_append_if_new(Joypad *joypad, JoypadButtons *buttons, Ticks ticks) {
     print_joypad_buttons(ticks, *buttons);
 #endif
   }
+}
+
+void joypad_append_reset(Joypad *joypad, bool set, Ticks ticks) {
+  JoypadButtons buttons = joypad->buffer->last_buttons;
+  buttons.reset = set;
+  joypad_append_if_new(joypad, &buttons, ticks);
 }
 
 static JoypadStateIter joypad_find_state(JoypadBuffer *buffer, Ticks ticks) {
@@ -243,13 +250,13 @@ static JoypadStateIter joypad_get_next_state(JoypadStateIter iter) {
   return iter;
 }
 
-static u8 joypad_pack_buttons(JoypadButtons* buttons) {
-  return (buttons->down << 7) | (buttons->up << 6) | (buttons->left << 5) |
-         (buttons->right << 4) | (buttons->start << 3) |
+static u16 joypad_pack_buttons(JoypadButtons* buttons) {
+  return (buttons->reset << 8) | (buttons->down << 7) | (buttons->up << 6) |
+         (buttons->left << 5) | (buttons->right << 4) | (buttons->start << 3) |
          (buttons->select << 2) | (buttons->B << 1) | (buttons->A << 0);
 }
 
-static JoypadButtons joypad_unpack_buttons(u8 packed) {
+static JoypadButtons joypad_unpack_buttons(u16 packed) {
   JoypadButtons buttons;
   buttons.A = packed & 1;
   buttons.B = (packed >> 1) & 1;
@@ -259,6 +266,7 @@ static JoypadButtons joypad_unpack_buttons(u8 packed) {
   buttons.left = (packed >> 5) & 1;
   buttons.up = (packed >> 6) & 1;
   buttons.down = (packed >> 7) & 1;
+  buttons.reset = (packed >> 8) & 1;
   return buttons;
 }
 

@@ -105,6 +105,7 @@ typedef struct FileData {
 typedef struct JoypadButtons {
   bool down, up, left, right;
   bool start, select, B, A;
+  bool reset;
 } JoypadButtons;
 
 const char* replace_extension(const char* filename, const char* extension);

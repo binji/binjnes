@@ -100,6 +100,7 @@ Keys:
 | A | <kbd>X</kbd> |
 | START | <kbd>Enter</kbd> |
 | SELECT | <kbd>Tab</kbd> |
+| Reset | <kbd>Delete</kbd> |
 | Save state | <kbd>F6</kbd> |
 | Load state | <kbd>F9</kbd> |
 | Rewind | <kbd>Backspace</kbd> |

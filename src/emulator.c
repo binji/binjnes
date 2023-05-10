@@ -68,7 +68,7 @@ static void apu_sync(E *e);
 static void spr_step(E *e);
 
 static const u8 s_opcode_bits[], s_dmc_stall[];
-static const u16 s_cpu_decode, s_callvec, s_oamdma, s_dmc;
+static const u16 s_cpu_decode, s_callvec, s_reset, s_oamdma, s_dmc;
 static const u16 s_opcode_loc[];
 
 // Scheduler stuff /////////////////////////////////////////////////////////////
@@ -3122,7 +3122,10 @@ static inline void ror(u8 val, bool C, u8 *result, bool *out_c) {
 
 static inline void set_next_step(E* e) {
   C* c = &e->s.c;
-  if (c->has_nmi) {
+  if (c->has_reset) {
+    c->next_step = s_reset;
+    DEBUG("     [%" PRIu64 "] setting next step for RESET\n", e->s.cy);
+  } else if (c->has_nmi) {
     c->next_step = s_callvec;
     DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
   } else if (c->has_irq) {
@@ -3135,8 +3138,9 @@ static inline void check_irq(E* e) {
   C* c = &e->s.c;
   c->has_nmi = c->req_nmi;
   c->has_irq = (c->irq != 0) & !c->I;
-  if (c->has_nmi || c->has_irq) {
-    DEBUG("     [%" PRIu64 "] NMI or IRQ requested\n", e->s.cy);
+  c->has_reset = c->req_reset;
+  if (c->has_nmi || c->has_irq || c->has_reset) {
+    DEBUG("     [%" PRIu64 "] NMI, IRQ or RESET requested\n", e->s.cy);
   }
 }
 
@@ -3819,6 +3823,7 @@ static void cpu63(E* e, u8 busval) {
   c->set_vec_cy = e->s.cy;
   c->has_irq = false;
   c->has_nmi = false;
+  c->has_reset = false;
   c->req_nmi = false;
 }
 static void cpu168(E* e, u8 busval) {
@@ -3831,6 +3836,7 @@ static void cpu168(E* e, u8 busval) {
   c->set_vec_cy = e->s.cy;
   c->has_irq = false;
   c->has_nmi = false;
+  c->has_reset = false;
   c->req_nmi = false;
 }
 static void cpu64(E* e, u8 busval) {
@@ -5266,6 +5272,10 @@ EEvent emulator_run_until(E *e, Ticks until_ticks) {
     e->s.event |= EMULATOR_EVENT_UNTIL_TICKS;
   }
   return e->s.event;
+}
+
+void emulator_set_reset(E* e, bool set) {
+  e->s.c.req_reset = set;
 }
 
 void emulator_init_state_file_data(FileData* file_data) {

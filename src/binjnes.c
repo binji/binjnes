@@ -696,6 +696,10 @@ static void event(const sapp_event *event) {
       case SAPP_KEYCODE_EQUAL: inc_audio_volume(+0.05f); break;
       case SAPP_KEYCODE_BACKSPACE: rewind_begin(); break;
       case SAPP_KEYCODE_GRAVE_ACCENT: s_show_frame_counter ^= 1; break;
+      case SAPP_KEYCODE_DELETE:
+        emulator_set_reset(e, true);
+        joypad_append_reset(s_joypad, true, emulator_get_ticks(e));
+        break;
       default: break;
     }
     goto key;
@@ -703,6 +707,10 @@ static void event(const sapp_event *event) {
   case SAPP_EVENTTYPE_KEY_UP:
     switch (event->key_code) {
       case SAPP_KEYCODE_BACKSPACE: rewind_end(); break;
+      case SAPP_KEYCODE_DELETE:
+        emulator_set_reset(e, false);
+        joypad_append_reset(s_joypad, false, emulator_get_ticks(e));
+        break;
       default: break;
     }
     goto key;

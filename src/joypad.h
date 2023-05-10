@@ -38,6 +38,7 @@ Result joypad_new_for_movie(struct Emulator *, FileData *, struct Joypad **out);
 void joypad_delete(struct Joypad*);
 
 void joypad_append_if_new(struct Joypad *, JoypadButtons *, Ticks);
+void joypad_append_reset(struct Joypad *, bool set, Ticks);
 void joypad_begin_rewind_playback(struct Joypad *);
 void joypad_end_rewind_playback(struct Joypad *);
 void joypad_truncate_to_current(struct Joypad *);

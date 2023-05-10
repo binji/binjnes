@@ -200,7 +200,7 @@ typedef struct {
   u8 ram[0x800], prg_ram[0x10000];
   u8 opcode, open_bus, irq;
   bool C, Z, I, D, V, N; // Flags.
-  bool req_nmi, has_nmi, has_irq;
+  bool req_nmi, req_reset, has_nmi, has_irq, has_reset;
   u64 set_vec_cy;
 
   // XXX
@@ -314,6 +314,7 @@ Result emulator_write_prg_ram_to_file(Emulator*, const char* filename);
 
 EmulatorEvent emulator_step(Emulator*);
 EmulatorEvent emulator_run_until(Emulator*, Ticks until_ticks);
+void emulator_set_reset(Emulator*, bool set);
 
 void emulator_ticks_to_time(Ticks, u32* day, u32* hr, u32* min, u32* sec,
                             u32* ms);
