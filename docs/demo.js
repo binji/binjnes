@@ -226,6 +226,7 @@ let vm = new Vue({
       await tx.complete;
       const index = this.files.list.findIndex(x => x.sha1 === file.sha1);
       if (index < 0) return;
+      if (this.files.selected === index) --this.files.selected;
       this.files.list.splice(index, 1);
       if (this.loadedFile && this.loadedFile.sha1 === file.sha1) {
         this.loaded = false;
