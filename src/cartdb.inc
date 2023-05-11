@@ -1007,7 +1007,7 @@
   /* Pirates! */
   {.crc=0x3D0996B2, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Uchuusen: Cosmo Carrier */
-  {.crc=0x3D1C3137, .board=BOARD_UNSUPPORTED, .mapper=78, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x3D1C3137, .board=BOARD_JF_16, .mapper=78, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Ninja Crusaders */
   {.crc=0x3D1C4894, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* J.League Winning Goal */
@@ -3117,7 +3117,7 @@
   /* Kyonshiizu 2 */
   {.crc=0xBA43568A, .board=BOARD_UNSUPPORTED, .mapper=80, .prg=8, .chr=32, .vram=0, .wram=0, .battery=1, .mirror=MIRROR_NONE},
   /* Holy Diver */
-  {.crc=0xBA51AC6F, .board=BOARD_UNSUPPORTED, .mapper=78, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xBA51AC6F, .board=BOARD_HOLY_DIVER, .mapper=78, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* '89 Dennou Kyuusei Uranai */
   {.crc=0xBA58ED29, .board=BOARD_MAPPER_1, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Herakles no Eikou II: Titan no Metsubou */

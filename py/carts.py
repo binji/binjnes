@@ -51,6 +51,8 @@ BOARDS = {
   'NR8N':     'BOARD_CAMERICA',
   'BF9097':   'BOARD_CAMERICA_BF9097',
   'MC-ACC':   'BOARD_MC_ACC',
+  'JF-16':    'BOARD_JF_16',
+  'HOLYDIVER':    'BOARD_HOLY_DIVER',
 }
 
 BOARDS_TXROM = {
@@ -75,7 +77,7 @@ BOARDS_VRC4 = {
 }
 
 SUPPORTED_GENERIC_MAPPERS = {
-  0, 1, 2, 3, 5, 7, 9, 10, 11, 19, 24, 26, 30, 66, 69, 87, 206,
+  0, 1, 2, 3, 5, 7, 9, 10, 11, 19, 24, 26, 30, 66, 69, 78, 87, 206,
 }
 
 KEYS = ('name', 'mapper', 'board', 'prg', 'chip', 'chr', 'wram', 'battery',

@@ -3092,6 +3092,18 @@ static void mapper71_bf9097_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static void mapper78_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  set_prg16k_map(e, (m->prg_bank[0] = val & 7 & (e->ci.prg16k_banks - 1)),
+                 e->ci.prg16k_banks - 1);
+  set_chr8k_map(e, (m->chr_bank[0] = (val >> 4) & (e->ci.chr8k_banks - 1)));
+  if (e->ci.board == BOARD_JF_16) {
+    set_mirror(e, (val >> 3) & 1);
+  } else {
+    set_mirror(e, 2 + !((val >> 3) & 1));
+  }
+}
 
 static void mapper87_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
@@ -4780,6 +4792,12 @@ static Result get_cart_info(E *e, const FileData *file_data) {
             case 2: ci->board = BOARD_BNROM; break;
           }
           break;
+        case 78:
+          switch (submapper) {
+            case 1: ci->board = BOARD_JF_16; break;
+            case 3: ci->board = BOARD_HOLY_DIVER; break;
+          }
+          break;
         default:
           ci->board = (Board)ci->mapper;
           break;
@@ -5107,14 +5125,6 @@ static Result init_mapper(E *e) {
     set_prg32k_map(e, e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1);
     break;
 
-  case BOARD_MAPPER_87:
-    e->mapper_write = mapper0_write;
-    e->mapper_prg_ram_write = mapper87_write;
-    set_mirror(e, e->ci.mirror);
-    set_chr8k_map(e, 0);
-    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
-    break;
-
   case BOARD_MAPPER_69:
     e->s.m.prg_bank[3] = e->ci.prg8k_banks - 1;
     e->mapper_write = mapper69_write;
@@ -5134,6 +5144,23 @@ static Result init_mapper(E *e) {
     } else {
       e->mapper_write = mapper71_write;
     }
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_78:
+  case BOARD_HOLY_DIVER:
+  case BOARD_JF_16:
+    e->mapper_write = mapper78_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_87:
+    e->mapper_write = mapper0_write;
+    e->mapper_prg_ram_write = mapper87_write;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
