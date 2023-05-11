@@ -3,6 +3,7 @@
 "_emulator_get_ticks_f64",
 "_emulator_new_simple",
 "_emulator_run_until_f64",
+"_emulator_set_reset",
 "_file_data_delete",
 "_free",
 "_get_audio_buffer_capacity",

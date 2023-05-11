@@ -314,6 +314,12 @@
               v-bind:disabled="input.show"
               @click="toggleInputDialog">input
           </button>
+          <button
+              v-show="loaded"
+              v-bind:disabled="files.show || input.show"
+              @mousedown="reset(true)"
+              @mouseup="reset(false)">reset
+          </button>
           <button v-for="scale in [1,2,3,4]"
               v-show="loaded"
               @click="canvas.scale = scale">
@@ -329,7 +335,7 @@
           </span>
           <button
               v-show="loaded"
-              v-bind:disabled="files.show"
+              v-bind:disabled="files.show || input.show"
               @click="togglePause">{{pauseLabel}}</button>
         </div>
         <div class="right">

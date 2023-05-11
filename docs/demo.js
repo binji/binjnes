@@ -319,6 +319,10 @@ let vm = new Vue({
         this.paused = true;
       }
     },
+    reset: function(active) {
+      if (!emulator) return;
+      emulator.setReset(active);
+    },
     readFiles: async function() {
       this.files.list.length = 0;
       const db = await dbPromise;
@@ -607,6 +611,10 @@ class Emulator {
     const lerp = (from, to, alpha) => (alpha * from) + (1 - alpha) * to;
     this.fps = lerp(this.fps, Math.min(1 / deltaSec, 10000), 0.3);
     this.video.renderTexture();
+  }
+
+  setReset(active) {
+    this.module._emulator_set_reset(this.e, active);
   }
 
   bindKeys() {
