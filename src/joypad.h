@@ -39,6 +39,7 @@ void joypad_delete(struct Joypad*);
 
 void joypad_append_if_new(struct Joypad *, JoypadButtons *, Ticks);
 void joypad_append_reset(struct Joypad *, bool set, Ticks);
+Ticks joypad_get_next_reset_change(struct Joypad *);
 void joypad_begin_rewind_playback(struct Joypad *);
 void joypad_end_rewind_playback(struct Joypad *);
 void joypad_truncate_to_current(struct Joypad *);

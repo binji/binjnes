@@ -218,6 +218,8 @@ int main(int argc, char** argv) {
     file_data_delete(&file_data);
   }
 
+  emulator_schedule_reset_change(e, joypad_get_next_reset_change(joypad));
+
   if (s_output_audio) {
     output_audio_file = fopen(s_output_audio, "wb");
     CHECK_MSG(output_audio_file != NULL, "unable to open file %s.\n",
@@ -267,6 +269,10 @@ int main(int argc, char** argv) {
       printf("!! hit invalid opcode, pc=");
       printf("???\n");
       break;
+    }
+    if (event & EMULATOR_EVENT_RESET_CHANGE) {
+      emulator_toggle_reset(e);
+      emulator_schedule_reset_change(e, joypad_get_next_reset_change(joypad));
     }
   }
   f64 host_time = get_time_sec() - start_time;

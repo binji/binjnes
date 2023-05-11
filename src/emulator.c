@@ -78,6 +78,7 @@ static const char *s_sched_names[] = {
     "run until",
     "frame irq",
     "dmc fetch",
+    "reset",
 };
 _Static_assert(ARRAY_SIZE(s_sched_names) == SCHED_COUNT, "s_sched_names count mismatch");
 
@@ -139,6 +140,9 @@ static void sched_run(E* e) {
   if (s->sc.when[SCHED_DMC_FETCH] == s->cy ||
       s->sc.when[SCHED_FRAME_IRQ] == s->cy) {
     apu_sync(e);
+  }
+  if (s->sc.when[SCHED_RESET_CHANGE] == s->cy) {
+    e->s.event |= EMULATOR_EVENT_RESET_CHANGE;
   }
   for (int i = 0; i < SCHED_COUNT; ++i) {
     if (s->sc.when[i] < s->cy) {
@@ -3138,9 +3142,13 @@ static inline void check_irq(E* e) {
   C* c = &e->s.c;
   c->has_nmi = c->req_nmi;
   c->has_irq = (c->irq != 0) & !c->I;
-  c->has_reset = c->req_reset;
+  if (c->req_reset) {
+    c->has_reset = true;
+    c->req_reset = false;
+  }
   if (c->has_nmi || c->has_irq || c->has_reset) {
-    DEBUG("     [%" PRIu64 "] NMI, IRQ or RESET requested\n", e->s.cy);
+    DEBUG("     [%" PRIu64 "] NMI (%u), IRQ (%u) or RESET (%u) requested\n",
+          e->s.cy, c->has_nmi, c->has_irq, c->has_reset);
   }
 }
 
@@ -3829,8 +3837,6 @@ static void cpu63(E* e, u8 busval) {
 static void cpu168(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus.val = get_u16(1, c->S);
-  busval = c->PC.lo;
-  cpu_write(e, c->bus.val, busval);
   --c->S;
   c->veclo = 0xfc;
   c->set_vec_cy = e->s.cy;
@@ -4350,6 +4356,10 @@ static void cpu123(E* e, u8 busval) {
 static void cpu124(E* e, u8 busval) {
   return cpu151(e, busval);
 }
+static void cpu169(E* e, u8 busval) {
+  C* c = &e->s.c;
+  --c->S;
+}
 
 static void cpu_step(E *e) {
   static void (*const s_cpu_funcs[])(E*, u8) = {
@@ -4368,7 +4378,7 @@ static void cpu_step(E *e) {
     &cpu96, &cpu97, &cpu98, &cpu99, &cpu100, &cpu101, &cpu102, &cpu103,
     &cpu104, &cpu105, &cpu106, &cpu107, &cpu108, &cpu109, &cpu110, &cpu111,
     &cpu112, &cpu113, &cpu114, &cpu115, &cpu116, &cpu117, &cpu118, &cpu119,
-    &cpu120, &cpu121, &cpu122, &cpu123, &cpu124, &cpu168,
+    &cpu120, &cpu121, &cpu122, &cpu123, &cpu124, &cpu168, &cpu169,
   };
 
   if (e->mapper_cpu_step) {
@@ -4639,7 +4649,7 @@ static const u8 s_opcode_bits[] = {
 
   0,                           /* decode */
   1, 1, 61, 63, 64, 110, 111,  /* nmi, irq */
-  1, 1, 61, 125, 64, 110, 111, /* reset */
+  1, 1, 126, 125, 126, 110, 111, /* reset */
 
   /* oam dma */
 #define OAMDMA_RW 113, 114
@@ -5275,7 +5285,22 @@ EEvent emulator_run_until(E *e, Ticks until_ticks) {
 }
 
 void emulator_set_reset(E* e, bool set) {
-  e->s.c.req_reset = set;
+  if (e->s.c.reset_active && !set) {
+    e->s.c.req_reset = true;
+  }
+  e->s.c.reset_active = set;
+}
+
+void emulator_toggle_reset(E* e) {
+  emulator_set_reset(e, !e->s.c.reset_active);
+}
+
+void emulator_schedule_reset_change(E* e, Ticks at) {
+  if (at != ~0ull) {
+    sched_at(e, SCHED_RESET_CHANGE, at);
+  } else {
+    sched_clear(e, SCHED_RESET_CHANGE);
+  }
 }
 
 void emulator_init_state_file_data(FileData* file_data) {

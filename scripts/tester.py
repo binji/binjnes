@@ -190,6 +190,10 @@ def GenerateTestResults(results):
       Suite(out_file, results, suite['name'], suite['prefix'])
 
 
+def GetPath(dir_, p):
+  if p.startswith('//'): return os.path.join(common.ROOT_DIR, p[2:])
+  return os.path.join(dir_, p)
+
 def main(args):
   parser = argparse.ArgumentParser()
   parser.add_argument('patterns', metavar='pattern', nargs='*',
@@ -212,8 +216,8 @@ def main(args):
   for suite_name, suite in json.load(open(TEST_JSON)).items():
     dir_ = suite['dir']
     for test in suite['tests']:
-      joyp = os.path.join(dir_, test[3]) if len(test) == 4 else None
-      tests.append(Test(suite_name, os.path.join(dir_, test[0]), test[1], test[2], joyp))
+      joyp = GetPath(dir_, test[3]) if len(test) == 4 else None
+      tests.append(Test(suite_name, GetPath(dir_, test[0]), test[1], test[2], joyp))
 
   tests = [test for test in tests if pattern_re.match(test.rom)]
 

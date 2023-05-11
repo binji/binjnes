@@ -92,6 +92,14 @@
     ]
   },
 
+  "cpu_reset": {
+    "dir": "nes-test-roms/cpu_reset",
+    "tests": [
+      ["ram_after_reset.nes", 400, "e59ff0020f9f67a627b2ca1d5faaa56c3c10af85", "//test/ram_after_reset.joy"],
+      ["registers.nes", 400, "f7fb422cdc5b7d2165b0e80f76dcaf046a04ab8f", "//test/registers.joy"]
+    ]
+  },
+
   "cpu_timing_test6": {
     "dir": "nes-test-roms/cpu_timing_test6/",
     "tests": [
@@ -287,7 +295,7 @@
     "tests": [
       ["boing2k7/boing2k7.nes", 115, "a71554a1aefe9bfe62d84424af1723ed7e88a5b8"],
       ["fme7ramtest/fme7ramtest.nes", 15, "4939d16e0c82255c40e4b4b153f1277089aa8cbc"],
-      ["test28/test28.nes", 1100, "8d46f6d2004e99c00fb5a6c0ccc73e60dcf53a36", "test28.joy"]
+      ["test28/test28.nes", 1150, "8a2b1e958b00b6c3f7bb86a7fa7c6341d0d7912e", "test28.joy"]
     ]
   }
 }

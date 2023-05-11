@@ -87,6 +87,8 @@ typedef struct Joypad {
 static void joypad_append(JoypadBuffer *, JoypadButtons *, Ticks);
 static u16 joypad_pack_buttons(JoypadButtons*);
 static JoypadButtons joypad_unpack_buttons(u16 packed);
+static JoypadStateIter joypad_get_next_state(JoypadStateIter);
+static JoypadStateIter joypad_find_state(JoypadBuffer *, Ticks);
 
 static JoypadBuffer* joypad_buffer_new(void) {
   JoypadBuffer* buffer = xcalloc(1, sizeof(JoypadBuffer));
@@ -172,6 +174,26 @@ void joypad_append_reset(Joypad *joypad, bool set, Ticks ticks) {
   JoypadButtons buttons = joypad->buffer->last_buttons;
   buttons.reset = set;
   joypad_append_if_new(joypad, &buttons, ticks);
+}
+
+Ticks joypad_get_next_reset_change(Joypad *joypad) {
+  if (joypad && joypad->mode == JOYPAD_MODE_PLAYBACK) {
+    Ticks ticks = emulator_get_ticks(joypad->playback.e);
+    JoypadStateIter current = joypad_find_state(joypad->playback.buffer, ticks);
+    bool is_reset = current.state != NULL &&
+                    joypad_unpack_buttons(current.state->buttons).reset;
+    if (current.state != NULL) {
+      JoypadStateIter iter = joypad_get_next_state(current);
+      while (iter.state != NULL) {
+        JoypadButtons buttons = joypad_unpack_buttons(iter.state->buttons);
+        if (buttons.reset != is_reset) {
+          return iter.state->ticks;
+        }
+        iter = joypad_get_next_state(iter);
+      }
+    }
+  }
+  return ~0;
 }
 
 static JoypadStateIter joypad_find_state(JoypadBuffer *buffer, Ticks ticks) {

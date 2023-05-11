@@ -452,6 +452,7 @@ static void init_emulator(void) {
   s_save_state_filename =
       replace_extension(s_rom_filename, SAVE_STATE_EXTENSION);
   emulator_read_prg_ram_from_file(e, s_save_filename);
+  emulator_schedule_reset_change(e, joypad_get_next_reset_change(s_joypad));
 
   return;
 
@@ -524,6 +525,11 @@ static void run_until_ticks(Ticks until_ticks) {
         write_audio(audio_buffer->data + to_end, 0, write_head);
       }
       atomic_store(&s_audio_buffer_write, write_head);
+    }
+
+    if (event & EMULATOR_EVENT_RESET_CHANGE) {
+      emulator_toggle_reset(e);
+      emulator_schedule_reset_change(e, joypad_get_next_reset_change(s_joypad));
     }
   } while (!(event & (EMULATOR_EVENT_UNTIL_TICKS | EMULATOR_EVENT_BREAKPOINT |
                       EMULATOR_EVENT_INVALID_OPCODE)));
