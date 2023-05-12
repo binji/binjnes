@@ -172,6 +172,9 @@ let vm = new Vue({
       if (!this.selectedFileHasImage) return '';
       return this.selectedFile.image;
     },
+    inputAllowed: function() {
+      return !this.input.show && !this.files.show;
+    },
   },
   watch: {
     paused: function(newPaused, oldPaused) {
@@ -652,6 +655,7 @@ class Emulator {
   }
 
   keyEvent(isKeyDown, event) {
+    if (!vm.inputAllowed) return;
     let inputList = vm.input.list;
     for (let i = 0; i < inputList.length; ++i) {
       let options = inputList[i].options;
@@ -666,6 +670,7 @@ class Emulator {
   }
 
   keyRewind(isKeyDown) {
+    if (!vm.inputAllowed) return;
     if (this.isRewinding !== isKeyDown) {
       if (isKeyDown) {
         vm.paused = true;
@@ -678,6 +683,7 @@ class Emulator {
   }
 
   keyPause(isKeyDown) {
+    if (!vm.inputAllowed) return;
     if (isKeyDown) vm.togglePause();
   }
 
