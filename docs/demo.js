@@ -22,8 +22,6 @@ const REWIND_BUFFER_CAPACITY = 4 * 1024 * 1024;
 const REWIND_FACTOR = 1.5;
 const REWIND_UPDATE_MS = 16;
 const GAMEPAD_POLLING_INTERVAL = 1000 / 60 / 4; // When activated, poll for gamepad input about ~4 times per frame (~240 times second)
-const GAMEPAD_AXIS_DEADZONE = 0.8;
-const GAMEPAD_BUTTON_DEADZONE = 0.3;
 
 // From FrakenGraphics, based on FBX Smooth:
 // https://www.patreon.com/posts/nes-palette-for-47391225
@@ -63,6 +61,7 @@ function readFile(file) {
 function key(code) { return {type:'key', code}; }
 function gpaxis(axis, neg) { return {type:'axis', axis, neg}; }
 function gpbutton(button) { return {type:'button', button}; }
+function clamp(x, min, max) { return Math.min(Math.max(x, min), max); }
 
 let data = {
   fps: 60,
@@ -101,6 +100,8 @@ let data = {
     setting: false,
     key: -1,
     option: -1,
+    axisDeadzone: 0.5,
+    buttonDeadzone: 0.3,
   },
   volume: 0.5,
 };
@@ -174,6 +175,28 @@ let vm = new Vue({
     },
     inputAllowed: function() {
       return !this.input.show && !this.files.show;
+    },
+    axisDeadzoneInt: {
+      get() { return Math.floor(this.input.axisDeadzone * 100); },
+      set(value) { this.input.axisDeadzone = value / 100; },
+    },
+    buttonDeadzoneInt: {
+      get() { return Math.floor(this.input.buttonDeadzone * 100); },
+      set(value) { this.input.buttonDeadzone = value / 100; },
+    },
+    axisDeadzoneText: {
+      get() { return this.input.axisDeadzone; },
+      set(value) {
+        let num = parseFloat(value);
+        if (num == num) this.input.axisDeadzone = clamp(num, 0, 1);
+      },
+    },
+    buttonDeadzoneText: {
+      get() { return this.input.buttonDeadzone; },
+      set(value) {
+        let num = parseFloat(value);
+        if (num == num) this.input.buttonDeadzone = clamp(num, 0, 1);
+      },
     },
   },
   watch: {
@@ -390,13 +413,13 @@ let vm = new Vue({
           if (!gamepad) continue;
           for (let j = 0; j < gamepad.axes.length; ++j) {
             let axis = gamepad.axes[j];
-            if (Math.abs(axis) > GAMEPAD_AXIS_DEADZONE) {
+            if (Math.abs(axis) > this.input.axisDeadzone) {
               return {type:'axis', axis:j, neg:axis < 0};
             }
           }
           for (let j = 0; j < gamepad.buttons.length; ++j) {
             let button = gamepad.buttons[j];
-            if (button.value > GAMEPAD_BUTTON_DEADZONE || button.pressed) {
+            if (button.value > this.input.buttonDeadzone || button.pressed) {
               return {type:'button', button:j};
             }
           }
@@ -735,7 +758,7 @@ class Emulator {
             case 'axis':
               if (option.axis < gamepad.axes.length) {
                 let axis = gamepad.axes[option.axis];
-                if (Math.abs(axis) > GAMEPAD_AXIS_DEADZONE &&
+                if (Math.abs(axis) > vm.input.axisDeadzone &&
                     (axis < 0) === option.neg) {
                   isDown = true;
                 }
@@ -745,7 +768,7 @@ class Emulator {
             case 'button':
               if (option.button < gamepad.buttons.length) {
                 let button = gamepad.buttons[option.button];
-                if (button.pressed || button.value > GAMEPAD_BUTTON_DEADZONE) {
+                if (button.pressed || button.value > vm.input.buttonDeadzone) {
                   isDown = true;
                 }
               }

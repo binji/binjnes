@@ -72,6 +72,9 @@
     .input td {
       padding: 12px 8px;
     }
+    .input-deadzone {
+      width: 100%;
+    }
     .input-button {
       cursor: pointer;
     }
@@ -227,17 +230,39 @@
             <td class="input-button">button2</td>
             <td class="input-button">button3</td>
           </thead>
-            <tbody id="input-list">
-              <tr
-                  v-for="(key, index) in input.list">
-                <td class="name">{{key.name}}</td>
-                <td class="input-button"
-                  v-for="(_,optionIndex) in key.options"
-                  @click="beginSettingInputKey(index, optionIndex)">
-                  {{inputKeyName(key.options[optionIndex])}}
-                </td>
-              </tr>
-            </tbody>
+          <tbody id="input-list">
+            <tr
+                v-for="(key, index) in input.list">
+              <td class="name">{{key.name}}</td>
+              <td class="input-button"
+                v-for="(_,optionIndex) in key.options"
+                @click="beginSettingInputKey(index, optionIndex)">
+                {{inputKeyName(key.options[optionIndex])}}
+              </td>
+            </tr>
+            <tr>
+              <td class="name">Gamepad Axis Deadzone</td>
+              <td colspan="2">
+                <input
+                  v-model="axisDeadzoneInt"
+                  class="input-deadzone" type="range" min="0" max="100">
+              </td>
+              <td>
+                <input v-model.lazy="axisDeadzoneText" type="text">
+              </td>
+            </tr>
+            <tr>
+              <td class="name">Gamepad Button Deadzone</td>
+              <td colspan="2">
+                <input
+                  v-model="buttonDeadzoneInt"
+                  class="input-deadzone" type="range" min="0" max="100">
+              </td>
+              <td>
+                <input v-model.lazy="buttonDeadzoneText" type="text">
+              </td>
+            </tr>
+          </tbody>
         </table>
       </div>
     </div>
