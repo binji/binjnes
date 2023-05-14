@@ -367,7 +367,7 @@ static void shift_dis(E *e) {
   P* p = &e->s.p;
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
   e->frame_buffer[p->fbidx++] =
-      p->emphasis | p->palram[p->v >= 0x3f00 ? p->v & 0x1f : 0];
+      p->emphasis | p->palram[(p->v & 0xff00) == 0x3f00 ? p->v & 0x1f : 0];
 }
 
 static inline void reload(E *e, bool col0) {
