@@ -24,7 +24,7 @@ typedef struct {
 static Emulator* e;
 
 static EmulatorInit s_init;
-static JoypadButtons s_buttons;
+static SystemInput s_input;
 
 Emulator* emulator_new_simple(void* rom_data, size_t rom_size,
                               int audio_frequency, int audio_frames) {
@@ -55,12 +55,12 @@ f64 rewind_get_oldest_ticks_f64(RewindBuffer* buf) {
   return (f64)rewind_get_oldest_ticks(buf);
 }
 
-static void default_joypad_callback(JoypadButtons *joyp, void *user_data,
+static void default_joypad_callback(SystemInput *input, void *user_data,
                                     bool strobe) {
   Joypad* joypad = user_data;
-  *joyp = s_buttons;
+  *input = s_input;
   Ticks ticks = emulator_get_ticks(e);
-  joypad_append_if_new(joypad, joyp, ticks);
+  joypad_append_if_new(joypad, input, ticks);
 }
 
 Joypad* joypad_new_simple(Emulator *e) {
@@ -70,8 +70,10 @@ Joypad* joypad_new_simple(Emulator *e) {
   return result;
 }
 
-#define DEFINE_JOYP_SET(name) \
-  void set_joyp_##name(Emulator* e, bool set) { s_buttons.name = set; }
+#define DEFINE_JOYP_SET(name)                               \
+  void set_joyp_##name(Emulator* e, int player, bool set) { \
+    s_input.joyp[player].name = set;                        \
+  }
 
 DEFINE_JOYP_SET(up)
 DEFINE_JOYP_SET(down)

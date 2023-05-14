@@ -92,14 +92,22 @@ Keys:
 
 | Action | Key |
 | --- | --- |
-| DPAD-UP | <kbd>↑</kbd> |
-| DPAD-DOWN | <kbd>↓</kbd> |
-| DPAD-LEFT | <kbd>←</kbd> |
-| DPAD-RIGHT | <kbd>→</kbd> |
-| B | <kbd>Z</kbd> |
-| A | <kbd>X</kbd> |
-| START | <kbd>Enter</kbd> |
-| SELECT | <kbd>Tab</kbd> |
+| P0 DPAD-UP | <kbd>↑</kbd> |
+| P0 DPAD-DOWN | <kbd>↓</kbd> |
+| P0 DPAD-LEFT | <kbd>←</kbd> |
+| P0 DPAD-RIGHT | <kbd>→</kbd> |
+| P0 B | <kbd>Z</kbd> |
+| P0 A | <kbd>X</kbd> |
+| P0 START | <kbd>Enter</kbd> |
+| P0 SELECT | <kbd>Tab</kbd> |
+| P1 DPAD-UP | <kbd>Y</kbd> |
+| P1 DPAD-DOWN | <kbd>H</kbd> |
+| P1 DPAD-LEFT | <kbd>G</kbd> |
+| P1 DPAD-RIGHT | <kbd>J</kbd> |
+| P1 B | <kbd>K</kbd> |
+| P1 A | <kbd>L</kbd> |
+| P1 START | <kbd>O</kbd> |
+| P1 SELECT | <kbd>I</kbd> |
 | Reset | <kbd>Delete</kbd> |
 | Save state | <kbd>F6</kbd> |
 | Load state | <kbd>F9</kbd> |

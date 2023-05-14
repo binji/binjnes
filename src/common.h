@@ -102,11 +102,15 @@ typedef struct FileData {
   size_t size;
 } FileData;
 
-typedef struct JoypadButtons {
+typedef struct JoypadInput {
   bool down, up, left, right;
   bool start, select, B, A;
+} JoypadInput;
+
+typedef struct SystemInput {
+  JoypadInput joyp[2];
   bool reset;
-} JoypadButtons;
+} SystemInput;
 
 const char* replace_extension(const char* filename, const char* extension);
 Result file_read(const char* filename, FileData* out);

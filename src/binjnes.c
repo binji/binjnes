@@ -402,18 +402,27 @@ static void init_audio(void) {
   });
 }
 
-static void joypad_callback(JoypadButtons *joyp, void *user_data, bool strobe) {
-  joyp->up = s_key_state[SAPP_KEYCODE_UP];
-  joyp->down = s_key_state[SAPP_KEYCODE_DOWN];
-  joyp->left = s_key_state[SAPP_KEYCODE_LEFT];
-  joyp->right = s_key_state[SAPP_KEYCODE_RIGHT];
-  joyp->B = s_key_state[SAPP_KEYCODE_Z];
-  joyp->A = s_key_state[SAPP_KEYCODE_X];
-  joyp->start = s_key_state[SAPP_KEYCODE_ENTER];
-  joyp->select = s_key_state[SAPP_KEYCODE_TAB];
+static void joypad_callback(SystemInput* input, void *user_data, bool strobe) {
+  input->joyp[0].up = s_key_state[SAPP_KEYCODE_UP];
+  input->joyp[0].down = s_key_state[SAPP_KEYCODE_DOWN];
+  input->joyp[0].left = s_key_state[SAPP_KEYCODE_LEFT];
+  input->joyp[0].right = s_key_state[SAPP_KEYCODE_RIGHT];
+  input->joyp[0].B = s_key_state[SAPP_KEYCODE_Z];
+  input->joyp[0].A = s_key_state[SAPP_KEYCODE_X];
+  input->joyp[0].start = s_key_state[SAPP_KEYCODE_ENTER];
+  input->joyp[0].select = s_key_state[SAPP_KEYCODE_TAB];
+
+  input->joyp[1].up = s_key_state[SAPP_KEYCODE_Y];
+  input->joyp[1].down = s_key_state[SAPP_KEYCODE_H];
+  input->joyp[1].left = s_key_state[SAPP_KEYCODE_G];
+  input->joyp[1].right = s_key_state[SAPP_KEYCODE_J];
+  input->joyp[1].B = s_key_state[SAPP_KEYCODE_K];
+  input->joyp[1].A = s_key_state[SAPP_KEYCODE_L];
+  input->joyp[1].start = s_key_state[SAPP_KEYCODE_O];
+  input->joyp[1].select = s_key_state[SAPP_KEYCODE_I];
 
   Ticks ticks = emulator_get_ticks(e);
-  joypad_append_if_new(s_joypad, joyp, ticks);
+  joypad_append_if_new(s_joypad, input, ticks);
 }
 
 static void init_emulator(void) {

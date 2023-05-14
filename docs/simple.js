@@ -205,14 +205,14 @@ class Emulator {
 
   bindKeys() {
     this.keyFuncs = {
-      'ArrowDown': this.module._set_joyp_down.bind(null, this.e),
-      'ArrowLeft': this.module._set_joyp_left.bind(null, this.e),
-      'ArrowRight': this.module._set_joyp_right.bind(null, this.e),
-      'ArrowUp': this.module._set_joyp_up.bind(null, this.e),
-      'KeyZ': this.module._set_joyp_B.bind(null, this.e),
-      'KeyX': this.module._set_joyp_A.bind(null, this.e),
-      'Enter': this.module._set_joyp_start.bind(null, this.e),
-      'Tab': this.module._set_joyp_select.bind(null, this.e),
+      'ArrowDown': this.module._set_joyp_down.bind(null, this.e, 0),
+      'ArrowLeft': this.module._set_joyp_left.bind(null, this.e, 0),
+      'ArrowRight': this.module._set_joyp_right.bind(null, this.e, 0),
+      'ArrowUp': this.module._set_joyp_up.bind(null, this.e, 0),
+      'KeyZ': this.module._set_joyp_B.bind(null, this.e, 0),
+      'KeyX': this.module._set_joyp_A.bind(null, this.e, 0),
+      'Enter': this.module._set_joyp_start.bind(null, this.e, 0),
+      'Tab': this.module._set_joyp_select.bind(null, this.e, 0),
       'Space': this.keyPause.bind(this),
     };
     this.boundKeyDown = this.keyDown.bind(this);

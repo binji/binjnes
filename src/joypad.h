@@ -14,7 +14,7 @@ extern "C" {
 #endif
 
 struct Emulator;
-typedef void (*JoypadCallback)(struct JoypadButtons joyp[2], void *user_data,
+typedef void (*JoypadCallback)(struct SystemInput *input, void *user_data,
                                bool strobe);
 
 typedef struct Joypad Joypad;
@@ -37,7 +37,7 @@ Result joypad_new_for_playback(struct Emulator *, FileData *,
 Result joypad_new_for_movie(struct Emulator *, FileData *, struct Joypad **out);
 void joypad_delete(struct Joypad*);
 
-void joypad_append_if_new(struct Joypad *, JoypadButtons *, Ticks);
+void joypad_append_if_new(struct Joypad *, SystemInput *, Ticks);
 void joypad_append_reset(struct Joypad *, bool set, Ticks);
 Ticks joypad_get_next_reset_change(struct Joypad *);
 void joypad_begin_rewind_playback(struct Joypad *);

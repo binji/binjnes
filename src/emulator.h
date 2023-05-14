@@ -24,7 +24,7 @@ extern "C" {
 #define MAX_CHRRAM_SIZE 0x8000
 #define CHRRAM1K_MASK ((MAX_CHRRAM_SIZE >> 10) - 1)
 
-typedef void (*JoypadCallback)(struct JoypadButtons joyp[2], void *user_data,
+typedef void (*JoypadCallback)(struct SystemInput *input, void *user_data,
                                bool strobe);
 
 typedef struct JoypadCallbackInfo {

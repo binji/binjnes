@@ -1033,21 +1033,22 @@ static inline void inc_ppu_addr(P* p) {
   }
 }
 
-static inline void read_joyp(E *e, bool write, u8 val) {
+static inline void read_joyp(E* e, bool write, u8 val) {
   if (write || e->s.j.S) {
     if (e->joypad_info.callback) {
       bool strobe = write && val == 1;
       e->s.c.read_input = true;
-      JoypadButtons btns[2];
-      ZERO_MEMORY(btns);
-      e->joypad_info.callback(btns, e->joypad_info.user_data, strobe);
+      SystemInput input;
+      ZERO_MEMORY(input);
+      e->joypad_info.callback(&input, e->joypad_info.user_data, strobe);
       for (int i = 0; i < 2; ++i) {
-        e->s.j.joyp[i] = (btns[i].right << 7) | (btns[i].left << 6) |
-                         (btns[i].down << 5) | (btns[i].up << 4) |
-                         (btns[i].start << 3) | (btns[i].select << 2) |
-                         (btns[i].B << 1) | (btns[i].A << 0);
+        e->s.j.joyp[i] = (input.joyp[i].right << 7) |
+                         (input.joyp[i].left << 6) | (input.joyp[i].down << 5) |
+                         (input.joyp[i].up << 4) | (input.joyp[i].start << 3) |
+                         (input.joyp[i].select << 2) | (input.joyp[i].B << 1) |
+                         (input.joyp[i].A << 0);
         if (e->s.j.joyp[i]) {
-          print_byte(0x4016+i, e->s.j.joyp[i], 5, "RLDUTEBA");
+          print_byte(0x4016 + i, e->s.j.joyp[i], 5, "RLDUTEBA");
         }
       }
     } else {

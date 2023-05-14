@@ -13,7 +13,7 @@
 
 #include "emulator.h"
 
-#define DEBUG_JOYPAD_BUTTONS 0
+#define DEBUG_SYSTEM_INPUT 0
 
 #if 0
 #define LOG(...) printf(__VA_ARGS__)
@@ -25,8 +25,8 @@
 
 typedef struct {
   Ticks ticks;
-  u16 buttons;
-  u8 padding[6];
+  u32 input;
+  u8 padding[4];
 } JoypadState;
 
 typedef struct JoypadChunk {
@@ -43,7 +43,7 @@ typedef struct {
 
 typedef struct {
   JoypadChunk sentinel;
-  JoypadButtons last_buttons;
+  SystemInput last_input;
 } JoypadBuffer;
 
 typedef struct {
@@ -55,8 +55,7 @@ typedef struct {
 
 typedef struct {
   u32 latch;
-  u8 buttons[2];
-  u8 padding[2];
+  u32 input;
 } JoypadMovieFrame;
 
 typedef struct {
@@ -70,7 +69,7 @@ typedef struct {
   JoypadMovieBuffer* movie_buffer;
   u32 current_frame, current_frame_latch;
   u32 current_total_latch, max_latches;
-  JoypadButtons last_buttons;
+  SystemInput last_input;
 } JoypadMoviePlayback;
 
 typedef struct Joypad {
@@ -84,16 +83,16 @@ typedef struct Joypad {
   JoypadMoviePlayback movie_playback;
 } Joypad;
 
-static void joypad_append(JoypadBuffer *, JoypadButtons *, Ticks);
-static u16 joypad_pack_buttons(JoypadButtons*);
-static JoypadButtons joypad_unpack_buttons(u16 packed);
+static void joypad_append(JoypadBuffer*, SystemInput*, Ticks);
+static u32 joypad_pack_input(SystemInput*);
+static SystemInput joypad_unpack_input(u32 packed);
 static JoypadStateIter joypad_get_next_state(JoypadStateIter);
 static JoypadStateIter joypad_find_state(JoypadBuffer *, Ticks);
 
 static JoypadBuffer* joypad_buffer_new(void) {
   JoypadBuffer* buffer = xcalloc(1, sizeof(JoypadBuffer));
   buffer->sentinel.next = buffer->sentinel.prev = &buffer->sentinel;
-  joypad_append(buffer, &buffer->last_buttons, 0);
+  joypad_append(buffer, &buffer->last_input, 0);
   return buffer;
 }
 
@@ -137,43 +136,53 @@ static JoypadState* alloc_joypad_state(JoypadBuffer* buffer) {
   return &tail->data[tail->size++];
 }
 
-static void joypad_append(JoypadBuffer * buffer, JoypadButtons * buttons,
+static void joypad_append(JoypadBuffer* buffer, SystemInput* input,
                           Ticks ticks) {
   JoypadState* state = alloc_joypad_state(buffer);
   state->ticks = ticks;
-  state->buttons = joypad_pack_buttons(buttons);
-  buffer->last_buttons = *buttons;
+  state->input = joypad_pack_input(input);
+  buffer->last_input = *input;
 }
 
-static bool buttons_are_equal(JoypadButtons* lhs, JoypadButtons* rhs) {
+static bool joypad_input_is_equal(JoypadInput* lhs, JoypadInput* rhs) {
   return lhs->down == rhs->down && lhs->up == rhs->up &&
          lhs->left == rhs->left && lhs->right == rhs->right &&
          lhs->start == rhs->start && lhs->select == rhs->select &&
-         lhs->B == rhs->B && lhs->A == rhs->A && lhs->reset == rhs->reset;
+         lhs->B == rhs->B && lhs->A == rhs->A;
 }
 
-static void print_joypad_buttons(Ticks ticks, JoypadButtons buttons) {
-  printf("joyp: %" PRIu64 " %c%c%c%c %c%c%c%c%s\n", ticks,
-         buttons.down ? 'D' : '_', buttons.up ? 'U' : '_',
-         buttons.left ? 'L' : '_', buttons.right ? 'R' : '_',
-         buttons.start ? 'S' : '_', buttons.select ? 's' : '_',
-         buttons.B ? 'B' : '_', buttons.A ? 'A' : '_',
-         buttons.reset ? " [R]" : "");
+static bool system_input_is_equal(SystemInput* lhs, SystemInput* rhs) {
+  return joypad_input_is_equal(&lhs->joyp[0], &rhs->joyp[0]) &&
+         joypad_input_is_equal(&lhs->joyp[1], &rhs->joyp[1]) &&
+         lhs->reset == rhs->reset;
 }
 
-void joypad_append_if_new(Joypad *joypad, JoypadButtons *buttons, Ticks ticks) {
-  if (!buttons_are_equal(buttons, &joypad->buffer->last_buttons)) {
-    joypad_append(joypad->buffer, buttons, ticks);
-#if DEBUG_JOYPAD_BUTTONS
-    print_joypad_buttons(ticks, *buttons);
+static void print_input(Ticks ticks, SystemInput input) {
+  printf("joyp: %" PRIu64 " 0:%c%c%c%c %c%c%c%c 1:%c%c%c%c %c%c%c%c%s\n", ticks,
+         input.joyp[0].down ? 'D' : '_', input.joyp[0].up ? 'U' : '_',
+         input.joyp[0].left ? 'L' : '_', input.joyp[0].right ? 'R' : '_',
+         input.joyp[0].start ? 'S' : '_', input.joyp[0].select ? 's' : '_',
+         input.joyp[0].B ? 'B' : '_', input.joyp[0].A ? 'A' : '_',
+         input.joyp[1].down ? 'D' : '_', input.joyp[1].up ? 'U' : '_',
+         input.joyp[1].left ? 'L' : '_', input.joyp[1].right ? 'R' : '_',
+         input.joyp[1].start ? 'S' : '_', input.joyp[1].select ? 's' : '_',
+         input.joyp[1].B ? 'B' : '_', input.joyp[1].A ? 'A' : '_',
+         input.reset ? " [R]" : "");
+}
+
+void joypad_append_if_new(Joypad *joypad, SystemInput *input, Ticks ticks) {
+  if (!system_input_is_equal(input, &joypad->buffer->last_input)) {
+    joypad_append(joypad->buffer, input, ticks);
+#if DEBUG_SYSTEM_INPUT
+    print_input(ticks, *input);
 #endif
   }
 }
 
 void joypad_append_reset(Joypad *joypad, bool set, Ticks ticks) {
-  JoypadButtons buttons = joypad->buffer->last_buttons;
-  buttons.reset = set;
-  joypad_append_if_new(joypad, &buttons, ticks);
+  SystemInput input = joypad->buffer->last_input;
+  input.reset = set;
+  joypad_append_if_new(joypad, &input, ticks);
 }
 
 Ticks joypad_get_next_reset_change(Joypad *joypad) {
@@ -181,12 +190,12 @@ Ticks joypad_get_next_reset_change(Joypad *joypad) {
     Ticks ticks = emulator_get_ticks(joypad->playback.e);
     JoypadStateIter current = joypad_find_state(joypad->playback.buffer, ticks);
     bool is_reset = current.state != NULL &&
-                    joypad_unpack_buttons(current.state->buttons).reset;
+                    joypad_unpack_input(current.state->input).reset;
     if (current.state != NULL) {
       JoypadStateIter iter = joypad_get_next_state(current);
       while (iter.state != NULL) {
-        JoypadButtons buttons = joypad_unpack_buttons(iter.state->buttons);
-        if (buttons.reset != is_reset) {
+        SystemInput input = joypad_unpack_input(iter.state->input);
+        if (input.reset != is_reset) {
           return iter.state->ticks;
         }
         iter = joypad_get_next_state(iter);
@@ -257,7 +266,7 @@ static void joypad_truncate_to(JoypadBuffer *buffer, JoypadStateIter iter) {
   }
   iter.chunk->next = sentinel;
   sentinel->prev = iter.chunk;
-  buffer->last_buttons = joypad_unpack_buttons(iter.state->buttons);
+  buffer->last_input = joypad_unpack_input(iter.state->input);
 }
 
 static JoypadStateIter joypad_get_next_state(JoypadStateIter iter) {
@@ -272,24 +281,38 @@ static JoypadStateIter joypad_get_next_state(JoypadStateIter iter) {
   return iter;
 }
 
-static u16 joypad_pack_buttons(JoypadButtons* buttons) {
-  return (buttons->reset << 8) | (buttons->down << 7) | (buttons->up << 6) |
-         (buttons->left << 5) | (buttons->right << 4) | (buttons->start << 3) |
-         (buttons->select << 2) | (buttons->B << 1) | (buttons->A << 0);
+static u32 joypad_pack_input(SystemInput* input) {
+  return (input->reset << 16) | (input->joyp[1].down << 15) |
+         (input->joyp[1].up << 14) | (input->joyp[1].left << 13) |
+         (input->joyp[1].right << 12) | (input->joyp[1].start << 11) |
+         (input->joyp[1].select << 10) | (input->joyp[1].B << 9) |
+         (input->joyp[1].A << 8) | (input->joyp[0].down << 7) |
+         (input->joyp[0].up << 6) | (input->joyp[0].left << 5) |
+         (input->joyp[0].right << 4) | (input->joyp[0].start << 3) |
+         (input->joyp[0].select << 2) | (input->joyp[0].B << 1) |
+         (input->joyp[0].A << 0);
 }
 
-static JoypadButtons joypad_unpack_buttons(u16 packed) {
-  JoypadButtons buttons;
-  buttons.A = packed & 1;
-  buttons.B = (packed >> 1) & 1;
-  buttons.select = (packed >> 2) & 1;
-  buttons.start = (packed >> 3) & 1;
-  buttons.right = (packed >> 4) & 1;
-  buttons.left = (packed >> 5) & 1;
-  buttons.up = (packed >> 6) & 1;
-  buttons.down = (packed >> 7) & 1;
-  buttons.reset = (packed >> 8) & 1;
-  return buttons;
+static SystemInput joypad_unpack_input(u32 packed) {
+  SystemInput input;
+  input.joyp[0].A = packed & 1;
+  input.joyp[0].B = (packed >> 1) & 1;
+  input.joyp[0].select = (packed >> 2) & 1;
+  input.joyp[0].start = (packed >> 3) & 1;
+  input.joyp[0].right = (packed >> 4) & 1;
+  input.joyp[0].left = (packed >> 5) & 1;
+  input.joyp[0].up = (packed >> 6) & 1;
+  input.joyp[0].down = (packed >> 7) & 1;
+  input.joyp[1].A = (packed >> 8) & 1;
+  input.joyp[1].B = (packed >> 9) & 1;
+  input.joyp[1].select = (packed >> 10) & 1;
+  input.joyp[1].start = (packed >> 11) & 1;
+  input.joyp[1].right = (packed >> 12) & 1;
+  input.joyp[1].left = (packed >> 13) & 1;
+  input.joyp[1].up = (packed >> 14) & 1;
+  input.joyp[1].down = (packed >> 15) & 1;
+  input.reset = (packed >> 16) & 1;
+  return input;
 }
 
 JoypadStats joypad_get_stats(Joypad* joypad) {
@@ -361,8 +384,7 @@ static Result joypad_read(const FileData *file_data,
   ON_ERROR_RETURN;
 }
 
-static void joypad_playback_callback(struct JoypadButtons* joyp,
-                                     void* user_data,
+static void joypad_playback_callback(struct SystemInput* input, void* user_data,
                                      bool strobe) {
   bool changed = false;
   JoypadPlayback* playback = user_data;
@@ -382,17 +404,16 @@ static void joypad_playback_callback(struct JoypadButtons* joyp,
     changed = true;
   }
 
-#if DEBUG_JOYPAD_BUTTONS
+#if DEBUG_SYSTEM_INPUT
   if (changed) {
-    print_joypad_buttons(
-        playback->current.state->ticks,
-        joypad_unpack_buttons(playback->current.state->buttons));
+    print_input(playback->current.state->ticks,
+                joypad_unpack_input(playback->current.state->input));
   }
 #else
   (void)changed;
 #endif
 
-  *joyp = joypad_unpack_buttons(playback->current.state->buttons);
+  *input = joypad_unpack_input(playback->current.state->input);
 }
 
 static void init_joypad_playback_state(Emulator *e, JoypadPlayback *playback,
@@ -435,10 +456,6 @@ static Result joypad_read_movie(const FileData *file_data,
     size_t j;
     CHECK_MSG(frame->latch != 0, "Expected latch to be non-zero at index %zu\n",
               i);
-    for (j = 0; j < ARRAY_SIZE(frame->padding); ++j) {
-      CHECK_MSG(frame->padding[j] == 0, "Expected padding to be zero, got %u\n",
-                frame->padding[j]);
-    }
     total_latches += frame->latch;
   }
 
@@ -463,12 +480,11 @@ static void init_joypad_movie_playback_state(JoypadMoviePlayback *playback,
   playback->current_frame_latch = 0;
   playback->current_total_latch = 0;
   playback->max_latches = 0;
-  memset(&playback->last_buttons, 0, sizeof(JoypadButtons));
+  memset(&playback->last_input, 0, sizeof(SystemInput));
 }
 
-static void joypad_movie_playback_callback(struct JoypadButtons *joyp,
-                                           void *user_data,
-                                           bool strobe) {
+static void joypad_movie_playback_callback(struct SystemInput* input,
+                                           void* user_data, bool strobe) {
   JoypadMoviePlayback* playback = user_data;
 
   Ticks ticks = emulator_get_ticks(playback->e);
@@ -482,7 +498,7 @@ static void joypad_movie_playback_callback(struct JoypadButtons *joyp,
 #undef GET_TICKS
 #undef CMP_LT
 
-    u8 last_buttons = 0;
+    u32 last_input = 0;
     size_t total_latch_index = lower_bound - begin;
     u32 total_latches = 0;
     for (size_t i = 0; i < playback->movie_buffer->frame_count - 1; ++i) {
@@ -492,11 +508,11 @@ static void joypad_movie_playback_callback(struct JoypadButtons *joyp,
         playback->current_frame = i;
         playback->current_frame_latch = total_latch_index - total_latches;
         playback->current_total_latch = total_latch_index;
-        playback->last_buttons = joypad_unpack_buttons(last_buttons);
+        playback->last_input = joypad_unpack_input(last_input);
         break;
       }
       total_latches += frame->latch;
-      last_buttons = frame->buttons[0];
+      last_input = frame->input;
     }
 
     LOG("   *** Resync %" PRIu64 ". New frame=%u, latch=%u total=%u\n", ticks,
@@ -520,23 +536,32 @@ static void joypad_movie_playback_callback(struct JoypadButtons *joyp,
     }
     if (++playback->current_frame_latch >= frame->latch) {
       assert(playback->current_frame_latch <= frame->latch);
-      playback->last_buttons = joypad_unpack_buttons(frame->buttons[0]);
+      playback->last_input = joypad_unpack_input(frame->input);
       ++playback->current_frame;
       playback->current_frame_latch = 0;
-      LOG("buttons=%c%c%c%c%c%c%c%c\n", playback->last_buttons.down ? 'D' : '_',
-          playback->last_buttons.up ? 'U' : '_',
-          playback->last_buttons.left ? 'L' : '_',
-          playback->last_buttons.right ? 'R' : '_',
-          playback->last_buttons.start ? 'T' : '_',
-          playback->last_buttons.select ? 'E' : '_',
-          playback->last_buttons.B ? 'B' : '_',
-          playback->last_buttons.A ? 'A' : '_');
+      LOG("0:%c%c%c%c%c%c%c%c 1:%c%c%c%c%c%c%c%c\n",
+          playback->last_input.joyp[0].down ? 'D' : '_',
+          playback->last_input.joyp[0].up ? 'U' : '_',
+          playback->last_input.joyp[0].left ? 'L' : '_',
+          playback->last_input.joyp[0].right ? 'R' : '_',
+          playback->last_input.joyp[0].start ? 'T' : '_',
+          playback->last_input.joyp[0].select ? 'E' : '_',
+          playback->last_input.joyp[0].B ? 'B' : '_',
+          playback->last_input.joyp[0].A ? 'A' : '_',
+          playback->last_input.joyp[1].down ? 'D' : '_',
+          playback->last_input.joyp[1].up ? 'U' : '_',
+          playback->last_input.joyp[1].left ? 'L' : '_',
+          playback->last_input.joyp[1].right ? 'R' : '_',
+          playback->last_input.joyp[1].start ? 'T' : '_',
+          playback->last_input.joyp[1].select ? 'E' : '_',
+          playback->last_input.joyp[1].B ? 'B' : '_',
+          playback->last_input.joyp[1].A ? 'A' : '_');
     } else {
       LOG("\n");
     }
   }
 
-  *joyp = playback->last_buttons;
+  *input = playback->last_input;
 }
 
 Result joypad_new_for_movie(Emulator *e, FileData *file_data, Joypad **out) {
@@ -573,8 +598,8 @@ void joypad_truncate_to_current(Joypad* joypad) {
   if (joypad->mode == JOYPAD_MODE_USER) {
     joypad_truncate_to(joypad->buffer, joypad->playback.current);
     /* Append the current joypad state. */
-    JoypadButtons buttons;
-    joypad->callback(&buttons, joypad->callback_user_data, false);
+    SystemInput input;
+    joypad->callback(&input, joypad->callback_user_data, false);
   }
 }
 
