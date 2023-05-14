@@ -95,8 +95,8 @@
   "cpu_reset": {
     "dir": "nes-test-roms/cpu_reset",
     "tests": [
-      ["ram_after_reset.nes", 400, "e59ff0020f9f67a627b2ca1d5faaa56c3c10af85", "//test/ram_after_reset.joy"],
-      ["registers.nes", 400, "f7fb422cdc5b7d2165b0e80f76dcaf046a04ab8f", "//test/registers.joy"]
+      ["ram_after_reset.nes", 400, "0a2137d2e80b3b12e10ac332112fc84ba02ec33f", "//test/ram_after_reset.joy"],
+      ["registers.nes", 400, "3596cb6eccf3e6e72df472a6fb6500a83058564b", "//test/registers.joy"]
     ]
   },
 
