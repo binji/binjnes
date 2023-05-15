@@ -129,7 +129,14 @@ let vm = new Vue({
     }, 1000);
     let inputSettings = window.localStorage.getItem('inputSettings');
     if (inputSettings) {
-      this.input.list = JSON.parse(inputSettings);
+      const loaded = JSON.parse(inputSettings);
+      const loadedMap = new Map(loaded.map(v => [v.name, v.options]));
+      for (let setting of this.input.list) {
+        const newSetting = loadedMap.get(setting.name);
+        if (newSetting !== undefined) {
+          setting.options = newSetting;
+        }
+      }
     }
     this.readFiles();
   },
