@@ -252,7 +252,7 @@ static void ppu_write(E *e, u16 addr, u8 val) {
     case 12: case 13: case 14:         // 0x3000..0x3bff
       e->ppu_map_write[(addr >> 10) & 15][addr & 0x3ff] = val;
       DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%3u:%3u)\n", e->s.cy,
-             addr, val, e->s.p.state % 341, e->s.p.state / 341);
+            addr, val, ppu_dot(e), ppu_line(e));
       break;
   }
 }
@@ -309,6 +309,8 @@ static void shift_bg(E *e) { e->s.p.bgatshift >>= 4; }
 
 static inline u8 scanx(P* p) { return p->fbidx & 255; }
 static inline u8 scany(P* p) { return p->fbidx >> 8; }
+static inline u8 ppu_dot(E* e) { return e->s.p.state % 341; }
+static inline u8 ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void shift_en(E *e) {
   P* p = &e->s.p;
@@ -342,7 +344,7 @@ static void shift_en(E *e) {
       //  * (sprite priority doesn't matter)
       u8 bgpx = palidx & 3;
       if ((non0 & spr->spr0mask) && bgpx && scanx(p) != 255) {
-        DEBUG("[%3u:%3u] sprite0\n", p->state % 341, p->state / 341);
+        DEBUG("[%3u:%3u] sprite0\n", ppu_dot(e), ppu_line(e));
         p->ppustatus |= 0x40;
       }
 
@@ -1169,11 +1171,11 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
       DEBUG("(%" PRIu64 ") [%3u:%3u]: ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy,
-            p->state % 341, p->state / 341, p->t, val);
+            ppu_dot(e), ppu_line(e), p->t, val);
       goto io;
     case 1:
       DEBUG("(%" PRIu64 ") [%3u:%3u]: ppumask: %02x=>%02x\n", e->s.cy,
-            p->state % 341, p->state / 341, p->ppumask, val);
+            ppu_dot(e), ppu_line(e), p->ppumask, val);
       if ((val ^ p->ppumask) & 0x18) {
         p->enabled_changed_cy = e->s.cy;
       }
@@ -1197,13 +1199,13 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         u8 shamt = (p->x + (p->fbidx & 7)) * 2;
         p->bgatshift = interleave2(p->atshift >> shamt, p->bgshift >> shamt);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx x=%02hhx w=0\n",
-              e->s.cy, p->state % 341, p->state / 341, val, p->t, p->x);
+              e->s.cy, ppu_dot(e), ppu_line(e), val, p->t, p->x);
       } else {
         // w was 1.
         // t: CBA..HG FED..... = d: HGFEDCBA
         p->t = (p->t & 0x8c1f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx w=1\n", e->s.cy,
-              p->state % 341, p->state / 341, val, p->t);
+              ppu_dot(e), ppu_line(e), val, p->t);
       }
       goto io;
     case 6:
@@ -1213,7 +1215,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         // t: X...... ........ = 0
         p->t = (p->t & 0xff) | ((val & 0x3f) << 8);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:t=%04hx w=0\n", e->s.cy,
-              p->state % 341, p->state / 341, val, p->t);
+              ppu_dot(e), ppu_line(e), val, p->t);
       } else {
         // w was 1.
         // t: ....... HGFEDCBA = d: HGFEDCBA
@@ -1222,7 +1224,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         if (e->mapper_on_ppu_addr_updated)
           e->mapper_on_ppu_addr_updated(e, p->v);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:v=%04hx t=%04hx w=1\n",
-              e->s.cy, p->state % 341, p->state / 341, val, p->v, p->t);
+              e->s.cy, ppu_dot(e), ppu_line(e), val, p->v, p->t);
       }
       goto io;
     case 7: {
@@ -1232,7 +1234,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       if (e->mapper_on_ppu_addr_updated)
         e->mapper_on_ppu_addr_updated(e, p->v);
       DEBUG("  (%" PRIu64 ") [%3u:%3u]: ppu:write(%04hx)=%02hhx, v=%04hx\n",
-            e->s.cy, p->state % 341, p->state / 341, oldv, val, p->v);
+            e->s.cy, ppu_dot(e), ppu_line(e), oldv, val, p->v);
       goto io;
     }
     }
@@ -1985,8 +1987,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       mapper5_update_chr(e);
       break;
     case 0x5105:
-      LOG("✓  [%3u:%3u] Nametable mapping = %u:%u:%u:%u\n", e->s.p.state % 341,
-          e->s.p.state / 341, (val >> 0) & 3, (val >> 2) & 3, (val >> 4) & 3,
+      LOG("✓  [%3u:%3u] Nametable mapping = %u:%u:%u:%u\n", ppu_dot(e),
+          ppu_line(e), (val >> 0) & 3, (val >> 2) & 3, (val >> 4) & 3,
           (val >> 6) & 3);
       for (int i = 0; i < 4; ++i) {
         u8 bits = (val >> (i * 2)) & 3;
@@ -2108,8 +2110,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       if (m->mmc5.exram_mode != 3) {
         u16 ramaddr = (2 << 10) + (addr & 0x3ff);
         e->s.p.ram[ramaddr] = val;
-        LOG("✓  [%3u: %3u] Write internal RAM %04x <= %02x\n",
-            e->s.p.state % 341, e->s.p.state / 341, ramaddr, val);
+        LOG("✓  [%3u: %3u] Write internal RAM %04x <= %02x\n", ppu_dot(e),
+            ppu_line(e), ramaddr, val);
       }
       break;
     }
@@ -2231,8 +2233,7 @@ static void mapper5_cpu_step(E* e) {
   M* m = &e->s.m;
   if (e->s.cy - e->s.p.last_vram_access_cy >= 3 * 3) {
     if (m->mmc5.in_frame) {
-      LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", e->s.p.state % 341,
-          e->s.p.state / 341);
+      LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
     }
     m->mmc5.in_frame = false;
     m->mmc5.lastaddr = ~0;
@@ -2242,27 +2243,26 @@ static void mapper5_cpu_step(E* e) {
 static void mapper5_on_ppu_addr_updated(E* e, u16 addr) {
   M* m = &e->s.m;
   if ((addr & 0x3000) == 0x2000 && addr == m->mmc5.lastaddr) {
-    LOG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", e->s.p.state % 341,
-        e->s.p.state / 341, m->mmc5.match_count + 1, m->mmc5.lastaddr);
+    LOG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", ppu_dot(e),
+        ppu_line(e), m->mmc5.match_count + 1, m->mmc5.lastaddr);
     ++m->mmc5.match_count;
   } else {
     if (m->mmc5.match_count == 2) {
       if (!m->mmc5.in_frame) {
         m->mmc5.in_frame = true;
         m->mmc5.scan = 0;
-        LOG("✓  [%3u:%3u] MMC5, setting scan to 0\n", e->s.p.state % 341,
-            e->s.p.state / 341);
+        LOG("✓  [%3u:%3u] MMC5, setting scan to 0\n", ppu_dot(e), ppu_line(e));
       } else {
         if (++m->mmc5.scan == m->mmc5.scan_cmp) {
-          LOG("✓  [%3u:%3u] MMC5, scanline match = %u\n", e->s.p.state % 341,
-              e->s.p.state / 341, m->mmc5.scan);
+          LOG("✓  [%3u:%3u] MMC5, scanline match = %u\n", ppu_dot(e),
+              ppu_line(e), m->mmc5.scan);
           m->mmc5.irq_pending = true;
           if (m->mmc5.irq_enable) {
             e->s.c.irq |= IRQ_MAPPER;
           }
         } else {
-          LOG("✓  [%3u:%3u] MMC5, scan = %u\n", e->s.p.state % 341,
-              e->s.p.state / 341, m->mmc5.scan);
+          LOG("✓  [%3u:%3u] MMC5, scan = %u\n", ppu_dot(e), ppu_line(e),
+              m->mmc5.scan);
         }
       }
     }
