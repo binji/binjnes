@@ -25,8 +25,7 @@
 
 typedef struct {
   Ticks ticks;
-  u32 input;
-  u8 padding[4];
+  u64 input;
 } JoypadState;
 
 typedef struct JoypadChunk {
@@ -84,8 +83,8 @@ typedef struct Joypad {
 } Joypad;
 
 static void joypad_append(JoypadBuffer*, SystemInput*, Ticks);
-static u32 joypad_pack_input(SystemInput*);
-static SystemInput joypad_unpack_input(u32 packed);
+static u64 joypad_pack_input(SystemInput*);
+static SystemInput joypad_unpack_input(u64 packed);
 static JoypadStateIter joypad_get_next_state(JoypadStateIter);
 static JoypadStateIter joypad_find_state(JoypadBuffer *, Ticks);
 
@@ -151,23 +150,49 @@ static bool joypad_input_is_equal(JoypadInput* lhs, JoypadInput* rhs) {
          lhs->B == rhs->B && lhs->A == rhs->A;
 }
 
+static bool zapper_input_is_equal(ZapperInput* lhs, ZapperInput* rhs) {
+  return lhs->x == rhs->x && lhs->y == rhs->y && lhs->trigger == rhs->trigger;
+}
+
+static bool controller_input_is_equal(ControllerInput* lhs, ControllerInput* rhs) {
+  return lhs->type == rhs->type &&
+         ((lhs->type == CONTROLLER_JOYPAD &&
+           joypad_input_is_equal(&lhs->joyp, &rhs->joyp)) ||
+          (lhs->type == CONTROLLER_ZAPPER &&
+           zapper_input_is_equal(&lhs->zap, &rhs->zap)));
+}
+
 static bool system_input_is_equal(SystemInput* lhs, SystemInput* rhs) {
-  return joypad_input_is_equal(&lhs->joyp[0], &rhs->joyp[0]) &&
-         joypad_input_is_equal(&lhs->joyp[1], &rhs->joyp[1]) &&
+  return controller_input_is_equal(&lhs->port[0], &rhs->port[0]) &&
+         controller_input_is_equal(&lhs->port[1], &rhs->port[1]) &&
          lhs->reset == rhs->reset;
 }
 
+static void sprint_joypad(JoypadInput joyp, char buffer[10]) {
+  snprintf(buffer, 10, "%c%c%c%c %c%c%c%c", joyp.down ? 'D' : '_',
+           joyp.up ? 'U' : '_', joyp.left ? 'L' : '_', joyp.right ? 'R' : '_',
+           joyp.start ? 'S' : '_', joyp.select ? 's' : '_', joyp.B ? 'B' : '_',
+           joyp.A ? 'A' : '_');
+}
+
+static void sprint_zapper(ZapperInput zap, char buffer[10]) {
+  snprintf(buffer, 10, "%3d,%3d %c", zap.x, zap.y,
+           zap.trigger ? 'T' : '_');
+}
+
 static void print_input(Ticks ticks, SystemInput input) {
-  printf("joyp: %" PRIu64 " 0:%c%c%c%c %c%c%c%c 1:%c%c%c%c %c%c%c%c%s\n", ticks,
-         input.joyp[0].down ? 'D' : '_', input.joyp[0].up ? 'U' : '_',
-         input.joyp[0].left ? 'L' : '_', input.joyp[0].right ? 'R' : '_',
-         input.joyp[0].start ? 'S' : '_', input.joyp[0].select ? 's' : '_',
-         input.joyp[0].B ? 'B' : '_', input.joyp[0].A ? 'A' : '_',
-         input.joyp[1].down ? 'D' : '_', input.joyp[1].up ? 'U' : '_',
-         input.joyp[1].left ? 'L' : '_', input.joyp[1].right ? 'R' : '_',
-         input.joyp[1].start ? 'S' : '_', input.joyp[1].select ? 's' : '_',
-         input.joyp[1].B ? 'B' : '_', input.joyp[1].A ? 'A' : '_',
-         input.reset ? " [R]" : "");
+  char pbuf[2][10];
+  for (int i = 0; i < 2; ++i) {
+    switch (input.port[i].type) {
+      case CONTROLLER_JOYPAD:
+        sprint_joypad(input.port[i].joyp, pbuf[i]);
+        break;
+      case CONTROLLER_ZAPPER:
+        sprint_zapper(input.port[i].zap, pbuf[i]);
+        break;
+    }
+  }
+  printf("inp: %" PRIu64 " 0:%s 1:%s\n", ticks, pbuf[0], pbuf[1]);
 }
 
 void joypad_append_if_new(Joypad *joypad, SystemInput *input, Ticks ticks) {
@@ -281,37 +306,72 @@ static JoypadStateIter joypad_get_next_state(JoypadStateIter iter) {
   return iter;
 }
 
-static u32 joypad_pack_input(SystemInput* input) {
-  return (input->reset << 16) | (input->joyp[1].down << 15) |
-         (input->joyp[1].up << 14) | (input->joyp[1].left << 13) |
-         (input->joyp[1].right << 12) | (input->joyp[1].start << 11) |
-         (input->joyp[1].select << 10) | (input->joyp[1].B << 9) |
-         (input->joyp[1].A << 8) | (input->joyp[0].down << 7) |
-         (input->joyp[0].up << 6) | (input->joyp[0].left << 5) |
-         (input->joyp[0].right << 4) | (input->joyp[0].start << 3) |
-         (input->joyp[0].select << 2) | (input->joyp[0].B << 1) |
-         (input->joyp[0].A << 0);
+static u8 pack_joypad(JoypadInput* joyp) {
+  return (joyp->down << 7) | (joyp->up << 6) | (joyp->left << 5) |
+         (joyp->right << 4) | (joyp->start << 3) | (joyp->select << 2) |
+         (joyp->B << 1) | (joyp->A << 0);
 }
 
-static SystemInput joypad_unpack_input(u32 packed) {
+static JoypadInput unpack_joypad(u8 packed) {
+  JoypadInput joyp;
+  joyp.A = packed & 1;
+  joyp.B = (packed >> 1) & 1;
+  joyp.select = (packed >> 2) & 1;
+  joyp.start = (packed >> 3) & 1;
+  joyp.right = (packed >> 4) & 1;
+  joyp.left = (packed >> 5) & 1;
+  joyp.up = (packed >> 6) & 1;
+  joyp.down = (packed >> 7) & 1;
+  return joyp;
+}
+
+static u8 pack_zapper(ZapperInput* zap) {
+  return (zap->trigger << 16) | (zap->y << 8) | (zap->x);
+}
+
+static ZapperInput unpack_zapper(u8 packed) {
+  ZapperInput zap;
+  zap.x = packed & 0xff;
+  zap.y = (packed >> 8) & 0xff;
+  zap.trigger = (packed >> 16) & 1;
+  return zap;
+}
+
+static u32 pack_controller(ControllerInput* port) {
+  switch (port->type) {
+    case CONTROLLER_JOYPAD:
+      return (port->type << 18) | pack_joypad(&port->joyp);
+    case CONTROLLER_ZAPPER:
+      return (port->type << 18) | pack_zapper(&port->zap);
+  }
+  return 0;
+}
+
+static ControllerInput unpack_controller(u32 packed) {
+  ControllerInput port;
+  port.type = (packed >> 18) & 1;
+  switch (port.type) {
+    case CONTROLLER_JOYPAD:
+      port.joyp = unpack_joypad(packed & 0x3ffff);
+      break;
+    case CONTROLLER_ZAPPER:
+      port.zap = unpack_zapper(packed & 0x3ffff);
+      break;
+  }
+  return port;
+}
+
+static u64 joypad_pack_input(SystemInput* input) {
+  return ((u64)input->reset << 40) |
+         ((u64)pack_controller(&input->port[1]) << 20) |
+         (u64)pack_controller(&input->port[0]);
+}
+
+static SystemInput joypad_unpack_input(u64 packed) {
   SystemInput input;
-  input.joyp[0].A = packed & 1;
-  input.joyp[0].B = (packed >> 1) & 1;
-  input.joyp[0].select = (packed >> 2) & 1;
-  input.joyp[0].start = (packed >> 3) & 1;
-  input.joyp[0].right = (packed >> 4) & 1;
-  input.joyp[0].left = (packed >> 5) & 1;
-  input.joyp[0].up = (packed >> 6) & 1;
-  input.joyp[0].down = (packed >> 7) & 1;
-  input.joyp[1].A = (packed >> 8) & 1;
-  input.joyp[1].B = (packed >> 9) & 1;
-  input.joyp[1].select = (packed >> 10) & 1;
-  input.joyp[1].start = (packed >> 11) & 1;
-  input.joyp[1].right = (packed >> 12) & 1;
-  input.joyp[1].left = (packed >> 13) & 1;
-  input.joyp[1].up = (packed >> 14) & 1;
-  input.joyp[1].down = (packed >> 15) & 1;
-  input.reset = (packed >> 16) & 1;
+  input.port[0] = unpack_controller(packed & 0xfffff);
+  input.port[1] = unpack_controller((packed >> 20) & 0xfffff);
+  input.reset = (packed >> 40) & 1;
   return input;
 }
 
@@ -366,10 +426,6 @@ static Result joypad_read(const FileData *file_data,
               "Expected ticks to be sorted, got %" PRIu64 " then %" PRIu64 "\n",
               last_ticks, ticks);
     size_t j;
-    for (j = 0; j < ARRAY_SIZE(state->padding); ++j) {
-      CHECK_MSG(state->padding[j] == 0, "Expected padding to be zero, got %u\n",
-                state->padding[j]);
-    }
     last_ticks = ticks;
   }
 

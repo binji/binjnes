@@ -247,7 +247,13 @@ typedef struct {
 } A;
 
 typedef struct {
-  u8 joyp[2];
+  struct {
+    ControllerType type;
+    Ticks triggercy;
+    u32 zapfbidx;
+    u8 joyp;
+    bool trigger;
+  } port[2];
   bool S;
 } J;
 

@@ -121,22 +121,26 @@
       justify-content: center;
     }
     table {
+      border-collapse: separate;
+      border-spacing: 0;
       width: 100%;
-      border-collapse: collapse;
-      border-spacing: 12px;
     }
-    .files-footer {
+    th {
+      padding: 4px;
+      position: sticky;
+      top: 0;
+      border-bottom: 1px solid gray;
+      background: white;
+    }
+    .input-footer, .files-footer {
       display: flex;
       flex-direction: row;
       align-items: flex-end;
       padding-top: 8px;
     }
-    #files-list {
+    #input-list, #files-list {
       margin: 8px 0;
       overflow: auto;
-    }
-    table thead {
-      border-bottom: 1px solid gray;
     }
     .file td {
       padding: 4px 0;
@@ -154,6 +158,9 @@
     .input-button {
       width: 20%;
     }
+    .player-label {
+      padding: 0 8px;
+    }
     .file-name {
       width: 60%;
     }
@@ -162,9 +169,6 @@
     }
     .file-modified {
       width: 20%;
-    }
-    thead td {
-      padding: 4px;
     }
     .file-image {
       border: 1px solid gray;
@@ -225,10 +229,10 @@
       <div class="content">
         <table>
           <thead>
-            <td class="input-name">Name</td>
-            <td class="input-button">button1</td>
-            <td class="input-button">button2</td>
-            <td class="input-button">button3</td>
+            <th class="input-name">Name</th>
+            <th class="input-button">button1</th>
+            <th class="input-button">button2</th>
+            <th class="input-button">button3</th>
           </thead>
           <tbody id="input-list">
             <tr
@@ -265,6 +269,19 @@
           </tbody>
         </table>
       </div>
+      <div class="input-footer top-line">
+        <span
+            v-for="(type, index) in input.type">
+          <label class="player-label">P{{index}}:
+            <select
+                v-model:value="input.type[index]"
+                @change="inputTypeChanged">
+              <option value="joypad">joypad</option>
+              <option value="zapper">zapper</option>
+            </select>
+          </label>
+        </span>
+      </div>
     </div>
     <div class="setting overlap" v-if="input.setting">
       <div class="setting-text">Press key for {{input.list[input.key].name}}...</div>
@@ -279,9 +296,9 @@
           v-bind:class="{empty:isFilesListEmpty}">
         <table v-if="!isFilesListEmpty">
           <thead>
-            <td class="file-name">Name</td>
-            <td class="file-size">Size</td>
-            <td class="file-modified"> Modified</td>
+            <th class="file-name">Name</th>
+            <th class="file-size">Size</th>
+            <th class="file-modified"> Modified</th>
           </thead>
           <tbody id="files-list">
             <tr class="file"

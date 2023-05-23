@@ -102,13 +102,31 @@ typedef struct FileData {
   size_t size;
 } FileData;
 
+typedef enum ControllerType {
+  CONTROLLER_JOYPAD,
+  CONTROLLER_ZAPPER,
+} ControllerType;
+
 typedef struct JoypadInput {
   bool down, up, left, right;
   bool start, select, B, A;
 } JoypadInput;
 
+typedef struct ZapperInput {
+  u8 x, y;
+  bool trigger;
+} ZapperInput;
+
+typedef struct ControllerInput {
+  ControllerType type;
+  union {
+    JoypadInput joyp;
+    ZapperInput zap;
+  };
+} ControllerInput;
+
 typedef struct SystemInput {
-  JoypadInput joyp[2];
+  ControllerInput port[2];
   bool reset;
 } SystemInput;
 

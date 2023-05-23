@@ -1035,30 +1035,66 @@ static inline void inc_ppu_addr(P* p) {
   }
 }
 
-static inline void read_joyp(E* e, bool write, u8 val) {
-  if (write || e->s.j.S) {
-    if (e->joypad_info.callback) {
-      bool strobe = write && val == 1;
-      e->s.c.read_input = true;
-      SystemInput input;
-      ZERO_MEMORY(input);
-      e->joypad_info.callback(&input, e->joypad_info.user_data, strobe);
-      for (int i = 0; i < 2; ++i) {
-        e->s.j.joyp[i] = (input.joyp[i].right << 7) |
-                         (input.joyp[i].left << 6) | (input.joyp[i].down << 5) |
-                         (input.joyp[i].up << 4) | (input.joyp[i].start << 3) |
-                         (input.joyp[i].select << 2) | (input.joyp[i].B << 1) |
-                         (input.joyp[i].A << 0);
-        if (e->s.j.joyp[i]) {
-          print_byte(0x4016 + i, e->s.j.joyp[i], 5, "RLDUTEBA");
-        }
+static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
+  J* j = &e->s.j;
+  if (e->joypad_info.callback) {
+    bool strobe = write && val == 1;
+    e->s.c.read_input = true;
+    SystemInput sys;
+    ZERO_MEMORY(sys);
+    e->joypad_info.callback(&sys, e->joypad_info.user_data, strobe);
+    for (int i = 0; i < 2; ++i) {
+      ControllerInput* ctrl = &sys.port[i];
+      j->port[i].type = ctrl->type;
+      switch (ctrl->type) {
+        case CONTROLLER_JOYPAD:
+          if (write || j->S) {
+            j->port[i].joyp = (ctrl->joyp.right << 7) | (ctrl->joyp.left << 6) |
+                              (ctrl->joyp.down << 5) | (ctrl->joyp.up << 4) |
+                              (ctrl->joyp.start << 3) |
+                              (ctrl->joyp.select << 2) | (ctrl->joyp.B << 1) |
+                              (ctrl->joyp.A << 0);
+            if (j->port[i].joyp) {
+              print_byte(0x4016 + i, j->port[i].joyp, 5, "RLDUTEBA");
+            }
+          }
+          break;
+        case CONTROLLER_ZAPPER:
+          j->port[i].zapfbidx = ctrl->zap.y * SCREEN_WIDTH + ctrl->zap.x;
+          j->port[i].trigger = ctrl->zap.trigger;
+          if (ctrl->zap.trigger) {
+            j->port[i].triggercy = e->s.cy;
+          }
+          break;
       }
-    } else {
-      for (int i = 0; i < 2; ++i) {
-        e->s.j.joyp[i] = 0;
+    }
+  } else {
+    for (int i = 0; i < 2; ++i) {
+      j->port[i].type = CONTROLLER_JOYPAD;
+      j->port[i].joyp = 0;
+    }
+  }
+
+  if (!write) {
+    switch(j->port[index].type) {
+      case CONTROLLER_JOYPAD: {
+        u8 result = (e->s.c.open_bus & ~0x1f) | (j->port[index].joyp & 1);
+        j->port[index].joyp = (j->port[index].joyp >> 1) | 0x80;
+        return result;
+      }
+      case CONTROLLER_ZAPPER: {
+        static const Ticks s_trigger_cy = PPU_TICKS_PER_SECOND / 10;  // ~100ms
+        static const int s_scanlines[] = {0, 19, 24, 26};
+        bool trigger = e->s.cy - j->port[index].triggercy < s_trigger_cy;
+        u32 fbidx = j->port[index].zapfbidx;
+        int dlines = MAX(0, (int)((e->s.p.fbidx - fbidx) / 256));
+        bool light = fbidx < SCREEN_WIDTH * SCREEN_HEIGHT &&
+                     dlines < s_scanlines[(e->frame_buffer[fbidx] >> 4) & 3];
+        return (e->s.c.open_bus & ~0x18) | (trigger << 4) | (!light << 3);
       }
     }
   }
+  return e->s.c.open_bus;
 }
 
 static inline u16 get_u16(u8 hi, u8 lo) { return (hi << 8) | lo; }
@@ -1119,18 +1155,8 @@ static u8 cpu_read(E *e, u16 addr) {
               e->s.cy, (e->s.cy - a->resetcy) / 3);
         return result;
       }
-      case 0x16: { // JOY1
-        read_joyp(e, false, 0);
-        u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[0] & 1);
-        e->s.j.joyp[0] = (e->s.j.joyp[0] >> 1) | 0x80;
-        return result;
-      }
-      case 0x17: { // JOY2
-        read_joyp(e, false, 0);
-        u8 result = (c->open_bus & ~0x1f) | (e->s.j.joyp[1] & 1);
-        e->s.j.joyp[1] = (e->s.j.joyp[1] >> 1) | 0x80;
-        return result;
-      }
+      case 0x16: return read_joyp(e, 0, false, 0);  // JOY1
+      case 0x17: return read_joyp(e, 1, false, 0);  // JOY2
     }
     // fallthrough
   case 5:
@@ -1362,11 +1388,10 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         c->next_step = s_oamdma + !(e->s.cy & 1); // 513/514 cycles
         goto io;
       }
-      case 0x16: {  // JOY1
-        read_joyp(e, true, val & 1);
+      case 0x16:
+        read_joyp(e, 0, true, val & 1);
         e->s.j.S = val & 1;
         goto io;
-      }
       default:
         e->mapper_write(e, addr, val);
         break;

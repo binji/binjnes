@@ -34,6 +34,7 @@
 #define REWIND_CYCLES_PER_FRAME (89432 * 3 / 2) /* Rewind at 1.5x */
 
 #define KEYCODE_COUNT 400
+#define MOUSEBUTTON_COUNT 3
 
 #define OVERSCAN_TOP 8
 #define OVERSCAN_BOTTOM 8
@@ -72,6 +73,8 @@ static f32 s_audio_buffer[AUDIO_FRAMES * AUDIO_CHANNELS * 5 + 1];
 static atomic_size_t s_audio_buffer_read = 0;
 static atomic_size_t s_audio_buffer_write = 0;
 static bool s_key_state[KEYCODE_COUNT];
+static bool s_mouse_state[MOUSEBUTTON_COUNT];
+static f32 s_mouse_x, s_mouse_y;
 static Joypad *s_joypad;
 static RewindBuffer *s_rewind_buffer;
 static RewindState s_rewind_state;
@@ -80,6 +83,8 @@ RGBAFrameBuffer s_overlay_rgba;
 RGBAFrameBuffer s_frame_buffer;
 static StatusText s_status_text;
 static bool s_show_frame_counter;
+static ControllerType s_controller_type[2] = {CONTROLLER_JOYPAD,
+                                              CONTROLLER_JOYPAD};
 
 sg_pass_action s_pass_action;
 sg_pipeline s_pipeline;
@@ -195,7 +200,11 @@ static void usage(int argc, char** argv) {
       "  -j,--read-joypad FILE   read joypad input from FILE\n"
       "  -J,--write-joypad FILE  write joypad input to FILE\n"
       "  -s,--seed SEED          random seed used for initializing RAM\n"
-      "  -x,--scale SCALE        render scale\n",
+      "  -x,--scale SCALE        render scale\n"
+      "     --p0 CONTROLLER      choose controller type for player 0\n"
+      "     --p1 CONTROLLER      choose controller type for player 1\n"
+      "\n"
+      " CONTROLLER is 'joypad' (default) or 'zapper'\n",
       argv[0]);
 }
 
@@ -207,6 +216,8 @@ static void parse_arguments(int argc, char** argv) {
     {'J', "write-joypad", 1},
     {'s', "seed", 1},
     {'x', "scale", 1},
+    {0, "p0", 1},
+    {0, "p1", 1},
   };
 
   struct OptionParser* parser = option_parser_new(
@@ -257,6 +268,21 @@ static void parse_arguments(int argc, char** argv) {
             break;
 
           default:
+            if (strcmp(result.option->long_name, "p0") == 0 ||
+                strcmp(result.option->long_name, "p1") == 0) {
+              int player = result.option->long_name[1] - '0';
+              if (strcmp(result.value, "joypad") == 0) {
+                s_controller_type[player] = CONTROLLER_JOYPAD;
+              } else if (strcmp(result.value, "zapper") == 0) {
+                s_controller_type[player] = CONTROLLER_ZAPPER;
+              } else {
+                PRINT_ERROR("ERROR: unknown controller type '%s'.\n\n",
+                            result.value);
+                goto error;
+              }
+            } else {
+              abort();
+            }
             break;
         }
         break;
@@ -403,23 +429,37 @@ static void init_audio(void) {
 }
 
 static void joypad_callback(SystemInput* input, void *user_data, bool strobe) {
-  input->joyp[0].up = s_key_state[SAPP_KEYCODE_UP];
-  input->joyp[0].down = s_key_state[SAPP_KEYCODE_DOWN];
-  input->joyp[0].left = s_key_state[SAPP_KEYCODE_LEFT];
-  input->joyp[0].right = s_key_state[SAPP_KEYCODE_RIGHT];
-  input->joyp[0].B = s_key_state[SAPP_KEYCODE_Z];
-  input->joyp[0].A = s_key_state[SAPP_KEYCODE_X];
-  input->joyp[0].start = s_key_state[SAPP_KEYCODE_ENTER];
-  input->joyp[0].select = s_key_state[SAPP_KEYCODE_TAB];
+  input->port[0].type = s_controller_type[0];
+  input->port[1].type = s_controller_type[1];
+  if (s_controller_type[0] == CONTROLLER_JOYPAD) {
+    input->port[0].joyp.up = s_key_state[SAPP_KEYCODE_UP];
+    input->port[0].joyp.down = s_key_state[SAPP_KEYCODE_DOWN];
+    input->port[0].joyp.left = s_key_state[SAPP_KEYCODE_LEFT];
+    input->port[0].joyp.right = s_key_state[SAPP_KEYCODE_RIGHT];
+    input->port[0].joyp.B = s_key_state[SAPP_KEYCODE_Z];
+    input->port[0].joyp.A = s_key_state[SAPP_KEYCODE_X];
+    input->port[0].joyp.start = s_key_state[SAPP_KEYCODE_ENTER];
+    input->port[0].joyp.select = s_key_state[SAPP_KEYCODE_TAB];
+  } else if (s_controller_type[0] == CONTROLLER_ZAPPER) {
+    input->port[0].zap.x = (u8)CLAMP(s_mouse_x, 0, SCREEN_WIDTH);
+    input->port[0].zap.y = (u8)CLAMP(s_mouse_y, 0, SCREEN_HEIGHT);
+    input->port[0].zap.trigger = s_mouse_state[SAPP_MOUSEBUTTON_LEFT];
+  }
 
-  input->joyp[1].up = s_key_state[SAPP_KEYCODE_Y];
-  input->joyp[1].down = s_key_state[SAPP_KEYCODE_H];
-  input->joyp[1].left = s_key_state[SAPP_KEYCODE_G];
-  input->joyp[1].right = s_key_state[SAPP_KEYCODE_J];
-  input->joyp[1].B = s_key_state[SAPP_KEYCODE_K];
-  input->joyp[1].A = s_key_state[SAPP_KEYCODE_L];
-  input->joyp[1].start = s_key_state[SAPP_KEYCODE_O];
-  input->joyp[1].select = s_key_state[SAPP_KEYCODE_I];
+  if (s_controller_type[1] == CONTROLLER_JOYPAD) {
+    input->port[1].joyp.up = s_key_state[SAPP_KEYCODE_UP];
+    input->port[1].joyp.down = s_key_state[SAPP_KEYCODE_DOWN];
+    input->port[1].joyp.left = s_key_state[SAPP_KEYCODE_LEFT];
+    input->port[1].joyp.right = s_key_state[SAPP_KEYCODE_RIGHT];
+    input->port[1].joyp.B = s_key_state[SAPP_KEYCODE_Z];
+    input->port[1].joyp.A = s_key_state[SAPP_KEYCODE_X];
+    input->port[1].joyp.start = s_key_state[SAPP_KEYCODE_ENTER];
+    input->port[1].joyp.select = s_key_state[SAPP_KEYCODE_TAB];
+  } else if (s_controller_type[1] == CONTROLLER_ZAPPER) {
+    input->port[1].zap.x = (u8)CLAMP(s_mouse_x, 0, SCREEN_WIDTH);
+    input->port[1].zap.y = (u8)CLAMP(s_mouse_y, 0, SCREEN_HEIGHT);
+    input->port[1].zap.trigger = s_mouse_state[SAPP_MOUSEBUTTON_LEFT];
+  }
 
   Ticks ticks = emulator_get_ticks(e);
   joypad_append_if_new(s_joypad, input, ticks);
@@ -732,6 +772,27 @@ static void event(const sapp_event *event) {
 
   key:
     s_key_state[event->key_code] = event->type == SAPP_EVENTTYPE_KEY_DOWN;
+    break;
+
+  case SAPP_EVENTTYPE_MOUSE_DOWN:
+  case SAPP_EVENTTYPE_MOUSE_UP:
+    s_mouse_state[event->mouse_button] =
+        event->type == SAPP_EVENTTYPE_MOUSE_DOWN;
+    break;
+
+  case SAPP_EVENTTYPE_MOUSE_MOVE:
+    // Convert to pixel space.
+    s_mouse_x = (event->mouse_x - s_viewport_x) * SCREEN_WIDTH / s_viewport_w;
+    s_mouse_y = (event->mouse_y - s_viewport_y) *
+                    (SCREEN_HEIGHT - (OVERSCAN_TOP + OVERSCAN_BOTTOM)) /
+                    s_viewport_h +
+                OVERSCAN_TOP;
+    // printf("mouse: %.2f %.2f\n", s_mouse_x, s_mouse_y);
+    break;
+
+  case SAPP_EVENTTYPE_MOUSE_LEAVE:
+    s_mouse_x = -1;
+    s_mouse_y = -1;
     break;
 
   default:

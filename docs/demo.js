@@ -22,6 +22,8 @@ const REWIND_BUFFER_CAPACITY = 4 * 1024 * 1024;
 const REWIND_FACTOR = 1.5;
 const REWIND_UPDATE_MS = 16;
 const GAMEPAD_POLLING_INTERVAL = 1000 / 60 / 4; // When activated, poll for gamepad input about ~4 times per frame (~240 times second)
+const CONTROLLER_JOYPAD = 0
+const CONTROLLER_ZAPPER = 1
 
 // From FrakenGraphics, based on FBX Smooth:
 // https://www.patreon.com/posts/nes-palette-for-47391225
@@ -85,6 +87,7 @@ let data = {
   },
   input: {
     show: false,
+    type: ['joypad', 'joypad'],
     list: [
       {name: 'P0 DPAD UP', options:[key('ArrowUp'), gpaxis(1, true), gpaxis(5, true)]},
       {name: 'P0 DPAD DOWN', options:[key('ArrowDown'), gpaxis(1, false), gpaxis(5, false)]},
@@ -137,6 +140,10 @@ let vm = new Vue({
           setting.options = newSetting;
         }
       }
+    }
+    let inputType = window.localStorage.getItem('inputType');
+    if (inputType) {
+      this.input.type = JSON.parse(inputType);
     }
     this.readFiles();
   },
@@ -449,6 +456,11 @@ let vm = new Vue({
     unsetInputKey: function() {
       this.finishSettingInputKey(null);
     },
+    inputTypeChanged: function() {
+      window.localStorage.setItem('inputType', JSON.stringify(this.input.type));
+      if (!emulator) return;
+      emulator.updateControllerType();
+    },
   }
 });
 
@@ -501,6 +513,7 @@ class Emulator {
     }
 
     this.bindKeys();
+    this.updateControllerType();
   }
 
   destroy() {
@@ -659,6 +672,16 @@ class Emulator {
     this.module._emulator_set_reset(this.e, active);
   }
 
+  updateControllerType() {
+    for (let i = 0; i < 2; ++i) {
+      console.log(i, vm.input.type[i]);
+      this.module._set_controller_type(
+          this.e, i,
+          vm.input.type[i] === 'zapper' ? CONTROLLER_ZAPPER :
+                                          CONTROLLER_JOYPAD);
+    }
+  }
+
   bindKeys() {
     this.keyFuncs = [  // Order matches input.list
       this.module._set_joyp_up.bind(null, this.e, 0),
@@ -684,6 +707,7 @@ class Emulator {
     this.boundKeyUp = this.keyEvent.bind(this, false);
     this.boundGamepadConnected = this.gamepadEvent.bind(this, true);
     this.boundGamepadDisconnected = this.gamepadEvent.bind(this, false);
+    this.boundMouseEvent = this.mouseEvent.bind(this);
 
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('keyup', this.boundKeyUp);
@@ -691,6 +715,13 @@ class Emulator {
     this.checkGamepadConnected();
     window.addEventListener('gamepadconnected', this.boundGamepadConnected);
     window.addEventListener('gamepaddisconnected', this.boundGamepadDisconnected);
+
+    let canvas = this.video.el;
+    canvas.addEventListener('mousedown', this.boundMouseEvent, false);
+    canvas.addEventListener('mouseup', this.boundMouseEvent, false);
+    canvas.addEventListener('mousemove', this.boundMouseEvent, false);
+    canvas.addEventListener('mouseleave', this.boundMouseEvent, false);
+    canvas.addEventListener('mouseenter', this.boundMouseEvent, false);
   }
 
   unbindKeys() {
@@ -807,6 +838,22 @@ class Emulator {
       this.releaseGamepad();
     }
   }
+
+  mouseEvent(event) {
+    for (let i = 0; i < vm.input.type.length; ++i) {
+      if (vm.input.type[i] === 'zapper') {
+        const rect = this.video.el.getBoundingClientRect();
+        const x = this.video.el.width * (event.offsetX / rect.width);
+        const y = this.video.el.height * (event.offsetY / rect.height);
+        const trigger = event.buttons & 1;
+        // console.log(x, y, trigger);
+        this.module._set_zapper_x(this.e, i, x);
+        this.module._set_zapper_y(this.e, i, y);
+        this.module._set_zapper_trigger(this.e, i, trigger);
+      }
+    }
+    event.preventDefault();
+  }
 }
 
 class Audio {
@@ -860,6 +907,7 @@ Audio.ctx = new AudioContext;
 class Video {
   constructor(module, e, el) {
     this.module = module;
+    this.el = el;
     try {
       this.renderer = new WebGLRenderer(el);
     } catch (error) {

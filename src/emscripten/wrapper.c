@@ -72,7 +72,7 @@ Joypad* joypad_new_simple(Emulator *e) {
 
 #define DEFINE_JOYP_SET(name)                               \
   void set_joyp_##name(Emulator* e, int player, bool set) { \
-    s_input.joyp[player].name = set;                        \
+    s_input.port[player].joyp.name = set;                   \
   }
 
 DEFINE_JOYP_SET(up)
@@ -83,6 +83,22 @@ DEFINE_JOYP_SET(B)
 DEFINE_JOYP_SET(A)
 DEFINE_JOYP_SET(start)
 DEFINE_JOYP_SET(select)
+
+void set_zapper_x(Emulator* e, int player, int x) {
+  s_input.port[player].zap.x = x;
+}
+
+void set_zapper_y(Emulator* e, int player, int y) {
+  s_input.port[player].zap.y = y;
+}
+
+void set_zapper_trigger(Emulator* e, int player, bool trigger) {
+  s_input.port[player].zap.trigger = trigger;
+}
+
+void set_controller_type(Emulator* e, int player, ControllerType type) {
+  s_input.port[player].type = type;
+}
 
 void* get_frame_buffer_ptr(Emulator* e) {
   return *emulator_get_frame_buffer(e);
