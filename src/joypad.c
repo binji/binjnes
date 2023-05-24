@@ -325,11 +325,11 @@ static JoypadInput unpack_joypad(u8 packed) {
   return joyp;
 }
 
-static u8 pack_zapper(ZapperInput* zap) {
+static u32 pack_zapper(ZapperInput* zap) {
   return (zap->trigger << 16) | (zap->y << 8) | (zap->x);
 }
 
-static ZapperInput unpack_zapper(u8 packed) {
+static ZapperInput unpack_zapper(u32 packed) {
   ZapperInput zap;
   zap.x = packed & 0xff;
   zap.y = (packed >> 8) & 0xff;
