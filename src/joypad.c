@@ -154,12 +154,19 @@ static bool zapper_input_is_equal(ZapperInput* lhs, ZapperInput* rhs) {
   return lhs->x == rhs->x && lhs->y == rhs->y && lhs->trigger == rhs->trigger;
 }
 
+static bool snes_mouse_input_is_equal(SnesMouseInput* lhs, SnesMouseInput* rhs) {
+  return lhs->dx == rhs->dx && lhs->dy == rhs->dy && lhs->lmb == rhs->lmb &&
+         lhs->rmb == rhs->rmb;
+}
+
 static bool controller_input_is_equal(ControllerInput* lhs, ControllerInput* rhs) {
   return lhs->type == rhs->type &&
          ((lhs->type == CONTROLLER_JOYPAD &&
            joypad_input_is_equal(&lhs->joyp, &rhs->joyp)) ||
           (lhs->type == CONTROLLER_ZAPPER &&
-           zapper_input_is_equal(&lhs->zap, &rhs->zap)));
+           zapper_input_is_equal(&lhs->zap, &rhs->zap)) ||
+          (lhs->type == CONTROLLER_SNES_MOUSE &&
+           snes_mouse_input_is_equal(&lhs->mouse, &rhs->mouse)));
 }
 
 static bool system_input_is_equal(SystemInput* lhs, SystemInput* rhs) {
@@ -168,20 +175,28 @@ static bool system_input_is_equal(SystemInput* lhs, SystemInput* rhs) {
          lhs->reset == rhs->reset;
 }
 
-static void sprint_joypad(JoypadInput joyp, char buffer[10]) {
-  snprintf(buffer, 10, "%c%c%c%c %c%c%c%c", joyp.down ? 'D' : '_',
+#define SPRINT_BUF_SIZE 32
+
+static void sprint_joypad(JoypadInput joyp, char buffer[SPRINT_BUF_SIZE]) {
+  snprintf(buffer, SPRINT_BUF_SIZE, "%c%c%c%c %c%c%c%c", joyp.down ? 'D' : '_',
            joyp.up ? 'U' : '_', joyp.left ? 'L' : '_', joyp.right ? 'R' : '_',
            joyp.start ? 'S' : '_', joyp.select ? 's' : '_', joyp.B ? 'B' : '_',
            joyp.A ? 'A' : '_');
 }
 
-static void sprint_zapper(ZapperInput zap, char buffer[10]) {
-  snprintf(buffer, 10, "%3d,%3d %c", zap.x, zap.y,
+static void sprint_zapper(ZapperInput zap, char buffer[SPRINT_BUF_SIZE]) {
+  snprintf(buffer, SPRINT_BUF_SIZE, "%3d,%3d %c", zap.x, zap.y,
            zap.trigger ? 'T' : '_');
 }
 
+static void sprint_snes_mouse(SnesMouseInput mouse,
+                              char buffer[SPRINT_BUF_SIZE]) {
+  snprintf(buffer, SPRINT_BUF_SIZE, "%+8d,%+8d %c%c", mouse.dx, mouse.dy,
+           mouse.lmb ? 'L' : '_', mouse.rmb ? 'R' : '_');
+}
+
 static void print_input(Ticks ticks, SystemInput input) {
-  char pbuf[2][10];
+  char pbuf[2][SPRINT_BUF_SIZE];
   for (int i = 0; i < 2; ++i) {
     switch (input.port[i].type) {
       case CONTROLLER_JOYPAD:
@@ -189,6 +204,9 @@ static void print_input(Ticks ticks, SystemInput input) {
         break;
       case CONTROLLER_ZAPPER:
         sprint_zapper(input.port[i].zap, pbuf[i]);
+        break;
+      case CONTROLLER_SNES_MOUSE:
+        sprint_snes_mouse(input.port[i].mouse, pbuf[i]);
         break;
     }
   }
@@ -337,12 +355,28 @@ static ZapperInput unpack_zapper(u32 packed) {
   return zap;
 }
 
+static u32 pack_snes_mouse(SnesMouseInput* mouse) {
+  return (mouse->rmb << 17) | (mouse->lmb << 16) | (mouse->dy << 8) |
+         (mouse->dx);
+}
+
+static SnesMouseInput unpack_snes_mouse(u32 packed) {
+  SnesMouseInput mouse;
+  mouse.dx = packed & 0xff;
+  mouse.dy = (packed >> 8) & 0xff;
+  mouse.lmb = (packed >> 16) & 1;
+  mouse.rmb = (packed >> 17) & 1;
+  return mouse;
+}
+
 static u32 pack_controller(ControllerInput* port) {
   switch (port->type) {
     case CONTROLLER_JOYPAD:
       return (port->type << 18) | pack_joypad(&port->joyp);
     case CONTROLLER_ZAPPER:
       return (port->type << 18) | pack_zapper(&port->zap);
+    case CONTROLLER_SNES_MOUSE:
+      return (port->type << 18) | pack_snes_mouse(&port->mouse);
   }
   return 0;
 }
@@ -356,6 +390,9 @@ static ControllerInput unpack_controller(u32 packed) {
       break;
     case CONTROLLER_ZAPPER:
       port.zap = unpack_zapper(packed & 0x3ffff);
+      break;
+    case CONTROLLER_SNES_MOUSE:
+      port.mouse = unpack_snes_mouse(packed & 0x3ffff);
       break;
   }
   return port;

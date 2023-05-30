@@ -59,6 +59,14 @@ static void default_joypad_callback(SystemInput *input, void *user_data,
                                     bool strobe) {
   Joypad* joypad = user_data;
   *input = s_input;
+  for (int p = 0; p < 2; ++p) {
+    if (s_input.port[p].type == CONTROLLER_SNES_MOUSE) {
+      if (!strobe) {
+        s_input.port[p].mouse.dx = 0;
+        s_input.port[p].mouse.dy = 0;
+      }
+    }
+  }
   Ticks ticks = emulator_get_ticks(e);
   joypad_append_if_new(joypad, input, ticks);
 }
@@ -84,16 +92,18 @@ DEFINE_JOYP_SET(A)
 DEFINE_JOYP_SET(start)
 DEFINE_JOYP_SET(select)
 
-void set_zapper_x(Emulator* e, int player, int x) {
+void set_zapper(Emulator* e, int player, int x, int y, bool trigger) {
   s_input.port[player].zap.x = x;
-}
-
-void set_zapper_y(Emulator* e, int player, int y) {
   s_input.port[player].zap.y = y;
+  s_input.port[player].zap.trigger = trigger;
 }
 
-void set_zapper_trigger(Emulator* e, int player, bool trigger) {
-  s_input.port[player].zap.trigger = trigger;
+void set_snesmouse(Emulator* e, int player, int dx, int dy, bool lmb,
+                   bool rmb) {
+  s_input.port[player].mouse.dx = dx;
+  s_input.port[player].mouse.dy = dy;
+  s_input.port[player].mouse.lmb = lmb;
+  s_input.port[player].mouse.rmb = rmb;
 }
 
 void set_controller_type(Emulator* e, int player, ControllerType type) {

@@ -75,6 +75,7 @@ static atomic_size_t s_audio_buffer_write = 0;
 static bool s_key_state[KEYCODE_COUNT];
 static bool s_mouse_state[MOUSEBUTTON_COUNT];
 static f32 s_mouse_x, s_mouse_y;
+static f32 s_mouse_dx, s_mouse_dy;
 static Joypad *s_joypad;
 static RewindBuffer *s_rewind_buffer;
 static RewindState s_rewind_state;
@@ -85,6 +86,7 @@ static StatusText s_status_text;
 static bool s_show_frame_counter;
 static ControllerType s_controller_type[2] = {CONTROLLER_JOYPAD,
                                               CONTROLLER_JOYPAD};
+static bool s_should_lock_mouse = false;
 
 sg_pass_action s_pass_action;
 sg_pipeline s_pipeline;
@@ -204,7 +206,7 @@ static void usage(int argc, char** argv) {
       "     --p0 CONTROLLER      choose controller type for player 0\n"
       "     --p1 CONTROLLER      choose controller type for player 1\n"
       "\n"
-      " CONTROLLER is 'joypad' (default) or 'zapper'\n",
+      " CONTROLLER is 'joypad' (default), 'zapper' or 'snesmouse'\n",
       argv[0]);
 }
 
@@ -275,6 +277,9 @@ static void parse_arguments(int argc, char** argv) {
                 s_controller_type[player] = CONTROLLER_JOYPAD;
               } else if (strcmp(result.value, "zapper") == 0) {
                 s_controller_type[player] = CONTROLLER_ZAPPER;
+              } else if (strcmp(result.value, "snesmouse") == 0) {
+                s_controller_type[player] = CONTROLLER_SNES_MOUSE;
+                s_should_lock_mouse = true;
               } else {
                 PRINT_ERROR("ERROR: unknown controller type '%s'.\n\n",
                             result.value);
@@ -429,36 +434,44 @@ static void init_audio(void) {
 }
 
 static void joypad_callback(SystemInput* input, void *user_data, bool strobe) {
-  input->port[0].type = s_controller_type[0];
-  input->port[1].type = s_controller_type[1];
-  if (s_controller_type[0] == CONTROLLER_JOYPAD) {
-    input->port[0].joyp.up = s_key_state[SAPP_KEYCODE_UP];
-    input->port[0].joyp.down = s_key_state[SAPP_KEYCODE_DOWN];
-    input->port[0].joyp.left = s_key_state[SAPP_KEYCODE_LEFT];
-    input->port[0].joyp.right = s_key_state[SAPP_KEYCODE_RIGHT];
-    input->port[0].joyp.B = s_key_state[SAPP_KEYCODE_Z];
-    input->port[0].joyp.A = s_key_state[SAPP_KEYCODE_X];
-    input->port[0].joyp.start = s_key_state[SAPP_KEYCODE_ENTER];
-    input->port[0].joyp.select = s_key_state[SAPP_KEYCODE_TAB];
-  } else if (s_controller_type[0] == CONTROLLER_ZAPPER) {
-    input->port[0].zap.x = (u8)CLAMP(s_mouse_x, 0, SCREEN_WIDTH);
-    input->port[0].zap.y = (u8)CLAMP(s_mouse_y, 0, SCREEN_HEIGHT);
-    input->port[0].zap.trigger = s_mouse_state[SAPP_MOUSEBUTTON_LEFT];
-  }
-
-  if (s_controller_type[1] == CONTROLLER_JOYPAD) {
-    input->port[1].joyp.up = s_key_state[SAPP_KEYCODE_UP];
-    input->port[1].joyp.down = s_key_state[SAPP_KEYCODE_DOWN];
-    input->port[1].joyp.left = s_key_state[SAPP_KEYCODE_LEFT];
-    input->port[1].joyp.right = s_key_state[SAPP_KEYCODE_RIGHT];
-    input->port[1].joyp.B = s_key_state[SAPP_KEYCODE_Z];
-    input->port[1].joyp.A = s_key_state[SAPP_KEYCODE_X];
-    input->port[1].joyp.start = s_key_state[SAPP_KEYCODE_ENTER];
-    input->port[1].joyp.select = s_key_state[SAPP_KEYCODE_TAB];
-  } else if (s_controller_type[1] == CONTROLLER_ZAPPER) {
-    input->port[1].zap.x = (u8)CLAMP(s_mouse_x, 0, SCREEN_WIDTH);
-    input->port[1].zap.y = (u8)CLAMP(s_mouse_y, 0, SCREEN_HEIGHT);
-    input->port[1].zap.trigger = s_mouse_state[SAPP_MOUSEBUTTON_LEFT];
+  for (int p = 0; p < 2; ++p) {
+    input->port[p].type = s_controller_type[p];
+    if (s_controller_type[p] == CONTROLLER_JOYPAD) {
+      if (p == 0) {
+        input->port[p].joyp.up = s_key_state[SAPP_KEYCODE_UP];
+        input->port[p].joyp.down = s_key_state[SAPP_KEYCODE_DOWN];
+        input->port[p].joyp.left = s_key_state[SAPP_KEYCODE_LEFT];
+        input->port[p].joyp.right = s_key_state[SAPP_KEYCODE_RIGHT];
+        input->port[p].joyp.B = s_key_state[SAPP_KEYCODE_Z];
+        input->port[p].joyp.A = s_key_state[SAPP_KEYCODE_X];
+        input->port[p].joyp.start = s_key_state[SAPP_KEYCODE_ENTER];
+        input->port[p].joyp.select = s_key_state[SAPP_KEYCODE_TAB];
+      } else {
+        input->port[p].joyp.up = s_key_state[SAPP_KEYCODE_Y];
+        input->port[p].joyp.down = s_key_state[SAPP_KEYCODE_H];
+        input->port[p].joyp.left = s_key_state[SAPP_KEYCODE_G];
+        input->port[p].joyp.right = s_key_state[SAPP_KEYCODE_J];
+        input->port[p].joyp.B = s_key_state[SAPP_KEYCODE_K];
+        input->port[p].joyp.A = s_key_state[SAPP_KEYCODE_L];
+        input->port[p].joyp.start = s_key_state[SAPP_KEYCODE_O];
+        input->port[p].joyp.select = s_key_state[SAPP_KEYCODE_I];
+      }
+    } else if (s_controller_type[p] == CONTROLLER_ZAPPER) {
+      input->port[p].zap.x = (u8)CLAMP(s_mouse_x, 0, SCREEN_WIDTH);
+      input->port[p].zap.y = (u8)CLAMP(s_mouse_y, 0, SCREEN_HEIGHT);
+      input->port[p].zap.trigger = s_mouse_state[SAPP_MOUSEBUTTON_LEFT];
+    } else if (s_controller_type[p] == CONTROLLER_SNES_MOUSE) {
+      input->port[p].mouse.dx =
+          (s8)CLAMP(s_mouse_dx / s_render_scale, -127, 127);
+      input->port[p].mouse.dy =
+          (s8)CLAMP(s_mouse_dy / s_render_scale, -127, 127);
+      input->port[p].mouse.lmb = s_mouse_state[SAPP_MOUSEBUTTON_LEFT];
+      input->port[p].mouse.rmb = s_mouse_state[SAPP_MOUSEBUTTON_RIGHT];
+      if (!strobe) {
+        s_mouse_dx = 0;
+        s_mouse_dy = 0;
+      }
+    }
   }
 
   Ticks ticks = emulator_get_ticks(e);
@@ -509,10 +522,17 @@ error:
   exit(1);
 }
 
+static void init_input(void) {
+  if (s_should_lock_mouse) {
+    sapp_lock_mouse(true);
+  }
+}
+
 static void init(void) {
   init_graphics();
   init_audio();
   init_emulator();
+  init_input();
 
   set_status_text("Loaded %s", s_rom_filename);
 }
@@ -665,6 +685,9 @@ static void rewind_end(void) {
 }
 
 static void frame(void)  {
+  if (s_should_lock_mouse && sapp_mouse_locked() != !s_paused) {
+    sapp_lock_mouse(!s_paused);
+  }
   if (s_rewind_state.rewinding) {
     rewind_by(REWIND_CYCLES_PER_FRAME);
   } else if (s_paused) {
@@ -787,12 +810,15 @@ static void event(const sapp_event *event) {
                     (SCREEN_HEIGHT - (OVERSCAN_TOP + OVERSCAN_BOTTOM)) /
                     s_viewport_h +
                 OVERSCAN_TOP;
-    // printf("mouse: %.2f %.2f\n", s_mouse_x, s_mouse_y);
+    s_mouse_dx += event->mouse_dx;
+    s_mouse_dy += event->mouse_dy;
     break;
 
   case SAPP_EVENTTYPE_MOUSE_LEAVE:
     s_mouse_x = -1;
     s_mouse_y = -1;
+    s_mouse_dx = 0;
+    s_mouse_dy = 0;
     break;
 
   default:

@@ -24,6 +24,7 @@ const REWIND_UPDATE_MS = 16;
 const GAMEPAD_POLLING_INTERVAL = 1000 / 60 / 4; // When activated, poll for gamepad input about ~4 times per frame (~240 times second)
 const CONTROLLER_JOYPAD = 0
 const CONTROLLER_ZAPPER = 1
+const CONTROLLER_SNES_MOUSE = 2
 
 // From FrakenGraphics, based on FBX Smooth:
 // https://www.patreon.com/posts/nes-palette-for-47391225
@@ -561,6 +562,7 @@ class Emulator {
       this.cancelAnimationFrame();
       this.audio.pause();
       this.beginRewind();
+      document.exitPointerLock();
     }
   }
 
@@ -674,11 +676,13 @@ class Emulator {
 
   updateControllerType() {
     for (let i = 0; i < 2; ++i) {
-      console.log(i, vm.input.type[i]);
-      this.module._set_controller_type(
-          this.e, i,
-          vm.input.type[i] === 'zapper' ? CONTROLLER_ZAPPER :
-                                          CONTROLLER_JOYPAD);
+      let type;
+      switch (vm.input.type[i]) {
+        default: case 'joypad': type = CONTROLLER_JOYPAD; break;
+        case 'zapper': type = CONTROLLER_ZAPPER; break;
+        case 'snesmouse': type = CONTROLLER_SNES_MOUSE; break;
+      }
+      this.module._set_controller_type(this.e, i, type);
     }
   }
 
@@ -841,15 +845,24 @@ class Emulator {
 
   mouseEvent(event) {
     for (let i = 0; i < vm.input.type.length; ++i) {
-      if (vm.input.type[i] === 'zapper') {
-        const rect = this.video.el.getBoundingClientRect();
-        const x = this.video.el.width * (event.offsetX / rect.width);
-        const y = this.video.el.height * (event.offsetY / rect.height);
-        const trigger = event.buttons & 1;
-        // console.log(x, y, trigger);
-        this.module._set_zapper_x(this.e, i, x);
-        this.module._set_zapper_y(this.e, i, y);
-        this.module._set_zapper_trigger(this.e, i, trigger);
+      switch (vm.input.type[i]) {
+        case 'zapper':
+          const rect = this.video.el.getBoundingClientRect();
+          const x = this.video.el.width * (event.offsetX / rect.width);
+          const y = this.video.el.height * (event.offsetY / rect.height);
+          const trigger = event.buttons & 1;
+          this.module._set_zapper(this.e, i, x, y, trigger);
+          break;
+        case 'snesmouse':
+          if (!this.isPaused && event.type === 'mousedown') {
+            this.video.el.requestPointerLock().catch(() => {})
+          }
+          const dx = event.movementX;
+          const dy = event.movementY;
+          const lmb = event.buttons & 1;
+          const rmb = (event.buttons >> 1) & 1;
+          this.module._set_snesmouse(this.e, i, dx, dy, lmb, rmb);
+          break;
       }
     }
     event.preventDefault();

@@ -105,6 +105,7 @@ typedef struct FileData {
 typedef enum ControllerType {
   CONTROLLER_JOYPAD,
   CONTROLLER_ZAPPER,
+  CONTROLLER_SNES_MOUSE,
 } ControllerType;
 
 typedef struct JoypadInput {
@@ -117,11 +118,17 @@ typedef struct ZapperInput {
   bool trigger;
 } ZapperInput;
 
+typedef struct SnesMouseInput {
+  s8 dx, dy;
+  bool lmb, rmb;
+} SnesMouseInput;
+
 typedef struct ControllerInput {
   ControllerType type;
   union {
     JoypadInput joyp;
     ZapperInput zap;
+    SnesMouseInput mouse;
   };
 } ControllerInput;
 

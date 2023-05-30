@@ -250,8 +250,8 @@ typedef struct {
   struct {
     ControllerType type;
     Ticks triggercy;
-    u32 zapfbidx;
-    u8 joyp;
+    u32 zapfbidx, serial;
+    u8 sensitivity;
     bool trigger;
   } port[2];
   bool S;

@@ -1038,7 +1038,7 @@ static inline void inc_ppu_addr(P* p) {
 static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
   J* j = &e->s.j;
   if (e->joypad_info.callback) {
-    bool strobe = write && val == 1;
+    bool strobe = write && (val & 1) == 1;
     e->s.c.read_input = true;
     SystemInput sys;
     ZERO_MEMORY(sys);
@@ -1049,13 +1049,13 @@ static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
       switch (ctrl->type) {
         case CONTROLLER_JOYPAD:
           if (write || j->S) {
-            j->port[i].joyp = (ctrl->joyp.right << 7) | (ctrl->joyp.left << 6) |
-                              (ctrl->joyp.down << 5) | (ctrl->joyp.up << 4) |
-                              (ctrl->joyp.start << 3) |
-                              (ctrl->joyp.select << 2) | (ctrl->joyp.B << 1) |
-                              (ctrl->joyp.A << 0);
-            if (j->port[i].joyp) {
-              print_byte(0x4016 + i, j->port[i].joyp, 5, "RLDUTEBA");
+            j->port[i].serial =
+                0xffffff00 | (ctrl->joyp.right << 7) | (ctrl->joyp.left << 6) |
+                (ctrl->joyp.down << 5) | (ctrl->joyp.up << 4) |
+                (ctrl->joyp.start << 3) | (ctrl->joyp.select << 2) |
+                (ctrl->joyp.B << 1) | (ctrl->joyp.A << 0);
+            if (j->port[i].serial) {
+              print_byte(0x4016 + i, j->port[i].serial, 5, "RLDUTEBA");
             }
           }
           break;
@@ -1066,20 +1066,35 @@ static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
             j->port[i].triggercy = e->s.cy;
           }
           break;
+        case CONTROLLER_SNES_MOUSE:
+          if (write || j->S) {
+            s8 dx = ctrl->mouse.dx, dy = ctrl->mouse.dy;
+            u8 b1 = (ctrl->mouse.rmb << 7) | (ctrl->mouse.lmb << 6) |
+                    ((j->port[i].sensitivity & 3) << 4) | 1;
+            // 2's complement to sign-magnitude
+            u8 b2 = dy < 0 ? 0x80 | (u8)(-dy) : dy;
+            u8 b3 = dx < 0 ? 0x80 | (u8)(-dx) : dx;
+            j->port[i].serial =
+                (reverse(b3) << 24) | (reverse(b2) << 16) | (reverse(b1) << 8);
+          }
+          break;
       }
     }
   } else {
     for (int i = 0; i < 2; ++i) {
       j->port[i].type = CONTROLLER_JOYPAD;
-      j->port[i].joyp = 0;
+      j->port[i].serial = 0;
     }
   }
 
-  if (!write) {
+  if (write) {
+    e->s.j.S = val & 1;
+  } else {
     switch(j->port[index].type) {
-      case CONTROLLER_JOYPAD: {
-        u8 result = (e->s.c.open_bus & ~0x1f) | (j->port[index].joyp & 1);
-        j->port[index].joyp = (j->port[index].joyp >> 1) | 0x80;
+      case CONTROLLER_JOYPAD:
+      case CONTROLLER_SNES_MOUSE: {
+        u8 result = (e->s.c.open_bus & ~0x1f) | (j->port[index].serial & 1);
+        j->port[index].serial = (j->port[index].serial >> 1) | 0x80000000;
         return result;
       }
       case CONTROLLER_ZAPPER: {
@@ -1389,8 +1404,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         goto io;
       }
       case 0x16:
-        read_joyp(e, 0, true, val & 1);
-        e->s.j.S = val & 1;
+        read_joyp(e, 0, true, val);
         goto io;
       default:
         e->mapper_write(e, addr, val);
