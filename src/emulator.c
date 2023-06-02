@@ -1103,8 +1103,10 @@ static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
         bool trigger = e->s.cy - j->port[index].triggercy < s_trigger_cy;
         u32 fbidx = j->port[index].zapfbidx;
         int dlines = MAX(0, (int)((e->s.p.fbidx - fbidx) / 256));
+        int color = e->frame_buffer[fbidx];
+        int brightness = (color & 15) >= 14 ? 0 : (color >> 4) & 3;
         bool light = fbidx < SCREEN_WIDTH * SCREEN_HEIGHT &&
-                     dlines < s_scanlines[(e->frame_buffer[fbidx] >> 4) & 3];
+                     dlines < s_scanlines[brightness];
         return (e->s.c.open_bus & ~0x18) | (trigger << 4) | (!light << 3);
       }
     }
