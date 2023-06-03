@@ -114,6 +114,7 @@ let data = {
     option: -1,
     axisDeadzone: 0.5,
     buttonDeadzone: 0.3,
+    snesMouseSensitivity: 0.0,
   },
   volume: 0.5,
 };
@@ -142,9 +143,13 @@ let vm = new Vue({
         }
       }
     }
-    let inputType = window.localStorage.getItem('inputType');
-    if (inputType) {
-      this.input.type = JSON.parse(inputType);
+    let inputItem = window.localStorage.getItem('input');
+    if (inputItem) {
+      const parsed = JSON.parse(inputItem);
+      this.input.type = parsed.type;
+      this.input.axisDeadzone = parsed.axisDeadzone;
+      this.input.buttonDeadzone = parsed.buttonDeadzone;
+      this.input.snesMouseSensitivity = parsed.snesMouseSensitivity;
     }
     this.readFiles();
   },
@@ -457,8 +462,14 @@ let vm = new Vue({
     unsetInputKey: function() {
       this.finishSettingInputKey(null);
     },
-    inputTypeChanged: function() {
-      window.localStorage.setItem('inputType', JSON.stringify(this.input.type));
+    inputChanged: function() {
+      let persist = {
+        type: this.input.type,
+        axisDeadzone: this.input.axisDeadzone,
+        buttonDeadzone: this.input.buttonDeadzone,
+        snesMouseSensitivity: this.input.snesMouseSensitivity,
+      };
+      window.localStorage.setItem('input', JSON.stringify(persist));
       if (!emulator) return;
       emulator.updateControllerType();
     },
@@ -508,6 +519,8 @@ class Emulator {
     this.lastRafSec = 0;
     this.leftoverTicks = 0;
     this.fps = 60;
+    this.mouseFracX = 0;
+    this.mouseFracY = 0;
 
     if (extRamBuffer) {
       this.loadExtRam(extRamBuffer);
@@ -857,11 +870,17 @@ class Emulator {
           if (!this.isPaused && event.type === 'mousedown') {
             this.video.el.requestPointerLock().catch(() => {})
           }
-          const dx = event.movementX;
-          const dy = event.movementY;
+          const sensitivity = Math.exp(vm.input.snesMouseSensitivity);
+          const dx = this.mouseFracX + event.movementX * sensitivity;
+          const dy = this.mouseFracY + event.movementY * sensitivity;
+          const idx = Math.trunc(dx);
+          const idy = Math.trunc(dy);
+          this.mouseFracX = dx - idx;
+          this.mouseFracY = dy - idy;
+          this.module._add_snesmouse_delta(this.e, i, idx, idy);
           const lmb = event.buttons & 1;
           const rmb = (event.buttons >> 1) & 1;
-          this.module._set_snesmouse(this.e, i, dx, dy, lmb, rmb);
+          this.module._set_snesmouse_buttons(this.e, i, lmb, rmb);
           break;
       }
     }

@@ -98,10 +98,12 @@ void set_zapper(Emulator* e, int player, int x, int y, bool trigger) {
   s_input.port[player].zap.trigger = trigger;
 }
 
-void set_snesmouse(Emulator* e, int player, int dx, int dy, bool lmb,
-                   bool rmb) {
-  s_input.port[player].mouse.dx = dx;
-  s_input.port[player].mouse.dy = dy;
+void add_snesmouse_delta(Emulator* e, int player, int dx, int dy) {
+  s_input.port[player].mouse.dx += dx;
+  s_input.port[player].mouse.dy += dy;
+}
+
+void set_snesmouse_buttons(Emulator* e, int player, bool lmb, bool rmb) {
   s_input.port[player].mouse.lmb = lmb;
   s_input.port[player].mouse.rmb = rmb;
 }

@@ -1,4 +1,5 @@
 [
+"_add_snesmouse_delta",
 "_emulator_delete",
 "_emulator_get_ticks_f64",
 "_emulator_new_simple",
@@ -26,7 +27,7 @@
 "_rewind_new_simple",
 "_rewind_to_ticks_wrapper",
 "_set_controller_type",
-"_set_snesmouse",
+"_set_snesmouse_buttons",
 "_set_joyp_A",
 "_set_joyp_B",
 "_set_joyp_down",

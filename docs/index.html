@@ -72,7 +72,7 @@
     .input td {
       padding: 12px 8px;
     }
-    .input-deadzone {
+    .input-deadzone, .input-sensitivity {
       width: 100%;
     }
     .input-button {
@@ -249,6 +249,7 @@
               <td colspan="2">
                 <input
                   v-model="axisDeadzoneInt"
+                  @change="inputChanged"
                   class="input-deadzone" type="range" min="0" max="100">
               </td>
               <td>
@@ -260,10 +261,23 @@
               <td colspan="2">
                 <input
                   v-model="buttonDeadzoneInt"
+                  @change="inputChanged"
                   class="input-deadzone" type="range" min="0" max="100">
               </td>
               <td>
                 <input v-model.lazy="buttonDeadzoneText" type="text">
+              </td>
+            </tr>
+            <tr>
+              <td class="name">SNES Mouse sensitivity</td>
+              <td colspan="2">
+                <input
+                  v-model="input.snesMouseSensitivity"
+                  @change="inputChanged"
+                  class="input-deadzone" type="range" min="-2" max="2" step="0.03125">
+              </td>
+              <td>
+                <input v-model.lazy="input.snesMouseSensitivity" type="text">
               </td>
             </tr>
           </tbody>
@@ -275,7 +289,7 @@
           <label class="player-label">P{{index}}:
             <select
                 v-model:value="input.type[index]"
-                @change="inputTypeChanged">
+                @change="inputChanged">
               <option value="joypad">joypad</option>
               <option value="zapper">zapper</option>
               <option value="snesmouse">snesmouse</option>
