@@ -4776,7 +4776,8 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
     ci->mirror = (flag6 & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
     ci->has_bat_ram = (flag6 & 4) != 0;
-    ci->has_trainer = (flag6 & 8) != 0;
+    ci->has_trainer = (flag6 & 8) != 0 &&
+                      (file_data->size & 8191) == kHeaderSize + kTrainerSize;
     ci->ignore_mirror = (flag6 & 0x10) != 0;
     ci->fourscreen = false;
 
@@ -4799,8 +4800,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->prg_data = file_data->data + data_size;
 
     /* Use detection from NESwiki */
-    if ((flag7 & 0xc) == 8 &&
-        file_data->size >= kHeaderSize + trainer_size + nes2_data_size) {
+    if ((flag7 & 0xc) == 8 && file_data->size >= data_size + nes2_data_size) {
       LOG("Found NES 2.0 header\n");
       data_size += nes2_data_size;
       ci->is_nes2_0 = true;
