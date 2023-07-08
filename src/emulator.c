@@ -1627,6 +1627,7 @@ static u8 mapper_prg_ram_read(E *e, u16 addr) {
 static void mapper_prg_ram_write(E *e, u16 addr, u8 val) {
   if (e->s.m.prg_ram_en && e->s.m.prg_ram_write_en) {
     e->prg_ram_map[addr & 0x1fff] = val;
+    e->s.m.prg_ram_updated = true;
   }
 }
 
@@ -3104,6 +3105,7 @@ static u8 mapper69_prg_ram_read(E *e, u16 addr) {
 static void mapper69_prg_ram_write(E *e, u16 addr, u8 val) {
   if (!e->s.m.prg_ram_to_rom && e->s.m.prg_ram_en && e->s.m.prg_ram_write_en) {
     e->prg_ram_map[addr & 0x1fff] = val;
+    e->s.m.prg_ram_updated = true;
   }
 }
 
@@ -5377,6 +5379,11 @@ void emulator_init_state_file_data(FileData* file_data) {
   file_data->data = xmalloc(file_data->size);
 }
 
+void emulator_init_prg_ram_file_data(Emulator* e, FileData* file_data) {
+  file_data->size = 512 * e->ci.prgram512b_banks;
+  file_data->data = xmalloc(file_data->size);
+}
+
 Result emulator_read_state(Emulator *e, const FileData *file_data) {
   CHECK_MSG(file_data->size == sizeof(S),
             "save state file is wrong size: %ld, expected %ld.\n",
@@ -5401,6 +5408,12 @@ Result emulator_write_state(Emulator *e, FileData *file_data) {
   memcpy(file_data->data, &e->s, file_data->size);
   return OK;
   ON_ERROR_RETURN;
+}
+
+bool emulator_was_prg_ram_updated(Emulator* e) {
+  bool result = e->s.m.prg_ram_updated;
+  e->s.m.prg_ram_updated = false;
+  return result;
 }
 
 Result emulator_read_prg_ram(Emulator* e, const FileData* file_data) {

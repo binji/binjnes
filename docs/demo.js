@@ -72,7 +72,7 @@ let data = {
   loaded: false,
   loadedFile: null,
   paused: false,
-  extRamUpdated: false,
+  prgRamUpdated: false,
   canvas: {
     show: false,
     scale: 3,
@@ -127,9 +127,9 @@ let vm = new Vue({
       this.fps = emulator ? emulator.fps : 60;
     }, 500);
     setInterval(() => {
-      if (this.extRamUpdated) {
-        this.updateExtRam();
-        this.extRamUpdated = false;
+      if (this.prgRamUpdated) {
+        this.updatePrgRam();
+        this.prgRamUpdated = false;
       }
     }, 1000);
     let inputSettings = window.localStorage.getItem('inputSettings');
@@ -185,7 +185,7 @@ let vm = new Vue({
       return this.files.list.length == 0;
     },
     cantDownloadSave: function() {
-      return this.isFilesListEmpty || this.selectedFile.extRam === undefined;
+      return this.isFilesListEmpty || this.selectedFile.prgRam === undefined;
     },
     loadedFileName: function() {
       return this.loadedFile ? this.loadedFile.name : '';
@@ -259,9 +259,9 @@ let vm = new Vue({
       this.files.selected = index;
     },
     playFile: async function(file) {
-      const [romBuffer, extRamBuffer] = await Promise.all([
+      const [romBuffer, prgRamBuffer] = await Promise.all([
         readFile(file.rom),
-        file.extRam ? readFile(file.extRam) : Promise.resolve(null)
+        file.prgRam ? readFile(file.prgRam) : Promise.resolve(null)
       ]);
       this.paused = false;
       this.loaded = true;
@@ -269,7 +269,7 @@ let vm = new Vue({
       this.files.show = false;
       this.input.show = false;
       this.loadedFile = file;
-      Emulator.start(await binjnesPromise, romBuffer, extRamBuffer);
+      Emulator.start(await binjnesPromise, romBuffer, prgRamBuffer);
     },
     deleteFile: async function(file) {
       const db = await dbPromise;
@@ -317,9 +317,9 @@ let vm = new Vue({
       }
     },
     downloadSave: async function(file) {
-      if (file.extRam) {
+      if (file.prgRam) {
         const el = $('#downloadEl');
-        const url = URL.createObjectURL(file.extRam);
+        const url = URL.createObjectURL(file.prgRam);
         el.href = url;
         el.download = file.name + '.sav';
         el.click();
@@ -332,21 +332,21 @@ let vm = new Vue({
     uploadSave: async function(event) {
       const file = event.target.files[0];
       const [db, buffer] = await Promise.all([dbPromise, readFile(file)]);
-      const extRamBlob = new Blob([buffer]);
+      const prgRamBlob = new Blob([buffer]);
       const tx = db.transaction('games', 'readwrite');
       const cursor = await tx.objectStore('games').openCursor(
           this.selectedFile.sha1);
       if (!cursor) return;
       Object.assign(this.selectedFile, cursor.value);
-      this.selectedFile.extRam = extRamBlob;
+      this.selectedFile.prgRam = prgRamBlob;
       this.selectedFile.image = undefined;
       this.selectedFile.modified = new Date;
       cursor.update(this.selectedFile);
       return tx.complete;
     },
-    updateExtRam: async function() {
+    updatePrgRam: async function() {
       if (!emulator) return;
-      const extRamBlob = new Blob([emulator.getExtRam()]);
+      const prgRamBlob = new Blob([emulator.getPrgRam()]);
       const imageDataURL = $('canvas').toDataURL();
       const db = await dbPromise;
       const tx = db.transaction('games', 'readwrite');
@@ -354,7 +354,7 @@ let vm = new Vue({
           this.loadedFile.sha1);
       if (!cursor) return;
       Object.assign(this.loadedFile, cursor.value);
-      this.loadedFile.extRam = extRamBlob;
+      this.loadedFile.prgRam = prgRamBlob;
       this.loadedFile.image = imageDataURL;
       this.loadedFile.modified = new Date;
       cursor.update(this.loadedFile);
@@ -481,9 +481,9 @@ function makeWasmBuffer(module, ptr, size) {
 }
 
 class Emulator {
-  static start(module, romBuffer, extRamBuffer) {
+  static start(module, romBuffer, prgRamBuffer) {
     Emulator.stop();
-    emulator = new Emulator(module, romBuffer, extRamBuffer);
+    emulator = new Emulator(module, romBuffer, prgRamBuffer);
     emulator.run();
   }
 
@@ -494,7 +494,7 @@ class Emulator {
     }
   }
 
-  constructor(module, romBuffer, extRamBuffer) {
+  constructor(module, romBuffer, prgRamBuffer) {
     this.module = module;
     // Align size up to 32k.
     const size = (romBuffer.byteLength + 0x7fff) & ~0x7fff;
@@ -522,8 +522,8 @@ class Emulator {
     this.mouseFracX = 0;
     this.mouseFracY = 0;
 
-    if (extRamBuffer) {
-      this.loadExtRam(extRamBuffer);
+    if (prgRamBuffer) {
+      this.loadPrgRam(prgRamBuffer);
     }
 
     this.bindKeys();
@@ -541,7 +541,7 @@ class Emulator {
   }
 
   withNewFileData(cb) {
-    const fileDataPtr = this.module._ext_ram_file_data_new(this.e);
+    const fileDataPtr = this.module._prg_ram_file_data_new(this.e);
     const buffer = makeWasmBuffer(
         this.module, this.module._get_file_data_ptr(fileDataPtr),
         this.module._get_file_data_size(fileDataPtr));
@@ -550,18 +550,18 @@ class Emulator {
     return result;
   }
 
-  loadExtRam(extRamBuffer) {
+  loadPrgRam(prgRamBuffer) {
     this.withNewFileData((fileDataPtr, buffer) => {
-      if (buffer.byteLength === extRamBuffer.byteLength) {
-        buffer.set(new Uint8Array(extRamBuffer));
-        this.module._emulator_read_ext_ram(this.e, fileDataPtr);
+      if (buffer.byteLength === prgRamBuffer.byteLength) {
+        buffer.set(new Uint8Array(prgRamBuffer));
+        this.module._emulator_read_prg_ram(this.e, fileDataPtr);
       }
     });
   }
 
-  getExtRam() {
+  getPrgRam() {
     return this.withNewFileData((fileDataPtr, buffer) => {
-      this.module._emulator_write_ext_ram(this.e, fileDataPtr);
+      this.module._emulator_write_prg_ram(this.e, fileDataPtr);
       return new Uint8Array(buffer);
     });
   }
@@ -657,11 +657,9 @@ class Emulator {
         break;
       }
     }
-    /*
-    if (this.module._emulator_was_ext_ram_updated(this.e)) {
-      vm.extRamUpdated = true;
+    if (this.module._emulator_was_prg_ram_updated(this.e)) {
+      vm.prgRamUpdated = true;
     }
-    */
   }
 
   rafCallback(startMs) {

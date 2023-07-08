@@ -186,6 +186,7 @@ typedef struct {
   PPUBankLoc ppu1k_loc[16];
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, is_mmc5_ex_attr_mode;
   bool prg_bank_is_prgram[4];
+  bool prg_ram_updated;
 } M;
 
 typedef union {
@@ -309,7 +310,9 @@ u32 audio_buffer_get_frames(AudioBuffer*);
 Ticks emulator_get_ticks(Emulator*);
 void emulator_convert_frame_buffer(Emulator*, RGBAFrameBuffer);
 
+bool emulator_was_prg_ram_updated(Emulator*);
 void emulator_init_state_file_data(FileData*);
+void emulator_init_prg_ram_file_data(Emulator*, FileData*);
 Result emulator_read_state(Emulator*, const FileData*);
 Result emulator_write_state(Emulator*, FileData*);
 Result emulator_read_prg_ram(Emulator*, const FileData*);
