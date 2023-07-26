@@ -462,7 +462,6 @@ static Result joypad_read(const FileData *file_data,
     CHECK_MSG(ticks >= last_ticks,
               "Expected ticks to be sorted, got %" PRIu64 " then %" PRIu64 "\n",
               last_ticks, ticks);
-    size_t j;
     last_ticks = ticks;
   }
 
@@ -546,18 +545,17 @@ static Result joypad_read_movie(const FileData *file_data,
   Ticks last_ticks = 0;
   for (i = 0; i < frame_count; ++i) {
     JoypadMovieFrame *frame = (JoypadMovieFrame *)file_data->data + i;
-    size_t j;
     CHECK_MSG(frame->latch != 0, "Expected latch to be non-zero at index %zu\n",
               i);
     total_latches += frame->latch;
   }
 
   JoypadMovieBuffer *buffer = xcalloc(1, sizeof(JoypadMovieBuffer));
-  buffer->frame_count = frame_count;
+  buffer->frame_count = (u32)frame_count;
   buffer->frames = xcalloc(frame_count, sizeof(JoypadMovieFrame));
   memcpy(buffer->frames, file_data->data,
          buffer->frame_count * sizeof(JoypadMovieFrame));
-  buffer->tick_count = total_latches;
+  buffer->tick_count = (u32)total_latches;
   buffer->ticks = xcalloc(total_latches, sizeof(Ticks));
   *out_buffer = buffer;
   return OK;
@@ -598,9 +596,9 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
       JoypadMovieFrame *frame = &playback->movie_buffer->frames[i];
       if (total_latch_index >= total_latches &&
           total_latch_index < total_latches + frame->latch) {
-        playback->current_frame = i;
-        playback->current_frame_latch = total_latch_index - total_latches;
-        playback->current_total_latch = total_latch_index;
+        playback->current_frame = (u32)i;
+        playback->current_frame_latch = (u32)(total_latch_index - total_latches);
+        playback->current_total_latch = (u32)total_latch_index;
         playback->last_input = joypad_unpack_input(last_input);
         break;
       }

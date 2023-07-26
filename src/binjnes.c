@@ -1,12 +1,12 @@
 #include <assert.h>
 #include <stdarg.h>
-#include <stdatomic.h>
 
 #include "sokol/sokol_app.h"
 #include "sokol/sokol_audio.h"
 #include "sokol/sokol_gfx.h"
 #include "sokol/sokol_glue.h"
 
+#include "atomic.h"
 #include "common.h"
 #include "emulator.h"
 #include "joypad.h"
@@ -70,8 +70,8 @@ static bool s_update_viewport = true;
 static f32 s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h;
 static f32 s_audio_volume = 0.5f;
 static f32 s_audio_buffer[AUDIO_FRAMES * AUDIO_CHANNELS * 5 + 1];
-static atomic_size_t s_audio_buffer_read = 0;
-static atomic_size_t s_audio_buffer_write = 0;
+static AtomicSize s_audio_buffer_read = 0;
+static AtomicSize s_audio_buffer_write = 0;
 static bool s_key_state[KEYCODE_COUNT];
 static bool s_mouse_state[MOUSEBUTTON_COUNT];
 static f32 s_mouse_x, s_mouse_y;
@@ -161,7 +161,7 @@ static void draw_str(int x, int y, RGBA color, const char* s) {
 
 static void draw_rect_str(int x, int y, RGBA rectcolor, RGBA strcolor,
                           const char *s) {
-  size_t len = strlen(s);
+  int len = (int)strlen(s);
   fill_rect(x - 1, y - 1, x + len * (GLYPH_WIDTH + 1) + 1, y + GLYPH_HEIGHT + 1,
             rectcolor);
   draw_str(x, y, strcolor, s);
@@ -398,8 +398,8 @@ static void init_graphics(void) {
 }
 
 static void audio_stream(float* dst_buffer, int num_frames, int num_channels) {
-  size_t read_head = atomic_load(&s_audio_buffer_read);
-  size_t write_head = atomic_load(&s_audio_buffer_write);
+  size_t read_head = atomic_load_size(&s_audio_buffer_read);
+  size_t write_head = atomic_load_size(&s_audio_buffer_write);
   size_t src_avail = read_head <= write_head
                          ? write_head - read_head
                          : ARRAY_SIZE(s_audio_buffer) - read_head + write_head;
@@ -421,7 +421,7 @@ static void audio_stream(float* dst_buffer, int num_frames, int num_channels) {
     memcpy(dst_buffer + to_end, s_audio_buffer, to_read * sizeof(f32));
     read_head = to_read;
   }
-  atomic_store(&s_audio_buffer_read, read_head);
+  atomic_store_size(&s_audio_buffer_read, read_head);
 }
 
 static void init_audio(void) {
@@ -571,8 +571,8 @@ static void run_until_ticks(Ticks until_ticks) {
       AudioBuffer *audio_buffer = emulator_get_audio_buffer(e);
       size_t src_avail =
           MIN(AUDIO_FRAMES, audio_buffer_get_frames(audio_buffer));
-      size_t read_head = atomic_load(&s_audio_buffer_read);
-      size_t write_head = atomic_load(&s_audio_buffer_write);
+      size_t read_head = atomic_load_size(&s_audio_buffer_read);
+      size_t write_head = atomic_load_size(&s_audio_buffer_write);
       size_t dst_avail =
           write_head < read_head
               ? read_head - write_head - 1
@@ -593,7 +593,7 @@ static void run_until_ticks(Ticks until_ticks) {
         write_head = to_write - to_end;
         write_audio(audio_buffer->data + to_end, 0, write_head);
       }
-      atomic_store(&s_audio_buffer_write, write_head);
+      atomic_store_size(&s_audio_buffer_write, write_head);
     }
 
     if (event & EMULATOR_EVENT_RESET_CHANGE) {
@@ -648,7 +648,7 @@ static void rewind_by(Ticks delta) {
   Ticks oldest = rewind_get_oldest_ticks(s_rewind_buffer);
   Ticks total = s_rewind_start - oldest;
   Ticks then_diff = then - oldest;
-  int num_ticks = then_diff * (GLYPHS_PER_LINE - 2) / total;
+  int num_ticks = (int)(then_diff * (GLYPHS_PER_LINE - 2) / total);
 
   char buffer[GLYPHS_PER_LINE + 1];
   buffer[0] = '|';
@@ -692,8 +692,8 @@ static void frame(void)  {
     rewind_by(REWIND_CYCLES_PER_FRAME);
   } else if (s_paused) {
     // Clear audio buffer.
-    size_t read_head = atomic_load(&s_audio_buffer_read);
-    size_t write_head = atomic_load(&s_audio_buffer_write);
+    size_t read_head = atomic_load_size(&s_audio_buffer_read);
+    size_t write_head = atomic_load_size(&s_audio_buffer_write);
     if (write_head < read_head) {
       memset(s_audio_buffer + write_head, 0,
              (read_head - write_head - 1) * sizeof(f32));
@@ -702,7 +702,7 @@ static void frame(void)  {
       memset(s_audio_buffer + write_head, 0, to_end * sizeof(f32));
       memset(s_audio_buffer, 0, (read_head - 1) * sizeof(f32));
     }
-    atomic_store(&s_audio_buffer_write, read_head - 1);
+    atomic_store_size(&s_audio_buffer_write, read_head - 1);
   } else {
     f64 delta_sec = sapp_frame_duration();
     Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
@@ -837,5 +837,6 @@ sapp_desc sokol_main(int argc, char *argv[]) {
       .width = SCREEN_WIDTH * s_render_scale,
       .height = SCREEN_HEIGHT * s_render_scale,
       .window_title = "binjnes",
+      .win32_console_attach = true,
   };
 }

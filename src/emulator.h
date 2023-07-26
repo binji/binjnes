@@ -7,6 +7,8 @@
 #ifndef BINJNES_EMULATOR_H_
 #define BINJNES_EMULATOR_H_
 
+#include <stdalign.h>
+
 #include "common.h"
 #include "cartdb.h"
 #include "vec.h"
@@ -36,6 +38,8 @@ typedef u16 FrameBuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
 typedef RGBA RGBAFrameBuffer[SCREEN_WIDTH * SCREEN_HEIGHT];
 
 typedef struct AudioBuffer {
+  alignas(16) f32 buffer[256];  // circular buffer for filter
+  int bufferi;      // buffer index
   u32 frequency;    /* Sample frequency, as N samples per second */
   u32 freq_counter; /* Used for resampling; [0..APU_TICKS_PER_SECOND). */
   u32 divisor;
@@ -43,9 +47,6 @@ typedef struct AudioBuffer {
   f32* data;   /* f32 1-channel samples @ |frequency| */
   f32* end;
   f32* position;
-
-  f32 buffer[256];  // circular buffer for filter
-  int bufferi;      // buffer index
 } AudioBuffer;
 
 typedef struct EmulatorInit {
@@ -154,7 +155,7 @@ typedef struct {
 
       union {
         struct {
-          u16x4 timer, period, seq, play_mask;
+          u16x8 timer, period, seq, play_mask;
           f32x4 sample, vol;
           u8 duty[2], sawadd, sawaccum;
         } a6;

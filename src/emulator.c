@@ -67,9 +67,15 @@ static void ppu_step(E *e);
 static void apu_sync(E *e);
 static void spr_step(E *e);
 
-static const u8 s_opcode_bits[], s_dmc_stall[];
-static const u16 s_cpu_decode, s_callvec, s_reset, s_oamdma, s_dmc;
-static const u16 s_opcode_loc[];
+static const u8 s_opcode_bits[781+1+7+7+514+4], s_dmc_stall[125];
+static const u16 s_opcode_loc[256];
+
+// See s_opcode_bits below
+#define STEP_CPU_DECODE 781
+#define STEP_CALLVEC (STEP_CPU_DECODE + 1)
+#define STEP_RESET (STEP_CALLVEC + 7)
+#define STEP_OAMDMA (STEP_RESET + 7)
+#define STEP_DMC (STEP_OAMDMA + 514)
 
 // Scheduler stuff /////////////////////////////////////////////////////////////
 
@@ -159,7 +165,7 @@ static void sched_run(E* e) {
 
 // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
 static inline u8 reverse(u8 b) {
-  return ((b * 0x80200802ull) & 0x0884422110ull) * 0x0101010101ull >> 32;
+  return (u8)(((b * 0x80200802ull) & 0x0884422110ull) * 0x0101010101ull >> 32);
 }
 
 // Derived from
@@ -320,21 +326,22 @@ static void shift_en(E *e) {
   // Decrement inactive counters. Active counters are always 0.
   u8x16 active;
   if (spr->any_active) {
-    active = spr->counter == 0;
-    spr->counter -= 1 & ~active;
+    active = v128_eqz_u8(spr->counter);
+    spr->counter =
+        v128_sub_u8(spr->counter, v128_and(v128_bcast_u8(1), v128_not(active)));
   }
 
   if (LIKELY(p->ppumask & 8)) { // Show BG.
     palidx = p->bgatshift & 0xf;
   }
 
-  if (spr->any_active && any_true_u8x16(active) &&
-      (p->ppumask & 0x10)) { // Show sprites.
+  if (spr->any_active && v128_any_true(active) &&
+      (p->ppumask & 0x10)) {  // Show sprites.
     assert(scany(p) != 0);
     // Find first non-zero sprite, if any. Check only the low bit of the lane
     // (the pixel that might be drawn).
-    u64x2 non0x2 = (u64x2)(spr->shift & active & 1);
-    u64 non0 = non0x2[0] | non0x2[1];
+    u64x2 non0x2 = v128_and(v128_and(spr->shift, active), v128_bcast_u8(1));
+    u64 non0 = non0x2.au64[0] | non0x2.au64[1];
     if (non0) {
       // Sprite 0 hit only occurs:
       //  * When sprite and background are both enabled
@@ -350,13 +357,14 @@ static void shift_en(E *e) {
 
       // Check if sprite is on transparent BG pixel, or has priority.
       if (!bgpx || (non0 & (-non0) & spr->pri)) {
-        int sidx = __builtin_ctzll(non0) >> 3;
-        u8 sprpx = ((spr->shift[sidx + 8] << 1) & 2) | (spr->shift[sidx] & 1);
-        palidx = spr->pal[sidx] | sprpx;
+        int sidx = ctzll(non0) >> 3;
+        u8 sprpx =
+            ((spr->shift.au8[sidx + 8] << 1) & 2) | (spr->shift.au8[sidx] & 1);
+        palidx = spr->pal.au8[sidx] | sprpx;
       }
     }
 
-    spr->shift = blendv_u8x16(spr->shift, spr->shift >> 1, active);
+    spr->shift = v128_blendv(spr->shift, v128_srl_u8(spr->shift, 1), active);
   }
 
   p->bgatshift >>= 4;
@@ -619,22 +627,22 @@ static void spr12(E *e) {
       ptbh = reverse(ptbh);
     }
     u8 sprmask = !(p->ppumask & 4) && x < 8 ? 0xff << (8 - x) : 0xff;
-    spr->shift[idx] = spr->ptbl & sprmask;
-    spr->shift[idx + 8] = ptbh & sprmask;
-    spr->pal[idx] = ((spr->at & 3) + 4) << 2;
+    spr->shift.au8[idx] = spr->ptbl & sprmask;
+    spr->shift.au8[idx + 8] = ptbh & sprmask;
+    spr->pal.au8[idx] = ((spr->at & 3) + 4) << 2;
     shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
     shift_in(&spr->spr0mask, (spr->s == 0 && spr->spr0) ? 0xff : 0);
-    spr->counter[idx] = spr->counter[idx + 8] = x;
+    spr->counter.au8[idx] = spr->counter.au8[idx + 8] = x;
     spr->next_any_active = p->state < 341 * 261;
   } else {
     // Dummy read for MMC3 IRQ
     spr_ptb(e, 0xff, 8);
     // empty sprite.
-    spr->shift[idx] = spr->shift[idx + 8] = 0;
-    spr->pal[idx] = 4 << 2;
+    spr->shift.au8[idx] = spr->shift.au8[idx + 8] = 0;
+    spr->pal.au8[idx] = 4 << 2;
     spr->pri >>= 8;
     spr->spr0mask >>= 8;
-    spr->counter[idx] = spr->counter[idx + 8] = 0xff;
+    spr->counter.au8[idx] = spr->counter.au8[idx + 8] = 0xff;
   }
   spr->s += 4;
 }
@@ -669,35 +677,39 @@ static inline bool is_power_of_two(u32 x) {
 
 static void set_vol(A* a, int chan, u8 val) {
   if (val & 0x10) {
-    a->vol[chan] = val & 0xf;
+    a->vol.af32[chan] = (f32)(val & 0xf);
     a->update = true;
   }
-  a->envreload[chan] = val & 0xf;
-  a->cvol[chan] = (val & 0x10) ? ~0 : 0;
-  a->envloop[chan] = (val & 0x20) ? ~0 : 0;
+  a->envreload.au32[chan] = val & 0xf;
+  a->cvol.au32[chan] = (val & 0x10) ? ~0 : 0;
+  a->envloop.au32[chan] = (val & 0x20) ? ~0 : 0;
 }
 
 static void set_halt(A *a, int chan, u8 val) {
-  a->halt[chan] = (val & (chan == 2 ? 0x80 : 0x20)) ? ~0 : 0;
+  a->halt.au16[chan] = (val & (chan == 2 ? 0x80 : 0x20)) ? ~0 : 0;
 }
 
 static u16x8 get_sweep_target_or_mute(A* a) {
-  u16x8 diff = {a->period[0] >> a->swshift[0], a->period[1] >> a->swshift[1]},
-        ndiff = diff + (u16x8){1, 0};
-  u16x8 target = blendv_u16x8(
-      a->period + diff, (a->period - ndiff) & (a->period > ndiff), a->swneg);
-  u16x8 old_mute = a->swmute_mask;
-  u16x8 mute = (a->period < 8) | (target > 0x7ff);
-  a->swmute_mask = ~mute;
+  u16x8 diff = V128_MAKE_U16(a->period.au16[0] >> a->swshift.au16[0],
+                            a->period.au16[1] >> a->swshift.au16[1], 0, 0, 0, 0,
+                            0, 0),
+       ndiff = v128_add_u16(diff, V128_MAKE_U16(1, 0, 0, 0, 0, 0, 0, 0));
+  u16x8 target = v128_blendv(
+      v128_add_u16(a->period, diff),
+      v128_and(v128_sub_u16(a->period, ndiff), v128_gt_u16(a->period, ndiff)),
+      a->swneg);
+  u16x8 mute = v128_or(v128_lt_u16(a->period, v128_bcast_u16(8)),
+                      v128_gt_u16(target, v128_bcast_u16(0x7ff)));
+  a->swmute_mask = v128_not(mute);
   return target;
 }
 
 static void set_sweep(A *a, int chan, u8 val) {
-  a->swshift[chan] = val & 7;
-  a->swneg[chan] = (val & 8) ? ~0 : 0;
-  a->swperiod[chan] = (val >> 4) & 7;
-  a->swen[chan] = (val & 0x80) ? ~0 : 0;
-  a->swreload[chan] = ~0;
+  a->swshift.au16[chan] = val & 7;
+  a->swneg.au16[chan] = (val & 8) ? ~0 : 0;
+  a->swperiod.au16[chan] = (val >> 4) & 7;
+  a->swen.au16[chan] = (val & 0x80) ? ~0 : 0;
+  a->swreload.au16[chan] = ~0;
   get_sweep_target_or_mute(a);
 }
 
@@ -709,11 +721,11 @@ static void set_len(A* a, int chan, u8 val) {
   static const u8 lens[] = {10, 254, 20,  2,  40, 4,  80, 6,  160, 8,  60,
                             10, 14,  12,  26, 14, 12, 16, 24, 18,  48, 20,
                             96, 22,  192, 24, 72, 26, 16, 28, 32,  30};
-  a->len[chan] = lens[val >> 3];
+  a->len.au16[chan] = lens[val >> 3];
 }
 
 static void update_tri_play_mask(A* a) {
-  a->play_mask[2] = a->len[2] && a->tricnt && a->period[2] >= 2;
+  a->play_mask.au16[2] = a->len.au16[2] && a->tricnt && a->period.au16[2] >= 2;
 }
 
 static void start_chan(A* a, int chan, u8 val) {
@@ -723,11 +735,11 @@ static void start_chan(A* a, int chan, u8 val) {
       a->trireload = true;
       update_tri_play_mask(a);
     } else {
-      a->start[chan] = ~0;
-      a->play_mask[chan] = ~0;
+      a->start.au32[chan] = ~0;
+      a->play_mask.au16[chan] = ~0;
     }
     if (chan < 2) {
-      a->seq[chan] = 0;
+      a->seq.au16[chan] = 0;
     }
     a->update = true;
   }
@@ -740,7 +752,7 @@ static void start_dmc(A* a) {
 }
 
 static void set_period(A* a, int chan, u16 val) {
-  a->period[chan] = val;
+  a->period.au16[chan] = val;
   if (chan < 2) {
     get_sweep_target_or_mute(a);
   } else if (chan == 2) {
@@ -749,16 +761,16 @@ static void set_period(A* a, int chan, u16 val) {
 }
 
 static void set_period_lo(A* a, int chan, u8 val) {
-  set_period(a, chan, (a->period[chan] & 0x700) | val);
+  set_period(a, chan, (a->period.au16[chan] & 0x700) | val);
 }
 
 static void set_period_hi(A* a, int chan, u8 val) {
-  set_period(a, chan, ((val & 7) << 8) | (a->period[chan] & 0xff));
+  set_period(a, chan, ((val & 7) << 8) | (a->period.au16[chan] & 0xff));
   start_chan(a, chan, val);
 }
 
 static void apu_tick(E *e, u64 cy) {
-  static const u16x8 timer_diff = {1, 1, 2, 1, 1};
+  #define TIMER_DIFF V128_MAKE_U16(1, 1, 2, 1, 1, 0, 0, 0)
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
                                 {0, 1, 1, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 1, 1, 1, 1},
@@ -772,39 +784,42 @@ static void apu_tick(E *e, u64 cy) {
 
   // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
   // Reload the timers that are zero.
-  u16x8 timer0 = a->timer < timer_diff;
-  a->timer = blendv_u16x8(a->timer - timer_diff, a->period, timer0);
-  timer0 &= a->play_mask;
+  u16x8 timer0 = v128_lt_u16(a->timer, TIMER_DIFF);
+  a->timer = v128_blendv(v128_sub_u16(a->timer, TIMER_DIFF), a->period, timer0);
+  #undef TIMER_DIFF
+  timer0 = v128_and(timer0, a->play_mask);
 
-  if (timer0[0] | timer0[1] | timer0[2] | timer0[3] | timer0[4]) {
+  if (timer0.au16[0] | timer0.au16[1] | timer0.au16[2] | timer0.au16[3] |
+      timer0.au16[4]) {
     // Advance the sequence for reloaded timers.
-    a->seq = (a->seq + (1 & timer0)) & (u16x8){7, 7, 31, 0, 7};
+    a->seq = v128_and(v128_add_u16(a->seq, v128_and(v128_bcast_u16(1), timer0)),
+                      V128_MAKE_U16(7, 7, 31, 0, 7, 0, 0, 0));
 
-    if (timer0[0]) {
-      a->sample[0] = pduty[a->reg[0] >> 6][a->seq[0]];
+    if (timer0.au16[0]) {
+      a->sample.af32[0] = pduty[a->reg[0] >> 6][a->seq.au16[0]];
     }
-    if (timer0[1]) {
-      a->sample[1] = pduty[a->reg[4] >> 6][a->seq[1]];
+    if (timer0.au16[1]) {
+      a->sample.af32[1] = pduty[a->reg[4] >> 6][a->seq.au16[1]];
     }
-    if (timer0[2]) {
-      a->sample[2] = trisamp[a->seq[2]];
+    if (timer0.au16[2]) {
+      a->sample.af32[2] = trisamp[a->seq.au16[2]];
     }
-    if (timer0[3]) {
+    if (timer0.au16[3]) {
       a->noise =
           (a->noise >> 1) |
           (((a->noise << 14) ^ (a->noise << ((a->reg[0xe] & 0x80) ? 8 : 13))) &
            0x4000);
-      a->sample[3] = a->noise & 1;
+      a->sample.af32[3] = (f32)(a->noise & 1);
     }
-    if (timer0[4]) {
+    if (timer0.au16[4]) {
       if (a->dmcbufstate) {
         DEBUG("   dmc timer overflow (cy: %" PRIu64 ") (seq=%u) (timer=>%u)\n",
-              cy, a->seq[4], a->timer[4]);
+              cy, a->seq.au16[4], a->timer.au16[4]);
         u8 newdmcout = a->dmcout + ((a->dmcshift & 1) << 2) - 2;
         if (newdmcout <= 127) { a->dmcout = newdmcout; }
         a->dmcshift >>= 1;
       }
-      if (a->seq[4] == 0) {
+      if (a->seq.au16[4] == 0) {
         if (a->dmcen) {
           DEBUG("  dmc output finished, fetch (cy: %" PRIu64 ")\n", cy);
           a->dmcfetch = true;
@@ -823,12 +838,14 @@ static void apu_tick(E *e, u64 cy) {
   if (a->dmcfetch) {
     sched_occurred(e, SCHED_DMC_FETCH);
     sched_at(e, SCHED_DMC_FETCH,
-             cy + ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4] + 1) * 6);
+             cy + ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
+                   a->timer.au16[4] + 1) *
+                      6);
     u16 step = e->s.c.step - 1;
-    if (step < s_dmc) {
+    if (step < STEP_DMC) {
       e->s.c.dmc_step = step; // TODO: Should finish writes first?
       u8 stall = s_dmc_stall[s_opcode_bits[step]];
-      e->s.c.step = s_dmc + (4 - stall);
+      e->s.c.step = STEP_DMC + (4 - stall);
       e->s.c.bits = s_opcode_bits[e->s.c.step++];
       DEBUG(" QUEUE dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
             cy, stall, step, a->seq[4]);
@@ -840,21 +857,21 @@ static void apu_tick(E *e, u64 cy) {
 
   bool update = a->update;
   if (a->update) {
-    u16x8 play_mask =
-        a->play_mask & (a->swmute_mask | (u16x8){0, 0, ~0, ~0, ~0});
+    u16x8 play_mask = v128_and(
+        a->play_mask,
+        v128_or(a->swmute_mask, V128_MAKE_U16(0, 0, ~0, ~0, ~0, 0, 0, 0)));
     u32x4 play_mask4 =
-        (u32x4) __builtin_convertvector(*(s16x4 *)&play_mask, s32x4) |
-        (s32x4){0, 0, -1, 0};
-    f32x4 sampvol = (f32x4)((u32x4)a->sample & play_mask4) * a->vol;
+        v128_or(v128_sext_s16_s32(play_mask), V128_MAKE_S32(0, 0, -1, 0));
+    f32x4 sampvol = v128_mul_f32(v128_and(a->sample, play_mask4), a->vol);
 
     // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
     // Started from a 31-entry table and calculated a quadratic regression.
-    static const f32 PB = 0.01133789176986089272, PC = -0.00009336679655005083;
+    static const f32 PB = 0.01133789176986089272f, PC = -0.00009336679655005083f;
     // Started from a 203-entry table and calculated a cubic regression.
-    static const f32 TB = 0.00653531668798749448, TC = -0.00002097005655295220,
-                     TD = 0.00000003402641447451;
-    f32 p = sampvol[0] + sampvol[1];
-    f32 t = 3 * sampvol[2] + 2 * sampvol[3] + a->dmcout;
+    static const f32 TB = 0.00653531668798749448f, TC = -0.00002097005655295220f,
+                     TD = 0.00000003402641447451f;
+    f32 p = sampvol.af32[0] + sampvol.af32[1];
+    f32 t = 3 * sampvol.af32[2] + 2 * sampvol.af32[3] + a->dmcout;
     a->base_mixed = a->mixed = p * (PB + p * PC) + t * (TB + t * (TC + t * TD));
     a->update = false;
   }
@@ -871,41 +888,57 @@ static void apu_tick(E *e, u64 cy) {
   ab->freq_counter += ab->frequency;
   if (VALUE_WRAPPED(ab->freq_counter, APU_TICKS_PER_SECOND)) {
     // 128-tap low-pass filter @ 894.8kHz: pass=12kHz, stop=20kHz
-    static const f32 h[] __attribute__((aligned(16))) = {
-        0.00913,  -0.00143, -0.00141, -0.00144, -0.00151, -0.00162, -0.00177,
-        -0.00194, -0.00213, -0.00234, -0.00256, -0.00277, -0.00300, -0.00321,
-        -0.00342, -0.00360, -0.00377, -0.00390, -0.00400, -0.00408, -0.00410,
-        -0.00407, -0.00399, -0.00387, -0.00368, -0.00343, -0.00310, -0.00271,
-        -0.00225, -0.00171, -0.00110, -0.00042, 0.00033,  0.00116,  0.00205,
-        0.00302,  0.00405,  0.00514,  0.00629,  0.00748,  0.00872,  0.01000,
-        0.01131,  0.01264,  0.01398,  0.01534,  0.01669,  0.01803,  0.01935,
-        0.02064,  0.02189,  0.02310,  0.02426,  0.02535,  0.02637,  0.02731,
-        0.02816,  0.02892,  0.02959,  0.03015,  0.03061,  0.03095,  0.03118,
-        0.03130,  0.03130,  0.03118,  0.03095,  0.03061,  0.03015,  0.02959,
-        0.02892,  0.02816,  0.02731,  0.02637,  0.02535,  0.02426,  0.02310,
-        0.02189,  0.02064,  0.01935,  0.01803,  0.01669,  0.01534,  0.01398,
-        0.01264,  0.01131,  0.01000,  0.00872,  0.00748,  0.00629,  0.00514,
-        0.00405,  0.00302,  0.00205,  0.00116,  0.00033,  -0.00042, -0.00110,
-        -0.00171, -0.00225, -0.00271, -0.00310, -0.00343, -0.00368, -0.00387,
-        -0.00399, -0.00407, -0.00410, -0.00408, -0.00400, -0.00390, -0.00377,
-        -0.00360, -0.00342, -0.00321, -0.00300, -0.00277, -0.00256, -0.00234,
-        -0.00213, -0.00194, -0.00177, -0.00162, -0.00151, -0.00144, -0.00141,
-        -0.00143, 0.00913,
+#define LPF_DATA                                                              \
+  0.00913f, -0.00143f, -0.00141f, -0.00144f, -0.00151f, -0.00162f, -0.00177f, \
+      -0.00194f, -0.00213f, -0.00234f, -0.00256f, -0.00277f, -0.00300f,       \
+      -0.00321f, -0.00342f, -0.00360f, -0.00377f, -0.00390f, -0.00400f,       \
+      -0.00408f, -0.00410f, -0.00407f, -0.00399f, -0.00387f, -0.00368f,       \
+      -0.00343f, -0.00310f, -0.00271f, -0.00225f, -0.00171f, -0.00110f,       \
+      -0.00042f, 0.00033f, 0.00116f, 0.00205f, 0.00302f, 0.00405f, 0.00514f,  \
+      0.00629f, 0.00748f, 0.00872f, 0.01000f, 0.01131f, 0.01264f, 0.01398f,   \
+      0.01534f, 0.01669f, 0.01803f, 0.01935f, 0.02064f, 0.02189f, 0.02310f,   \
+      0.02426f, 0.02535f, 0.02637f, 0.02731f, 0.02816f, 0.02892f, 0.02959f,   \
+      0.03015f, 0.03061f, 0.03095f, 0.03118f, 0.03130f, 0.03130f, 0.03118f,   \
+      0.03095f, 0.03061f, 0.03015f, 0.02959f, 0.02892f, 0.02816f, 0.02731f,   \
+      0.02637f, 0.02535f, 0.02426f, 0.02310f, 0.02189f, 0.02064f, 0.01935f,   \
+      0.01803f, 0.01669f, 0.01534f, 0.01398f, 0.01264f, 0.01131f, 0.01000f,   \
+      0.00872f, 0.00748f, 0.00629f, 0.00514f, 0.00405f, 0.00302f, 0.00205f,   \
+      0.00116f, 0.00033f, -0.00042f, -0.00110f, -0.00171f, -0.00225f,         \
+      -0.00271f, -0.00310f, -0.00343f, -0.00368f, -0.00387f, -0.00399f,       \
+      -0.00407f, -0.00410f, -0.00408f, -0.00400f, -0.00390f, -0.00377f,       \
+      -0.00360f, -0.00342f, -0.00321f, -0.00300f, -0.00277f, -0.00256f,       \
+      -0.00234f, -0.00213f, -0.00194f, -0.00177f, -0.00162f, -0.00151f,       \
+      -0.00144f, -0.00141f, -0.00143f, 0.00913f
+    static const alignas(16) f32 h[4][128 + 4] = {
+        {LPF_DATA, 0, 0, 0, 0},
+        {0, LPF_DATA, 0, 0, 0},
+        {0, 0, LPF_DATA, 0, 0},
+        {0, 0, 0, LPF_DATA, 0},
+    };
+    static const alignas(16) u32x4 mask[4] = {
+        V128_MAKE_U32(~0, ~0, ~0, ~0),
+        V128_MAKE_U32( 0, ~0, ~0, ~0),
+        V128_MAKE_U32( 0,  0, ~0, ~0),
+        V128_MAKE_U32( 0,  0,  0, ~0),
     };
 
-    assert(absize == ARRAY_SIZE(h));
-
-    typedef f32 f32x4u __attribute__((vector_size(16), aligned(4)));
+    assert(absize == ARRAY_SIZE(h[0]) - 4);
 
     // Resample to destination frequency, with low-pass filter.
     f32x4 accum4 = {0};
-    const f32x4* h4 = (const f32x4*)&h[0];
-    f32x4u* buf4 = (f32x4u*)&ab->buffer[ab->bufferi];
-    for (size_t i = 0; i < ARRAY_SIZE(h) / 4; ++i) {
+    u32 unalign = ab->bufferi & 3;
+    const f32x4* h4 = (const f32x4*)&h[unalign][0];
+    f32x4* buf4 = (f32x4*)&ab->buffer[ab->bufferi & ~3];
+    u32x4 mask4 = mask[unalign];
+    accum4 = v128_mul_f32(*h4++, v128_and(*buf4++, mask4));
+    for (size_t i = 0; i < absize / 4 - 1; ++i) {
       // filter is symmetric, so can be indexed in same direction.
-      accum4 += *h4++ * *buf4++;
+      accum4 = v128_add_f32(accum4, v128_mul_f32(*h4++, *buf4++));
     }
-    *ab->position++ = accum4[0] + accum4[1] + accum4[2] + accum4[3];
+    accum4 = v128_add_f32(
+        accum4, v128_mul_f32(*h4++, v128_and(*buf4++, v128_not(mask4))));
+    *ab->position++ =
+        accum4.af32[0] + accum4.af32[1] + accum4.af32[2] + accum4.af32[3];
     if (ab->position > ab->end) {
       fprintf(stderr,
               "ab->position > ab->end (%zu > %zu). a.cy=%" PRIu64
@@ -918,16 +951,22 @@ static void apu_tick(E *e, u64 cy) {
 
 static void apu_quarter(A *a) {
   // pulse 1, pulse 2, noise envelope
-  const f32x4 ffff = {15, 15, 15, 15}, oldvol = a->vol;
-  u32x4 env0 = a->envdiv == 0, env0_start = env0 | a->start,
-        decay0 = a->decay == 0;
-  a->decay = (f32x4)(((u32x4)a->decay & ~env0_start) |
-                     ((u32x4)(a->decay - 1) & (~a->start & env0 & ~decay0)) |
-                     ((u32x4)ffff & (a->start | (env0 & decay0 & a->envloop))));
-  a->envdiv = blendv_u32x4(a->envdiv - 1, a->envreload, env0_start);
-  a->vol = (f32x4)blendv_u32x4((u32x4)a->decay, (u32x4)a->vol, a->cvol);
-  a->update = any_true_u32x4(a->vol != oldvol);
-  a->start = (u32x4){0, 0, 0, 0};
+  const f32x4 ffff = v128_bcast_f32(15), oldvol = a->vol;
+  u32x4 env0 = v128_eqz_u32(a->envdiv),
+                 env0_start = v128_or(env0, a->start),
+                 decay0 = v128_eqz_u32(a->decay);
+  a->decay = v128_or(
+      v128_and(a->decay, v128_not(env0_start)),
+      v128_or(v128_and(v128_sub_f32(a->decay, v128_bcast_f32(1)),
+                       v128_and(v128_and(v128_not(a->start), env0),
+                                v128_not(decay0))),
+              v128_and(ffff, v128_or(a->start, v128_and(v128_and(env0, decay0),
+                                                        a->envloop)))));
+  a->envdiv = v128_blendv(v128_sub_u32(a->envdiv, v128_bcast_u32(1)),
+                          a->envreload, env0_start);
+  a->vol = v128_blendv(a->decay, a->vol, a->cvol);
+  a->update = v128_any_true(v128_ne_f32(a->vol, oldvol));
+  a->start = V128_MAKE_U32(0, 0, 0, 0);
 
   // triangle linear counter
   // If the linear counter reload flag is set,
@@ -940,31 +979,35 @@ static void apu_quarter(A *a) {
     // ... otherwise if the linear counter is non-zero, it is decremented.
     --a->tricnt;
   }
-  if (a->play_mask[2] && a->tricnt == 0) {
+  if (a->play_mask.au16[2] && a->tricnt == 0) {
     update_tri_play_mask(a);
     a->update = true;
   }
   // If the control flag is clear, the linear counter reload flag is cleared.
   if (!(a->reg[8] & 0x80)) {
     a->trireload = 0;
-    a->start[2] = 0;
+    a->start.au32[2] = 0;
   }
 }
 
 static void apu_half(A *a) {
   // length counter
-  u16x8 len0 = a->len == 0;
-  a->len -= 1 & ~(len0 | a->halt);
-  a->play_mask &= ~len0;
+  u16x8 len0 = v128_eqz_u16(a->len);
+  a->len = v128_sub_u16(
+      a->len, v128_and(v128_bcast_u16(1), v128_not(v128_or(len0, a->halt))));
+  a->play_mask = v128_and(a->play_mask, v128_not(len0));
 
   // sweep unit
   u16x8 target = get_sweep_target_or_mute(a);
-  u16x8 swdiv0 = a->swdiv == 0, swshift0 = a->swshift == 0,
-        swupdate = ~swshift0 & swdiv0 & a->swen & a->swmute_mask,
-        swdec = ~(swdiv0 | a->swreload);
-  a->period = blendv_u16x8(a->period, target, swupdate);
-  a->swdiv = blendv_u16x8(a->swperiod, a->swdiv - 1, swdec);
-  a->swreload = (u16x8){0, 0};
+  u16x8 swdiv0 = v128_eqz_u16(a->swdiv), swshift0 = v128_eqz_u16(a->swshift),
+       swupdate =
+           v128_and(v128_and(v128_and(v128_not(swshift0), swdiv0), a->swen),
+                    a->swmute_mask),
+       swdec = v128_not(v128_or(swdiv0, a->swreload));
+  a->period = v128_blendv(a->period, target, swupdate);
+  a->swdiv = v128_blendv(a->swperiod, v128_sub_u16(a->swdiv, v128_bcast_u16(1)),
+                         swdec);
+  a->swreload = v128_zero();
   get_sweep_target_or_mute(a);
 }
 
@@ -1165,8 +1208,8 @@ static u8 cpu_read(E *e, u16 addr) {
         apu_sync(e);
         u8 result = ((c->irq & (IRQ_FRAME | IRQ_DMC | IRQ_MAPPER)) << 6) |
                     (c->open_bus & 0x20) | (a->dmcen << 4) |
-                    ((a->len[3] > 0) << 3) | ((a->len[2] > 0) << 2) |
-                    ((a->len[1] > 0) << 1) | (a->len[0] > 0);
+                    ((a->len.au16[3] > 0) << 3) | ((a->len.au16[2] > 0) << 2) |
+                    ((a->len.au16[1] > 0) << 1) | (a->len.au16[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
         DEBUG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
               e->s.cy, (e->s.cy - a->resetcy) / 3);
@@ -1184,7 +1227,7 @@ static u8 cpu_read(E *e, u16 addr) {
 
    // ROM
   default:
-    __builtin_unreachable();
+    UNREACHABLE();
   }
   return e->mapper_read(e, addr);
 }
@@ -1316,8 +1359,10 @@ static void cpu_write(E *e, u16 addr, u8 val) {
 
       // DMC
       case 0x10:
-        a->period[4] = dmcrate[val & 15];
-        u32 next = ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6;
+        a->period.au16[4] = dmcrate[val & 15];
+        u32 next = ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
+                    a->timer.au16[4]) *
+                   6;
         if (a->dmcen) {
           sched_at(e, SCHED_DMC_FETCH, e->s.cy + next + !(a->state & 1) * 3);
         } else {
@@ -1343,11 +1388,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
                     e->s.cy, a->seq[4]);
-              sched_at(
-                  e, SCHED_DMC_FETCH,
-                  e->s.cy +
-                      ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6 +
-                      !(a->state & 1) * 3);
+              sched_at(e, SCHED_DMC_FETCH,
+                       e->s.cy +
+                           ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
+                            a->timer.au16[4]) *
+                               6 +
+                           !(a->state & 1) * 3);
             }
             start_dmc(a);
           }
@@ -1356,7 +1402,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
           sched_clear(e, SCHED_DMC_FETCH);
         }
         for (int i = 0; i < 4; ++i) {
-          if (!(val & (1 << i))) { a->len[i] = 0; }
+          if (!(val & (1 << i))) { a->len.au16[i] = 0; }
         }
         a->update |= !!(val & 0x1f);
         c->irq &= ~IRQ_DMC;
@@ -1405,7 +1451,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
 
       case 0x14: {   // OAMDMA
         c->oam.hi = val;
-        c->next_step = s_oamdma + !(e->s.cy & 1); // 513/514 cycles
+        c->next_step = STEP_OAMDMA + !(e->s.cy & 1); // 513/514 cycles
         goto io;
       }
       case 0x16:
@@ -1526,11 +1572,11 @@ static void set_mirror(E *e, Mirror mirror) {
 }
 
 static void update_chr1k_map(E* e) {
-  for (size_t i = 0; i < 8; ++i) {
+  for (int i = 0; i < 8; ++i) {
     update_ppu_bank(e, i, e->s.m.ppu1k_bank[i], e->s.m.ppu1k_loc[i]);
   }
 
-  for (size_t i = 0; i < 8; ++i) {
+  for (int i = 0; i < 8; ++i) {
     update_ppu_bg_spr_bank(e, i, e->s.m.chr1k_bg_bank[i],
                            e->s.m.chr1k_spr_bank[i], e->s.m.ppu1k_loc[i]);
   }
@@ -1795,13 +1841,13 @@ static void mapper206_write(E *e, u16 addr, u8 val) {
   } else if ((addr & 0xe001) == 0x8001) { // Bank data
     u8 select = m->m206.bank_select;
     switch (select) {
-      case 0 ... 1:  // CHR 2k banks at $0000, $0800
+      case 0: case 1:  // CHR 2k banks at $0000, $0800
         m->chr_bank[select] = val & 0b111110 & (e->ci.chr2k_banks - 1);
         break;
-      case 2 ... 5:  // CHR 1k banks at $1000, $1400, $1800, $1C00
+      case 2: case 3: case 4: case 5:  // CHR 1k banks at $1000, $1400, $1800, $1C00
         m->chr_bank[select] = val & 0b111111 & (e->ci.chr1k_banks - 1);
         break;
-      case 6 ... 7:  // PRG 8k bank at $8000, $A000
+      case 6: case 7:  // PRG 8k bank at $8000, $A000
         m->prg_bank[select - 6] = val & 0b1111 & (e->ci.prg8k_banks - 1);
         break;
     }
@@ -1989,10 +2035,10 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   LOG("mapper5_write(%04x, %02x)\n", addr, val);
   switch (addr) {
-    case 0x5000 ... 0x5003:
+    case 0x5000: case 0x5001: case 0x5002: case 0x5003:
       LOG("✓  Pulse 1 audio = %u (%02x)\n", val, val);
       break;
-    case 0x5004 ... 0x5007:
+    case 0x5004: case 0x5005: case 0x5006: case 0x5007:
       LOG("✓  Pulse 2 audio = %u (%02x)\n", val, val);
       break;
     case 0x5010:
@@ -2069,7 +2115,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
           val);
       set_prgram8k_map(e, m->prgram_bank = val);
       break;
-    case 0x5114 ... 0x5117: {
+    case 0x5114: case 0x5115: case 0x5116: case 0x5117: {
       u8 bankidx = addr - 0x5114;
       LOG("  PRG bankswitching %04x..%04x = %02x\n",
           (addr - 0x5113) * 0x2000 + 0x6000, (addr - 0x5113) * 0x2000 + 0x7fff,
@@ -2079,7 +2125,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       goto update_prg;
     }
 
-    case 0x5120 ... 0x5127: {
+    case 0x5120: case 0x5121: case 0x5122: case 0x5123:
+    case 0x5124: case 0x5125: case 0x5126: case 0x5127: {
       u8 bankidx = addr - 0x5120;
       LOG("✓  CHR bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
           bankidx * 0x400 + 0x3ff, val);
@@ -2089,7 +2136,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       break;
     }
 
-    case 0x5128 ... 0x512b: {
+    case 0x5128: case 0x5129: case 0x512a: case 0x512b: {
       u8 bankidx = addr - 0x5128;
       LOG("✓  CHR BG bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
           bankidx * 0x400 + 0x3ff, val);
@@ -2151,26 +2198,22 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       printf("✓  Hardware timer hi = %02x\n", val);
       break;
 
-    case 0x5c00 ... 0x5fff: {
-      if (m->mmc5.exram_mode != 3) {
-        u16 ramaddr = (2 << 10) + (addr & 0x3ff);
-        e->s.p.ram[ramaddr] = val;
-        LOG("✓  [%3u: %3u] Write internal RAM %04x <= %02x\n", ppu_dot(e),
-            ppu_line(e), ramaddr, val);
-      }
-      break;
-    }
-
-    case 0x8000 ... 0xffff: {
-      u16 bank = (addr >> 13) & 3;
-      if (m->prg_bank_is_prgram[bank]) {
-        e->prg_rom_map[bank][addr & 0x1fff] = val;
-      }
-      break;
-    }
-
     default:
-      printf("  Unknown\n");
+      if (addr >= 0x5c00 && addr <= 0x5fff) {
+        if (m->mmc5.exram_mode != 3) {
+          u16 ramaddr = (2 << 10) + (addr & 0x3ff);
+          e->s.p.ram[ramaddr] = val;
+          LOG("✓  [%3u: %3u] Write internal RAM %04x <= %02x\n", ppu_dot(e),
+              ppu_line(e), ramaddr, val);
+        }
+      } else if (addr >= 0x8000) {
+        u16 bank = (addr >> 13) & 3;
+        if (m->prg_bank_is_prgram[bank]) {
+          e->prg_rom_map[bank][addr & 0x1fff] = val;
+        }
+      } else {
+        printf("  Unknown\n");
+      }
       break;
 
     update_prg:
@@ -2234,31 +2277,33 @@ static u8 mapper5_read(E* e, u16 addr) {
       printf("✓  Hardware timer status\n");
       break;
 
-    case 0x5c00 ... 0x5fff: {
-      u16 ramaddr = (2<<10) + (addr & 0x3ff);
-      if (m->mmc5.exram_mode & 2) {
-        u8 result = e->s.p.ram[ramaddr];
-        LOG("✓  Read internal RAM %04x >= %02x\n", ramaddr, result);
-        return result;
-      } else {
-        LOG("✓  Read internal RAM %04x >= zero\n", ramaddr);
-        return 0;
-      }
-    }
-
-    case 0x5000 ... 0x5007:
+    case 0x5000: case 0x5001: case 0x5002: case 0x5003:
+    case 0x5004: case 0x5005: case 0x5006: case 0x5007:
     case 0x5011:
-    case 0x5100 ... 0x5107:
-    case 0x5113 ... 0x5117:
-    case 0x5120 ... 0x512b:
+    case 0x5100: case 0x5101: case 0x5102: case 0x5103:
+    case 0x5104: case 0x5105: case 0x5106: case 0x5107:
+    case 0x5113: case 0x5114: case 0x5115: case 0x5116: case 0x5117:
+    case 0x5120: case 0x5121: case 0x5122: case 0x5123:
+    case 0x5124: case 0x5125: case 0x5126: case 0x5127:
+    case 0x5128: case 0x5129: case 0x512a: case 0x512b:
     case 0x5130:
-    case 0x5200 ... 0x5203:
-    case 0x5207 ... 0x5208:
+    case 0x5200: case 0x5201: case 0x5202: case 0x5203:
+    case 0x5207: case 0x5208:
     case 0x520a:
       break;
 
     default:
-      if (addr > 0x4017) {
+      if (addr >= 0x5c00 && addr <= 0x5fff) {
+        u16 ramaddr = (2<<10) + (addr & 0x3ff);
+        if (m->mmc5.exram_mode & 2) {
+          u8 result = e->s.p.ram[ramaddr];
+          LOG("✓  Read internal RAM %04x >= %02x\n", ramaddr, result);
+          return result;
+        } else {
+          LOG("✓  Read internal RAM %04x >= zero\n", ramaddr);
+          return 0;
+        }
+      } else if (addr > 0x4017) {
         printf("✓  unknown read(%04x)\n", addr);
       }
       break;
@@ -2494,7 +2539,9 @@ static void mapper19_write(E *e, u16 addr, u8 val) {
       m->namco163.irq_enable = !!(val & 0x80);
       e->s.c.irq &= ~IRQ_MAPPER;
       break;
-    case 16 ... 27: // 0x8000..0xdfff  CHR bank
+    case 16: case 17: case 18: case 19:
+    case 20: case 21: case 22: case 23:
+    case 24: case 25: case 26: case 27: // 0x8000..0xdfff  CHR bank
       if (reg < 24) {
         m->chr_bank[reg - 16] = val;
       } else {
@@ -2619,12 +2666,12 @@ static bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, bool chr_shift) {
   u8 chr_select = (((addr >> 12) - 0xb) << 1) | ((addr >> 1) & 1);
 
   switch (addr) {
-    case 0x8000 ... 0x8003: // PRG select 0
+    case 0x8000: case 0x8001: case 0x8002: case 0x8003: // PRG select 0
       m->prg_bank[0] = val & 0x1f;
       mapper_vrc_prg_map(e);
       return true;
 
-    case 0xa000 ... 0xa003: // PRG select 1
+    case 0xa000: case 0xa001: case 0xa002: case 0xa003: // PRG select 1
       m->prg_bank[1] = val & 0x1f;
       mapper_vrc_prg_map(e);
       return true;
@@ -2658,7 +2705,7 @@ static bool mapper_vrc_shared_write(E* e, u16 addr, u8 val, bool chr_shift) {
 
 static void mapper_vrc2_shared_write(E* e, u16 addr, u8 val) {
   switch (addr) {
-    case 0x9000 ... 0x9003:
+    case 0x9000: case 0x9001: case 0x9002: case 0x9003:
       set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
       break;
   }
@@ -2776,7 +2823,7 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
   A *a = &e->s.a;
   u8 chan = (addr >> 12) - 9;
   switch (addr & 0xf003) {
-    case 0x8000 ... 0x8003: // 16k PRG Select
+    case 0x8000: case 0x8001: case 0x8002: case 0x8003: // 16k PRG Select
       m->prg_bank[0] = (val & 0xf) << 1;
       DEBUG("[%" PRIu64 "]: prg0=%u (%02x)\n", e->s.cy, m->prg_bank[0],
             m->prg_bank[0]);
@@ -2784,7 +2831,7 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
 
     case 0x9000: case 0xa000:  // Pulse Control
       m->vrc.a6.duty[chan] = val >> 4;
-      m->vrc.a6.vol[chan] = val & 0xf;
+      m->vrc.a6.vol.af32[chan] = (f32)(val & 0xf);
       print_byte(addr, val, chan + 1, "MDDDVVVV");
       break;
     case 0xb000: // Saw Accum Rate
@@ -2792,18 +2839,18 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
       print_byte(addr, val, chan + 1, "XXAAAAAA");
       break;
     case 0x9001: case 0xa001: case 0xb001: // Freq Low
-      m->vrc.a6.period[chan] = (m->vrc.a6.period[chan] & 0x0f00) | val;
+      m->vrc.a6.period.au16[chan] = (m->vrc.a6.period.au16[chan] & 0x0f00) | val;
       print_byte(addr, val, chan + 1, "LLLLLLLL");
       break;
     case 0x9002: case 0xa002: case 0xb002: // Freq High
-      m->vrc.a6.period[chan] =
-          (m->vrc.a6.period[chan] & 0x00ff) | ((val & 0xf) << 8);
+      m->vrc.a6.period.au16[chan] =
+          (m->vrc.a6.period.au16[chan] & 0x00ff) | ((val & 0xf) << 8);
       if (val & 0x80) { // Channel enabled.
-        m->vrc.a6.play_mask[chan] = ~0;
+        m->vrc.a6.play_mask.au16[chan] = ~0;
       } else {
-        m->vrc.a6.timer[chan] = 0;
-        m->vrc.a6.sample[chan] = m->vrc.a6.seq[chan] = 0;
-        m->vrc.a6.play_mask[chan] = 0;
+        m->vrc.a6.timer.au16[chan] = 0;
+        m->vrc.a6.sample.af32[chan] = m->vrc.a6.seq.au16[chan] = 0;
+        m->vrc.a6.play_mask.au16[chan] = 0;
       }
       m->vrc.update_audio = true;
       print_byte(addr, val, chan + 1, "EXXXHHHH");
@@ -2817,7 +2864,7 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
           val & 3);
       goto chr_select;
 
-    case 0xc000 ... 0xc003: // 8k PRG Select
+    case 0xc000: case 0xc001: case 0xc002: case 0xc003: // 8k PRG Select
       m->prg_bank[1] = val & 0x1f;
       DEBUG("[%" PRIu64 "]: prg1=%u (%02x)\n", e->s.cy, m->prg_bank[1],
           m->prg_bank[1]);
@@ -2828,8 +2875,8 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
                     e->ci.prg8k_banks - 1);
       break;
 
-    case 0xd000 ... 0xd003:
-    case 0xe000 ... 0xe003: { // CHR Select 0..7
+    case 0xd000: case 0xd001: case 0xd002: case 0xd003:
+    case 0xe000: case 0xe001: case 0xe002: case 0xe003: { // CHR Select 0..7
       u8 select = (((addr >> 12) - 0xd) << 2) | (addr & 3);
       m->chr_bank[select] = val;
       DEBUG("[%" PRIu64 "]: addr=%04x chr%u=%u (%02x)\n", e->s.cy, addr, select,
@@ -2852,7 +2899,7 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
                         (m->chr_bank[3] << 1), (m->chr_bank[3] << 1) | 1);
           break;
 
-        case 2 ... 3:
+        case 2: case 3:
           set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1],
                            m->chr_bank[2], m->chr_bank[3],
                            (m->chr_bank[4] << 1), (m->chr_bank[4] << 1) | 1,
@@ -2910,43 +2957,48 @@ static void mapper_vrc_cpu_step(E *e) {
 }
 
 static void mapper_vrc6_apu_tick(E* e, bool update) {
-  M* m = &e->s.m;
-  static const u16x4 timer_diff = {2, 2, 1};
-  u16x4 timer0 = m->vrc.a6.timer < timer_diff;
-  m->vrc.a6.timer =
-      blendv_u16x4(m->vrc.a6.timer - timer_diff, m->vrc.a6.period, timer0);
-  timer0 &= m->vrc.a6.play_mask;
-  if (timer0[0] | timer0[1] | timer0[2]) {
+  M *m = &e->s.m;
+  #define TIMER_DIFF V128_MAKE_U16(2, 2, 1, 0, 0, 0, 0, 0)
+  u16x8 timer0 = v128_lt_u16(m->vrc.a6.timer, TIMER_DIFF);
+  m->vrc.a6.timer = v128_blendv(v128_sub_u16(m->vrc.a6.timer, TIMER_DIFF),
+                                m->vrc.a6.period, timer0);
+#undef TIMER_DIFF
+  timer0 = v128_and(timer0, m->vrc.a6.play_mask);
+  if (timer0.au16[0] | timer0.au16[1] | timer0.au16[2]) {
     // Advance the sequence for reloaded timers.
-    m->vrc.a6.seq = (m->vrc.a6.seq + (1 & timer0)) & (u16x4){15, 15, 7};
+    m->vrc.a6.seq = v128_and(
+        v128_add_u16(m->vrc.a6.seq, v128_and(v128_bcast_u16(1), timer0)),
+        V128_MAKE_U16(15, 15, 7, 0, 0, 0, 0, 0));
 
-    if (timer0[0]) {
-      m->vrc.a6.sample[0] =
-          (m->vrc.a6.seq[0] <= m->vrc.a6.duty[0]) | (m->vrc.a6.duty[0] >> 3);
+    if (timer0.au16[0]) {
+      m->vrc.a6.sample.af32[0] =
+          (f32)((m->vrc.a6.seq.au16[0] <= m->vrc.a6.duty[0]) |
+                (m->vrc.a6.duty[0] >> 3));
     }
-    if (timer0[1]) {
-      m->vrc.a6.sample[1] =
-          (m->vrc.a6.seq[1] <= m->vrc.a6.duty[1]) | (m->vrc.a6.duty[1] >> 3);
+    if (timer0.au16[1]) {
+      m->vrc.a6.sample.af32[1] =
+          (f32)((m->vrc.a6.seq.au16[1] <= m->vrc.a6.duty[1]) |
+                (m->vrc.a6.duty[1] >> 3));
     }
-    if (timer0[2]) {
-      m->vrc.a6.sample[2] = 1;
-      m->vrc.a6.vol[2] = m->vrc.a6.sawaccum >> 3;
+    if (timer0.au16[2]) {
+      m->vrc.a6.sample.af32[2] = 1;
+      m->vrc.a6.vol.af32[2] = (f32)(m->vrc.a6.sawaccum >> 3);
       m->vrc.a6.sawaccum += m->vrc.a6.sawadd;
-      if (m->vrc.a6.seq[2] == 7) {
+      if (m->vrc.a6.seq.au16[2] == 7) {
         m->vrc.a6.sawaccum = 0;
-        m->vrc.a6.seq[2] = 0;
+        m->vrc.a6.seq.au16[2] = 0;
       }
     }
     m->vrc.update_audio = true;
   }
 
   if (update || m->vrc.update_audio) {
-    u32x4 play_mask4 =
-        (u32x4) __builtin_convertvector((s16x4)m->vrc.a6.play_mask, s32x4);
+    u32x4 play_mask4 = v128_sext_s16_s32(m->vrc.a6.play_mask);
     f32x4 sampvol =
-        (f32x4)((u32x4)m->vrc.a6.sample & play_mask4) * m->vrc.a6.vol;
+        v128_mul_f32(v128_and(m->vrc.a6.sample, play_mask4), m->vrc.a6.vol);
     e->s.a.mixed =
-        e->s.a.base_mixed + (sampvol[0] + sampvol[1] + sampvol[2]) * 0.01f;
+        e->s.a.base_mixed +
+        (sampvol.af32[0] + sampvol.af32[1] + sampvol.af32[2]) * 0.01f;
     m->vrc.update_audio = false;
   }
 }
@@ -3258,13 +3310,13 @@ static inline void ror(u8 val, bool C, u8 *result, bool *out_c) {
 static inline void set_next_step(E* e) {
   C* c = &e->s.c;
   if (c->has_reset) {
-    c->next_step = s_reset;
+    c->next_step = STEP_RESET;
     DEBUG("     [%" PRIu64 "] setting next step for RESET\n", e->s.cy);
   } else if (c->has_nmi) {
-    c->next_step = s_callvec;
+    c->next_step = STEP_CALLVEC;
     DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
   } else if (c->has_irq) {
-    c->next_step = s_callvec;
+    c->next_step = STEP_CALLVEC;
     DEBUG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy);
   }
 }
@@ -3387,21 +3439,21 @@ static void cpu4(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->X, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->X, &c->T.lo);
   return cpu128(e, busval);
 }
 static void cpu5(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->X, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->X, &c->T.lo);
   return cpu127(e, busval);
 }
 static void cpu6(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   return cpu128(e, busval);
 }
 static void cpu7(E* e, u8 busval) {
@@ -3425,7 +3477,7 @@ static void cpu8(E* e, u8 busval) {
 static void cpu131(E* e, u8 busval) {
   C* c = &e->s.c;
   c->step = c->next_step;
-  c->next_step = s_cpu_decode;
+  c->next_step = STEP_CPU_DECODE;
 }
 static void cpu9(E* e, u8 busval) {
   C* c = &e->s.c;
@@ -3434,7 +3486,7 @@ static void cpu9(E* e, u8 busval) {
   c->open_bus = busval = cpu_read(e, c->bus.val);
   u16 result = c->PC.lo + (s8)c->T.lo;
   c->fixhi = result >> 8;
-  c->PC.lo = result;
+  c->PC.lo = (u8)result;
   if (!c->fixhi) { return cpu131(e, busval); }
 }
 static void cpu10(E* e, u8 busval) {
@@ -3450,20 +3502,20 @@ static void cpu11(E* e, u8 busval) {
   check_irq(e);
   c->bus = c->T;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->X, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->X, &c->T.lo);
 }
 static void cpu12(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->T;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
 }
 static void cpu13(E* e, u8 busval) {
   C* c = &e->s.c;
   ++c->bus.lo;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   c->T.hi = busval;
   return cpu129(e, busval);
 }
@@ -3526,7 +3578,7 @@ static void cpu137(E* e, u8 busval) {
   u16 sum = c->A + busval + c->C;
   c->C = sum >= 0x100;
   c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
-  c->T.lo = c->A = sum;
+  c->T.lo = c->A = (u8)sum;
   return cpu138(e, busval);
 }
 static void cpu18(E* e, u8 busval) {
@@ -4139,7 +4191,7 @@ static void cpu162(E* e, u8 busval) {
   u16 sum = c->A + busval + c->C;
   c->C = sum >= 0x100;
   c->V = !!(~(c->A ^ busval) & (busval ^ sum) & 0x80);
-  c->T.lo = c->A = sum;
+  c->T.lo = c->A = (u8)sum;
   return cpu153(e, busval);
 }
 static void cpu82(E* e, u8 busval) {
@@ -4208,7 +4260,7 @@ static void cpu90(E* e, u8 busval) {
   C* c = &e->s.c;
   ++c->bus.lo;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   return cpu133(e, busval);
 }
 static void cpu91(E* e, u8 busval) {
@@ -4223,7 +4275,7 @@ static void cpu92(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
   c->open_bus = busval = cpu_read(e, c->bus.val);
-  c->fixhi = __builtin_add_overflow(c->T.lo, c->Y, &c->T.lo);
+  c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   return cpu127(e, busval);
 }
 static void cpu93(E* e, u8 busval) {
@@ -4433,7 +4485,9 @@ static void cpu118(E* e, u8 busval) {
       e->s.a.dmcen = true;
       sched_at(e, SCHED_DMC_FETCH,
                e->s.cy +
-                   ((a->period[4] + 1) * (7 - a->seq[4]) + a->timer[4]) * 6 +
+                   ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
+                    a->timer.au16[4]) *
+                       6 +
                    !(a->state & 1) * 3);
     } else {
       DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
@@ -4793,9 +4847,6 @@ static const u8 s_opcode_bits[] = {
 
   117, 117, 117, 118, /* DMC */
 };
-static const u16 s_cpu_decode = 781, s_callvec = s_cpu_decode + 1,
-                 s_reset = s_callvec + 7, s_oamdma = s_reset + 7,
-                 s_dmc = s_oamdma + 514;
 
 static Result get_cart_info(E *e, const FileData *file_data) {
   const u32 kHeaderSize = 16;
@@ -5330,20 +5381,20 @@ static Result init_emulator(E *e, const EInit *init) {
   CHECK(SUCCESS(init_mapper(e)));
   s->c.opcode = 1; // anything but 0, so it isn't interpreted as BRK.
   s->c.I = true;
-  s->c.step = s_reset;
-  s->c.next_step = s_cpu_decode;
+  s->c.step = STEP_RESET;
+  s->c.next_step = STEP_CPU_DECODE;
   s->c.bits = s_opcode_bits[s->c.step++];
   // Triangle volume is always full; disabled by len counter or linear counter.
-  s->a.vol[2] = 1;
-  s->a.cvol[2] = ~0;
+  s->a.vol.af32[2] = 1;
+  s->a.cvol.au32[2] = ~0;
   s->a.noise = 1;
   // DMC channel should never have playback stopped.
-  s->a.period[4] = 213;
-  s->a.len[4] = 1;
-  s->a.halt[4] = ~0;
-  s->a.play_mask[4] = ~0;
+  s->a.period.au16[4] = 213;
+  s->a.len.au16[4] = 1;
+  s->a.halt.au16[4] = ~0;
+  s->a.play_mask.au16[4] = ~0;
   // Default to all channels unmuted. Using scalar - vector hack for broadcast.
-  s->a.swmute_mask = ~0 - (u16x8){};
+  s->a.swmute_mask = v128_bcast_u16(~0);
   s->a.state = 4;
   sched_init(e);
   sched_at(e, SCHED_FRAME_IRQ, 89481);
@@ -5410,7 +5461,7 @@ void emulator_convert_frame_buffer(Emulator *e, RGBAFrameBuffer fb) {
 }
 
 u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
-  return audio_buffer->position - audio_buffer->data;
+  return (u32)(audio_buffer->position - audio_buffer->data);
 }
 
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
@@ -5430,7 +5481,7 @@ EEvent emulator_run_until(E *e, Ticks until_ticks) {
     // Move extra frames down.
     f32 *end = ab->data + ab->frames;
     assert(ab->position >= end);
-    u32 extra_frames = ab->position - end;
+    u32 extra_frames = (u32)(ab->position - end);
     memmove(ab->data, end, extra_frames * sizeof(f32));
     ab->position = ab->data + extra_frames;
   }
@@ -5592,7 +5643,7 @@ void emulator_ticks_to_time(Ticks ticks, u32* day, u32* hr, u32* min, u32* sec,
   *sec = secs % 60;
   *min = (secs / 60) % 60;
   *hr = (secs / (60 * 60)) % 24;
-  *day = secs / (60 * 60 * 24);
+  *day = (u32)(secs / (60 * 60 * 24));
 }
 
 // Debug stuff /////////////////////////////////////////////////////////////////
@@ -5616,8 +5667,10 @@ void disasm(E *e, u16 addr) {
   int n = 0;
   char buf[100];
 
+#if defined(BINJNES_CLANG)
 #pragma clang diagnostic push
 #pragma clang diagnostic ignored "-Wformat-security"
+#endif
   switch (bytes) {
   case 1:
     printf("%02x     ", opcode);
@@ -5632,7 +5685,9 @@ void disasm(E *e, u16 addr) {
     n = snprintf(buf, 100, fmt, b01);
     break;
   }
+#if defined(BINJNES_CLANG)
 #pragma clang diagnostic pop
+#endif
 
   if ((opcode & 0x1f) == 0x10) {  // Branch.
     snprintf(buf + n, 100 - n, " (%04x)", addr + 2 + (s8)b0);

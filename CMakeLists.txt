@@ -8,14 +8,33 @@ set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} ${PROJECT_SOURCE_DIR}/cmake)
 
 option(WERROR "Build with warnings as errors" OFF)
 
-add_definitions(
-  -Wall -Wextra -Wpointer-arith -Wno-unused-parameter -g
-  -Wno-unused-function -Wno-unused-variable
-  -Wno-implicit-fallthrough -Wno-unknown-pragmas
-)
-if (WERROR)
-  add_definitions(-Werror)
+if (UNIX AND NOT APPLE)
+  set(LINUX TRUE)
 endif ()
+
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
+  if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    add_definitions(-DBINJNES_CLANG)
+  elseif (CMAKE_CXX_COMPILER_ID MATCHES "GNU")
+    add_definitions(-DBINJNES_GCC)
+  endif ()
+  add_definitions(
+    -Wall -Wextra -Wpointer-arith -Wno-unused-parameter -g
+    -Wno-unused-function -Wno-unused-variable
+    -Wno-implicit-fallthrough -Wno-unknown-pragmas
+  )
+  if (WERROR)
+    add_definitions(-Werror)
+  endif ()
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  add_definitions(
+    /DBINJNES_MSVC
+    /D_CRT_SECURE_NO_WARNINGS
+    /std:c11
+    /wd4146  # unary minus operator applied to unsigned type
+    /wd4098  # 'void' function returning a value
+  )
+endif()
 
 function (target_copy_to_bin name)
 add_custom_target(${name}-copy-to-bin ALL
@@ -39,11 +58,13 @@ if (NOT EMSCRIPTEN)
 
 
   # Sokol stuff
-  set(OpenGL_GL_PREFERENCE GLVND)
-  find_package(OpenGL)
-  find_package(X11)
-  find_package(Threads)
-  find_package(ALSA)
+  if (LINUX)
+    set(OpenGL_GL_PREFERENCE GLVND)
+    find_package(OpenGL)
+    find_package(X11)
+    find_package(Threads)
+    find_package(ALSA)
+  endif()
 
   add_executable(binjnes
     src/binjnes.c
@@ -57,14 +78,16 @@ if (NOT EMSCRIPTEN)
   )
   target_include_directories(binjnes
     PUBLIC ${PROJECT_SOURCE_DIR}/third_party)
-  target_link_libraries(binjnes
-    OpenGL::GL
-    ${X11_X11_LIB}
-    ${X11_Xi_LIB}
-    ${X11_Xcursor_LIB}
-    ALSA::ALSA
-    Threads::Threads
-  )
+  if (LINUX)
+    target_link_libraries(binjnes
+      OpenGL::GL
+      ${X11_X11_LIB}
+      ${X11_Xi_LIB}
+      ${X11_Xcursor_LIB}
+      ALSA::ALSA
+      Threads::Threads
+    )
+  endif ()
   install(TARGETS binjnes DESTINATION bin)
   target_copy_to_bin(binjnes)
 

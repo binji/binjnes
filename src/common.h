@@ -18,12 +18,20 @@
 extern "C" {
 #endif
 
-#if defined(__clang__) || defined(__GNUC__)
+#if defined(BINJNES_CLANG) || defined(BINJNES_GCC)
 #define UNLIKELY(x) __builtin_expect(!!(x), 0)
 #define LIKELY(x) __builtin_expect(!!(x), 1)
 #else
 #define UNLIKELY(x) (x)
 #define LIKELY(x) (x)
+#endif
+
+#if defined(BINJNES_CLANG) || defined(BINJNES_GCC)
+#define UNREACHABLE() __builtin_unreachable()
+#elif defined(BINJNES_MSVC)
+#define UNREACHABLE() __assume(0)
+#else
+#error "How to define unreachable on this compiler?"
 #endif
 
 #define ARRAY_SIZE(x) (sizeof(x) / sizeof((x)[0]))
@@ -59,7 +67,6 @@ extern "C" {
     fclose(f);                         \
   }                                    \
   return ERROR
-#define UNREACHABLE(...) PRINT_ERROR(__VA_ARGS__), exit(1)
 
 #define MAKE_RGBA(r, g, b, a)                                          \
   (((u32)(u8)(a) << 24) | ((u32)(u8)(b) << 16) | ((u32)(u8)(g) << 8) | \

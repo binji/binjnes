@@ -71,7 +71,7 @@ static u32 get_crc(u8 *buf, int len) {
 const CartDbInfo* cartdb_info_from_file(const FileData* file_data) {
   const size_t kHeaderSize = 16;
   const size_t kCartDbLength = ARRAY_SIZE(s_cart_db);
-  u32 crc = get_crc(file_data->data + kHeaderSize, file_data->size - kHeaderSize);
+  u32 crc = get_crc(file_data->data + kHeaderSize, (int)(file_data->size - kHeaderSize));
   const CartDbInfo* begin = &s_cart_db[0];
   const CartDbInfo* end = &s_cart_db[kCartDbLength];
   LOWER_BOUND(const CartDbInfo, found, begin, end, crc, GET_CRC, CMP_LT);
