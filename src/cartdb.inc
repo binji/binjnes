@@ -1901,7 +1901,7 @@
   /* S.C.A.T.: Special Cybernetic Attack Team */
   {.crc=0x74189E12, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Lagrange Point */
-  {.crc=0x743387FF, .board=BOARD_UNSUPPORTED, .mapper=85, .prg=32, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0x743387FF, .board=BOARD_MAPPER_85, .mapper=85, .prg=32, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Godzilla: Monster of Monsters! */
   {.crc=0x74386F15, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Hiryuu no Ken II: Dragon no Tsubasa */
@@ -3853,7 +3853,7 @@
   /* Cycle Race Roadman: Gekisou!! Nihon Isshuu 4000km */
   {.crc=0xE429F0D3, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Tiny Toon Adventures 2: Montana Land e Youkoso */
-  {.crc=0xE4362167, .board=BOARD_UNSUPPORTED, .mapper=85, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xE4362167, .board=BOARD_MAPPER_85, .mapper=85, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Casino Derby */
   {.crc=0xE44001D8, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Thomas The Tank Engine & Friends */

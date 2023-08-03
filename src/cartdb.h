@@ -40,6 +40,7 @@ typedef enum {
   BOARD_MAPPER_69 = 69,
   BOARD_MAPPER_71 = 71,
   BOARD_MAPPER_78 = 78,
+  BOARD_MAPPER_85 = 85,
   BOARD_MAPPER_87 = 87,
   BOARD_MAPPER_206 = 206,
 
@@ -79,6 +80,10 @@ typedef enum {
   // Mapper 78
   BOARD_HOLY_DIVER,
   BOARD_JF_16,
+
+  // Mapper 85
+  BOARD_VRC7A,
+  BOARD_VRC7B,
 } Board;
 
 typedef enum {

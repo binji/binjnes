@@ -2661,6 +2661,26 @@ static void mapper_vrc2_shared_write(E* e, u16 addr, u8 val) {
   }
 }
 
+static void vrc_irq_control_write(E* e, u8 val) {
+  M* m = &e->s.m;
+  m->vrc.irq_enable_after_ack = val & 1;
+  m->vrc.irq_enable = !!(val & 2);
+  m->vrc.irq_cycle_mode = !!(val & 4);
+  m->vrc.prescaler = 0;
+  if (m->vrc.irq_enable) {
+    m->vrc.irq_counter = m->vrc.irq_latch;
+  }
+  e->s.c.irq &= ~IRQ_MAPPER;
+  DEBUG("[%" PRIu64 "]: irq control=%02x\n", e->s.cy, val);
+}
+
+static void vrc_irq_ack_write(E* e, u8 val) {
+  M* m = &e->s.m;
+  e->s.c.irq &= ~IRQ_MAPPER;
+  m->vrc.irq_enable = m->vrc.irq_enable_after_ack;
+  DEBUG("[%" PRIu64 "]: irq ack\n", e->s.cy);
+}
+
 static void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
   M *m = &e->s.m;
   switch (addr) {
@@ -2687,21 +2707,11 @@ static void mapper_vrc4_shared_write(E* e, u16 addr, u8 val) {
       break;
 
     case 0xf002: // IRQ control
-      m->vrc.irq_enable_after_ack = val & 1;
-      m->vrc.irq_enable = !!(val & 2);
-      m->vrc.irq_cycle_mode = !!(val & 4);
-      m->vrc.prescaler = 0;
-      if (m->vrc.irq_enable) {
-        m->vrc.irq_counter = m->vrc.irq_latch;
-      }
-      e->s.c.irq &= ~IRQ_MAPPER;
-      DEBUG("[%" PRIu64 "]: irq control=%02x\n", e->s.cy, val);
+      vrc_irq_control_write(e, val);
       break;
 
     case 0xf003: // IRQ acknowledge
-      e->s.c.irq &= ~IRQ_MAPPER;
-      m->vrc.irq_enable = m->vrc.irq_enable_after_ack;
-      DEBUG("[%" PRIu64 "]: irq ack\n", e->s.cy);
+      vrc_irq_ack_write(e, val);
       break;
   }
 }
@@ -2749,6 +2759,13 @@ static void mapper25_write(E* e, u16 addr, u8 val) {
   } else {
     mapper_vrc4d_write(e, addr, val);
   }
+}
+
+static void vrc_irq_latch_write(E* e, u8 val) {
+  M* m = &e->s.m;
+  m->vrc.irq_latch = val;
+  DEBUG("[%" PRIu64 "]: irq latch=%u (%02x)\n", e->s.cy, m->vrc.irq_latch,
+        m->vrc.irq_latch);
 }
 
 static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
@@ -2841,27 +2858,15 @@ static void mapper_vrc6_shared_write(E* e, u16 addr, u8 val) {
       break;
 
     case 0xf000: // IRQ latch
-      m->vrc.irq_latch = val;
-      DEBUG("[%" PRIu64 "]: irq latch=%u (%02x)\n", e->s.cy, m->vrc.irq_latch,
-          m->vrc.irq_latch);
+      vrc_irq_latch_write(e, val);
       break;
 
     case 0xf001: // IRQ control
-      m->vrc.irq_enable_after_ack = val & 1;
-      m->vrc.irq_enable = !!(val & 2);
-      m->vrc.irq_cycle_mode = !!(val & 4);
-      m->vrc.prescaler = 0;
-      if (m->vrc.irq_enable) {
-        m->vrc.irq_counter = m->vrc.irq_latch;
-      }
-      e->s.c.irq &= ~IRQ_MAPPER;
-      DEBUG("[%" PRIu64 "]: irq control=%02x\n", e->s.cy, val);
+      vrc_irq_control_write(e, val);
       break;
 
     case 0xf002: // IRQ acknowledge
-      e->s.c.irq &= ~IRQ_MAPPER;
-      m->vrc.irq_enable = m->vrc.irq_enable_after_ack;
-      DEBUG("[%" PRIu64 "]: irq ack\n", e->s.cy);
+      vrc_irq_ack_write(e, val);
       break;
   }
 }
@@ -3147,6 +3152,68 @@ static void mapper78_write(E *e, u16 addr, u8 val) {
   } else {
     set_mirror(e, 2 + !((val >> 3) & 1));
   }
+}
+
+static void mapper_vrc7_shared_write(E *e, u16 addr, u8 val, u8 shift, u8 mask) {
+  M *m = &e->s.m;
+  u16 fix_addr = (addr & 0xf000) | ((addr >> shift) & mask);
+  switch (fix_addr) {
+    case 0x8000: // PRG 0 select
+      m->prg_bank[0] = val & 0x3f;
+      goto prg_select;
+
+    case 0x8001 ... 0x8002: // PRG 1 select
+      m->prg_bank[1] = val & 0x3f;
+      goto prg_select;
+
+    case 0x9000: // PRG 2 select
+      m->prg_bank[2] = val & 0x3f;
+      goto prg_select;
+
+    prg_select:
+      set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], m->prg_bank[2],
+                    e->ci.prg8k_banks - 1);
+      break;
+
+    case 0xa000 ... 0xdfff: {  // CHR 0..7 select
+      u8 select =
+          (((fix_addr >> 12) - 0xa) << 1) | (((fix_addr >> 1) | fix_addr) & 1);
+      m->chr_bank[select] = val;
+      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                    m->chr_bank[6], m->chr_bank[7]);
+      break;
+    }
+
+    case 0xe000: // Mirroring control
+      set_mirror(e, ((val & 3) + 2) & 3);
+      e->s.m.prg_ram_en = !!(val & 0x80);
+      break;
+
+    case 0xe001 ... 0xe002: // IRQ latch
+      vrc_irq_latch_write(e, val);
+      break;
+
+    case 0xf000: // IRQ control
+      vrc_irq_control_write(e, val);
+      break;
+
+    case 0xf001 ... 0xf002: // IRQ acknowledge
+      vrc_irq_ack_write(e, val);
+      break;
+  }
+}
+
+static void mapper_vrc7a_write(E *e, u16 addr, u8 val) {
+  return mapper_vrc7_shared_write(e, addr, val, 3, 1);
+}
+
+static void mapper_vrc7b_write(E *e, u16 addr, u8 val) {
+  return mapper_vrc7_shared_write(e, addr, val, 4, 1);
+}
+
+static void mapper85_write(E *e, u16 addr, u8 val) {
+  return mapper_vrc7_shared_write(e, addr, val, 3, 3);
 }
 
 static void mapper87_write(E *e, u16 addr, u8 val) {
@@ -4842,6 +4909,12 @@ static Result get_cart_info(E *e, const FileData *file_data) {
             case 3: ci->board = BOARD_HOLY_DIVER; break;
           }
           break;
+        case 85:
+          switch (submapper) {
+            case 1: ci->board = BOARD_VRC7B; break;
+            case 2: ci->board = BOARD_VRC7A; break;
+          }
+          break;
         default:
           ci->board = (Board)ci->mapper;
           break;
@@ -5200,6 +5273,23 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_85:
+    e->mapper_write = mapper85_write;
+    goto vrc7_shared;
+  case BOARD_VRC7A:
+    e->mapper_write = mapper_vrc7a_write;
+    goto vrc7_shared;
+  case BOARD_VRC7B:
+    e->mapper_write = mapper_vrc7b_write;
+    goto vrc7_shared;
+
+  vrc7_shared:
+    e->mapper_cpu_step = mapper_vrc_cpu_step;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
 
   case BOARD_MAPPER_87:
