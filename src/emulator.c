@@ -4788,7 +4788,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     u32 ines_chr8k_banks = file_data->data[5];
     u32 ines_data_size = (ines_prg16k_banks << 14) + (ines_chr8k_banks << 13);
 
-    u32 nes2_prg16k_banks = ((flag9 & 0xf) << 4) | file_data->data[4];
+    u32 nes2_prg16k_banks = ((flag9 & 0xf) << 8) | file_data->data[4];
     u32 nes2_chr8k_banks = (flag9 & 0xf0) | file_data->data[5];
     u32 nes2_data_size = (nes2_prg16k_banks << 14) + (nes2_chr8k_banks << 13);
     u32 nes2_prg_ram_banks = (64 << (file_data->data[10] & 0xf)) >> 13;
@@ -4964,7 +4964,7 @@ static Result init_mapper(E *e) {
   shared:
     set_mirror(e, e->ci.mirror);
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
-    set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
   case BOARD_MAPPER_4:
   case BOARD_TXROM_MMC3A:
