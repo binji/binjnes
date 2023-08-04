@@ -151,10 +151,17 @@ typedef struct {
       u16 prescaler;
       bool irq_enable, irq_enable_after_ack, irq_cycle_mode;
       u8 ppu_bank_style; // VRC6 only
-      // audio (VRC6 only)
-      u16x4 timer, period, seq, play_mask;
-      f32x4 sample, vol;
-      u8 duty[2], sawadd, sawaccum;
+
+      union {
+        struct {
+          u16x4 timer, period, seq, play_mask;
+          f32x4 sample, vol;
+          u8 duty[2], sawadd, sawaccum;
+        } a6;
+        struct {
+          // TODO
+        } a7;
+      };
       bool update_audio;
     } vrc;
 
