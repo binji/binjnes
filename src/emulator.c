@@ -1325,7 +1325,10 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         }
         if (!(val & 0x80)) { c->irq &= ~IRQ_DMC; }
         goto apu;
-      case 0x11: a->dmcout = val & 0x7f; goto apu;
+      case 0x11:
+        a->dmcout = val & 0x7f;
+        a->update = true;
+        goto apu;
       case 0x12: case 0x13: goto apu;
 
       case 0x15:
