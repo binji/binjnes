@@ -9,7 +9,12 @@
 #include <string.h>
 #include <inttypes.h>
 
-#ifndef _MSC_VER
+#if defined(BINJNES_MSVC)
+#define WIN32_LEAN_AND_MEAN
+#define NOMINMAX
+#include <windows.h>
+#undef ERROR
+#else
 #include <sys/time.h>
 #endif
 
@@ -79,8 +84,11 @@ void usage(int argc, char** argv) {
 
 static f64 get_time_sec(void) {
 #ifdef _MSC_VER
-  // TODO(binji): Windows equivalent of gettimeofday.
-  return 0;
+  // https://stackoverflow.com/a/34833160
+  LARGE_INTEGER fq, t;
+  QueryPerformanceFrequency(&fq);
+  QueryPerformanceCounter(&t);
+  return (f64)(1000000 * t.QuadPart) / (fq.QuadPart * 1000000.0);
 #else
   struct timeval tp;
   gettimeofday(&tp, NULL);
