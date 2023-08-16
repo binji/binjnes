@@ -161,6 +161,7 @@ typedef struct {
         } a6;
         struct {
           // TODO
+          u8 temp;
         } a7;
       };
       bool update_audio;

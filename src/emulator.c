@@ -916,10 +916,10 @@ static void apu_tick(E *e, u64 cy) {
         {0, 0, 0, LPF_DATA, 0},
     };
     static const alignas(16) u32x4 mask[4] = {
-        V128_MAKE_U32(~0, ~0, ~0, ~0),
-        V128_MAKE_U32( 0, ~0, ~0, ~0),
-        V128_MAKE_U32( 0,  0, ~0, ~0),
-        V128_MAKE_U32( 0,  0,  0, ~0),
+        {.au32 = { ~0, ~0, ~0, ~0 }},
+        {.au32 = {  0, ~0, ~0, ~0 }},
+        {.au32 = {  0,  0, ~0, ~0 }},
+        {.au32 = {  0,  0,  0, ~0 }},
     };
 
     assert(absize == ARRAY_SIZE(h[0]) - 4);
@@ -3222,7 +3222,7 @@ static void mapper_vrc7_shared_write(E *e, u16 addr, u8 val, u8 shift, u8 mask) 
       m->prg_bank[0] = val & 0x3f;
       goto prg_select;
 
-    case 0x8001 ... 0x8002: // PRG 1 select
+    case 0x8001: case 0x8002: // PRG 1 select
       m->prg_bank[1] = val & 0x3f;
       goto prg_select;
 
@@ -3235,22 +3235,12 @@ static void mapper_vrc7_shared_write(E *e, u16 addr, u8 val, u8 shift, u8 mask) 
                     e->ci.prg8k_banks - 1);
       break;
 
-    case 0xa000 ... 0xdfff: {  // CHR 0..7 select
-      u8 select =
-          (((fix_addr >> 12) - 0xa) << 1) | (((fix_addr >> 1) | fix_addr) & 1);
-      m->chr_bank[select] = val;
-      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
-                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
-                    m->chr_bank[6], m->chr_bank[7]);
-      break;
-    }
-
     case 0xe000: // Mirroring control
       set_mirror(e, ((val & 3) + 2) & 3);
       e->s.m.prg_ram_en = !!(val & 0x80);
       break;
 
-    case 0xe001 ... 0xe002: // IRQ latch
+    case 0xe001: case 0xe002: // IRQ latch
       vrc_irq_latch_write(e, val);
       break;
 
@@ -3258,8 +3248,19 @@ static void mapper_vrc7_shared_write(E *e, u16 addr, u8 val, u8 shift, u8 mask) 
       vrc_irq_control_write(e, val);
       break;
 
-    case 0xf001 ... 0xf002: // IRQ acknowledge
+    case 0xf001: case 0xf002: // IRQ acknowledge
       vrc_irq_ack_write(e, val);
+      break;
+
+    default:
+      if (addr >= 0xa000 && addr <= 0xdfff) {  // CHR 0..7 select
+        u8 select =
+            (((fix_addr >> 12) - 0xa) << 1) | (((fix_addr >> 1) | fix_addr) & 1);
+        m->chr_bank[select] = val;
+        set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                      m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                      m->chr_bank[6], m->chr_bank[7]);
+      }
       break;
   }
 }
