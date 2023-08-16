@@ -23,6 +23,9 @@
 #include "joypad.h"
 #include "options.h"
 
+#define STB_IMAGE_WRITE_IMPLEMENTATION
+#include "third_party/stb_image_write.h"
+
 #define AUDIO_FREQUENCY 44100
 /* This value is arbitrary. Why not 1/10th of a second? */
 #define AUDIO_FRAMES (AUDIO_FREQUENCY / 10)
@@ -31,10 +34,20 @@
 #define MAX_PROFILE_LIMIT 1000
 #define PPU_FRAME_TICKS 89342
 
+typedef enum {
+  OUTPUT_IMAGE_FORMAT_PPM,
+  OUTPUT_IMAGE_FORMAT_BMP,
+  OUTPUT_IMAGE_FORMAT_PNG,
+  OUTPUT_IMAGE_FORMAT_DETECT = -1,
+} OutputImageFormat;
+
+static const char* s_format_extension[] = {"ppm", "bmp", "png"};
+
 static const char* s_joypad_filename;
 static const char *s_joypad_movie_filename;
 static int s_frames = DEFAULT_FRAMES;
-static const char* s_output_ppm;
+static const char* s_output_image;
+static OutputImageFormat s_output_image_format = OUTPUT_IMAGE_FORMAT_DETECT;
 static const char* s_output_audio;
 static bool s_animate;
 static bool s_print_ops;
@@ -45,13 +58,12 @@ static const char* s_rom_filename;
 static u32 s_random_seed = 0xcabba6e5;
 static RGBAFrameBuffer s_frame_buffer;
 
-Result write_frame_ppm(Emulator* e, const char* filename) {
+Result write_ppm(const char* filename) {
   FILE* f = fopen(filename, "wb");
   CHECK_MSG(f, "unable to open file \"%s\".\n", filename);
   CHECK_MSG(fprintf(f, "P6\n%u %u\n255\n", SCREEN_WIDTH, SCREEN_HEIGHT) >= 0,
             "fprintf failed.\n");
   int x, y;
-  emulator_convert_frame_buffer(e, s_frame_buffer);
   RGBA* data = s_frame_buffer;
   for (y = 0; y < SCREEN_HEIGHT; ++y) {
     for (x = 0; x < SCREEN_WIDTH; ++x) {
@@ -66,18 +78,40 @@ Result write_frame_ppm(Emulator* e, const char* filename) {
   ON_ERROR_CLOSE_FILE_AND_RETURN;
 }
 
+Result write_frame_image(Emulator* e, const char* filename) {
+  emulator_convert_frame_buffer(e, s_frame_buffer);
+  switch (s_output_image_format) {
+    case OUTPUT_IMAGE_FORMAT_PPM:
+      return write_ppm(filename);
+    case OUTPUT_IMAGE_FORMAT_BMP:
+      CHECK_MSG(stbi_write_bmp(filename, SCREEN_WIDTH, SCREEN_HEIGHT, 4, s_frame_buffer) != 0, "writing bmp failed");
+      break;
+    case OUTPUT_IMAGE_FORMAT_PNG:
+      CHECK_MSG(stbi_write_png(filename, SCREEN_WIDTH, SCREEN_HEIGHT, 4, s_frame_buffer, SCREEN_WIDTH * 4) != 0, "writing png failed");
+      break;
+    case OUTPUT_IMAGE_FORMAT_DETECT:
+      UNREACHABLE();
+      return ERROR;
+  }
+  return OK;
+  ON_ERROR_RETURN;
+}
+
 void usage(int argc, char** argv) {
   static const char usage[] =
       "usage: %s [options] <in.nes>\n"
-      "  -h,--help                help\n"
-      "  -m,--movie FILE          read movie input from FILE\n"
-      "  -j,--joypad FILE         read joypad input from FILE\n"
-      "  -f,--frames N            run for N frames (default: %u)\n"
-      "  -o,--output FILE         output PPM file to FILE\n"
-      "     --output-audio FILE   output raw F32-LE audio to FILE\n"
-      "  -a,--animate             output an image every frame\n"
-      "  -s,--seed SEED           random seed used for initializing RAM\n"
-      "  -P,--palette PAL         use a builtin palette for DMG\n";
+      "  -h,--help                        help\n"
+      "  -m,--movie FILE                  read movie input from FILE\n"
+      "  -j,--joypad FILE                 read joypad input from FILE\n"
+      "  -f,--frames N                    run for N frames (default: %u)\n"
+      "  -o,--output FILE                 output image file to FILE\n"
+      "     --output-image-format FORMAT  ouptut format\n"
+      "     --output-audio FILE           output raw F32-LE audio to FILE\n"
+      "  -a,--animate                     output an image every frame\n"
+      "  -s,--seed SEED                   random seed used for initializing RAM\n"
+      "  -P,--palette PAL                 use a builtin palette for DMG\n";
+      "\n"
+      " FORMAT is 'ppm' (default), 'bmp', or 'png'\n";
 
   PRINT_ERROR(usage, argv[0], DEFAULT_FRAMES);
 }
@@ -103,6 +137,7 @@ void parse_options(int argc, char**argv) {
     {'j', "joypad", 1},
     {'f', "frames", 1},
     {'o', "output", 1},
+    {0,   "output-image-format", 1},
     {0,   "output-audio", 1},
     {'a', "animate", 0},
     {'s', "seed", 1},
@@ -148,9 +183,25 @@ void parse_options(int argc, char**argv) {
             s_frames = atoi(result.value);
             break;
 
-          case 'o':
-            s_output_ppm = result.value;
+          case 'o': {
+            s_output_image = result.value;
+            if (s_output_image_format == OUTPUT_IMAGE_FORMAT_DETECT) {
+              char* last_dot = strrchr(s_output_image, '.');
+              if (last_dot != NULL) {
+                for (int i = 0; i < ARRAY_SIZE(s_format_extension); ++i) {
+                  if (strcmp(last_dot + 1, s_format_extension[i]) == 0) {
+                    s_output_image_format = i;
+                    break;
+                  }
+                }
+              }
+              if (s_output_image_format == OUTPUT_IMAGE_FORMAT_DETECT) {
+                // Couldn't guess from extension, just go with ppm
+                s_output_image_format = OUTPUT_IMAGE_FORMAT_PPM;
+              }
+            }
             break;
+          }
 
           case 'a':
             s_animate = true;
@@ -163,6 +214,19 @@ void parse_options(int argc, char**argv) {
           default:
             if (strcmp(result.option->long_name, "output-audio") == 0) {
               s_output_audio = result.value;
+            } else if (strcmp(result.option->long_name, "output-image-format") == 0) {
+              bool found = false;
+              for (int i = 0; i < ARRAY_SIZE(s_format_extension); ++i) {
+                if (strcmp(result.value, s_format_extension[i]) == 0) {
+                  s_output_image_format = i;
+                  found = true;
+                  break;
+                }
+              }
+              if (!found) {
+                PRINT_ERROR("ERROR: invalid image format\n\n");
+                goto error;
+              }
             } else {
               abort();
             }
@@ -245,11 +309,11 @@ int main(int argc, char** argv) {
   while (true) {
     EmulatorEvent event = emulator_run_until(e, until_ticks);
     if (event & EMULATOR_EVENT_NEW_FRAME) {
-      if (s_output_ppm && s_animate) {
+      if (s_output_image && s_animate) {
         char buffer[32];
-        snprintf(buffer, sizeof(buffer), ".%08d.ppm", animation_frame++);
-        const char* result = replace_extension(s_output_ppm, buffer);
-        CHECK(SUCCESS(write_frame_ppm(e, result)));
+        snprintf(buffer, sizeof(buffer), ".%08d.%s", animation_frame++, s_format_extension[s_output_image_format]);
+        const char* result = replace_extension(s_output_image, buffer);
+        CHECK(SUCCESS(write_frame_image(e, result)));
         xfree((char*)result);
       }
 
@@ -289,8 +353,8 @@ int main(int argc, char** argv) {
   printf("time: nes=%.1fs host=%.1fs (%.1fx) (%.1fms/frame)\n", nes_time,
          host_time, nes_time / host_time, host_time * 1000 / s_frames);
 
-  if (s_output_ppm && !s_animate) {
-    CHECK(SUCCESS(write_frame_ppm(e, s_output_ppm)));
+  if (s_output_image && !s_animate) {
+    CHECK(SUCCESS(write_frame_image(e, s_output_image)));
   }
 
   result = 0;
