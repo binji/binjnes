@@ -837,6 +837,5 @@ sapp_desc sokol_main(int argc, char *argv[]) {
       .width = SCREEN_WIDTH * s_render_scale,
       .height = SCREEN_HEIGHT * s_render_scale,
       .window_title = "binjnes",
-      .win32_console_attach = true,
   };
 }
