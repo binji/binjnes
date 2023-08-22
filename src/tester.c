@@ -109,7 +109,7 @@ void usage(int argc, char** argv) {
       "     --output-audio FILE           output raw F32-LE audio to FILE\n"
       "  -a,--animate                     output an image every frame\n"
       "  -s,--seed SEED                   random seed used for initializing RAM\n"
-      "  -P,--palette PAL                 use a builtin palette for DMG\n";
+      "  -P,--palette PAL                 use a builtin palette for DMG\n"
       "\n"
       " FORMAT is 'ppm' (default), 'bmp', or 'png'\n";
 
@@ -188,7 +188,7 @@ void parse_options(int argc, char**argv) {
             if (s_output_image_format == OUTPUT_IMAGE_FORMAT_DETECT) {
               char* last_dot = strrchr(s_output_image, '.');
               if (last_dot != NULL) {
-                for (int i = 0; i < ARRAY_SIZE(s_format_extension); ++i) {
+                for (size_t i = 0; i < ARRAY_SIZE(s_format_extension); ++i) {
                   if (strcmp(last_dot + 1, s_format_extension[i]) == 0) {
                     s_output_image_format = i;
                     break;
@@ -216,7 +216,7 @@ void parse_options(int argc, char**argv) {
               s_output_audio = result.value;
             } else if (strcmp(result.option->long_name, "output-image-format") == 0) {
               bool found = false;
-              for (int i = 0; i < ARRAY_SIZE(s_format_extension); ++i) {
+              for (size_t i = 0; i < ARRAY_SIZE(s_format_extension); ++i) {
                 if (strcmp(result.value, s_format_extension[i]) == 0) {
                   s_output_image_format = i;
                   found = true;
