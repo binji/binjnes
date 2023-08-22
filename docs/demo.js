@@ -185,7 +185,7 @@ let vm = new Vue({
       return this.files.list.length == 0;
     },
     cantDownloadSave: function() {
-      return this.isFilesListEmpty || this.selectedFile.prgRam === undefined;
+      return this.isFilesListEmpty || (this.selectedFile && this.selectedFile.prgRam === undefined);
     },
     loadedFileName: function() {
       return this.loadedFile ? this.loadedFile.name : '';
@@ -315,6 +315,7 @@ let vm = new Vue({
         await tx.complete;
         this.files.list.push(data);
       }
+      this.files.list.sort((a, b) => a.name.localeCompare(b.name));
     },
     downloadSave: async function(file) {
       if (file.prgRam) {
@@ -385,6 +386,7 @@ let vm = new Vue({
       tx.objectStore('games').iterateCursor(cursor => {
         if (!cursor) return;
         this.files.list.push(cursor.value);
+        this.files.list.sort((a, b) => a.name.localeCompare(b.name));
         cursor.continue();
       });
       return tx.complete;
