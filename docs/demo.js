@@ -6,25 +6,15 @@
  */
 "use strict";
 
-const RESULT_OK = 0;
-const RESULT_ERROR = 1;
 const SCREEN_WIDTH = 256;
 const SCREEN_HEIGHT = 240;
 const AUDIO_FRAMES = 4096;
 const AUDIO_LATENCY_SEC = 0.1;
 const MAX_UPDATE_SEC = 5 / 60;
 const PPU_TICKS_PER_SECOND = 5369318;
-const EVENT_NEW_FRAME = 1;
-const EVENT_AUDIO_BUFFER_FULL = 2;
-const EVENT_UNTIL_TICKS = 4;
-const REWIND_FRAMES_PER_BASE_STATE = 45;
-const REWIND_BUFFER_CAPACITY = 4 * 1024 * 1024;
 const REWIND_FACTOR = 1.5;
 const REWIND_UPDATE_MS = 16;
 const GAMEPAD_POLLING_INTERVAL = 1000 / 60 / 4; // When activated, poll for gamepad input about ~4 times per frame (~240 times second)
-const CONTROLLER_JOYPAD = 0
-const CONTROLLER_ZAPPER = 1
-const CONTROLLER_SNES_MOUSE = 2
 
 // From FrakenGraphics, based on FBX Smooth:
 // https://www.patreon.com/posts/nes-palette-for-47391225
@@ -44,8 +34,7 @@ const NESPAL = [
 
 const $ = document.querySelector.bind(document);
 let emulator = null;
-
-const binjnesPromise = Binjnes();
+let emulatorWorker = new Worker('./worker.js');
 
 const dbPromise = idb.open('db', 1, upgradeDb => {
   const objectStore = upgradeDb.createObjectStore('games', {keyPath : 'sha1'});
@@ -250,6 +239,11 @@ let vm = new Vue({
       if (!this.loaded) return;
       this.paused = !this.paused;
     },
+    setVolume: function(event) {
+      if (!emulator) return;
+      this.volume = +event.target.value;
+      emulator.audio.updateVolume();
+    },
     rewindTo: function(event) {
       if (!emulator) return;
       emulator.rewindToTicks(+event.target.value);
@@ -269,7 +263,7 @@ let vm = new Vue({
       this.files.show = false;
       this.input.show = false;
       this.loadedFile = file;
-      Emulator.start(await binjnesPromise, romBuffer, prgRamBuffer);
+      Emulator.start(romBuffer, prgRamBuffer);
     },
     deleteFile: async function(file) {
       const db = await dbPromise;
@@ -347,7 +341,8 @@ let vm = new Vue({
     },
     updatePrgRam: async function() {
       if (!emulator) return;
-      const prgRamBlob = new Blob([emulator.getPrgRam()]);
+      const prgRamArrayBuffer = await emulator.getPrgRam();
+      const prgRamBlob = new Blob([prgRamArrayBuffer]);
       const imageDataURL = $('canvas').toDataURL();
       const db = await dbPromise;
       const tx = db.transaction('games', 'readwrite');
@@ -478,15 +473,13 @@ let vm = new Vue({
   }
 });
 
-function makeWasmBuffer(module, ptr, size) {
-  return new Uint8Array(module.HEAP8.buffer, ptr, size);
-}
-
 class Emulator {
-  static start(module, romBuffer, prgRamBuffer) {
-    Emulator.stop();
-    emulator = new Emulator(module, romBuffer, prgRamBuffer);
-    emulator.run();
+  static async start(romBuffer, prgRamBuffer) {
+    await Audio.maybeAddWorkletModule()
+    this.stop();
+    emulator = new Emulator(romBuffer, prgRamBuffer);
+    emulator.requestAnimationFrame();
+
   }
 
   static stop() {
@@ -496,76 +489,47 @@ class Emulator {
     }
   }
 
-  constructor(module, romBuffer, prgRamBuffer) {
-    this.module = module;
-    // Align size up to 32k.
-    const size = (romBuffer.byteLength + 0x7fff) & ~0x7fff;
-    this.romDataPtr = this.module._malloc(size);
-    makeWasmBuffer(this.module, this.romDataPtr, size)
-        .fill(0)
-        .set(new Uint8Array(romBuffer));
-    this.e = this.module._emulator_new_simple(
-        this.romDataPtr, size, Audio.ctx.sampleRate, AUDIO_FRAMES);
-    if (this.e == 0) {
-      throw new Error('Invalid ROM.');
-    }
-
-    this.audio = new Audio(module, this.e);
-    this.video = new Video(module, this.e, $('canvas'));
-    this.rewind = new Rewind(module, this.e);
+  constructor(romBuffer, prgRamBuffer) {
+    this.audio = new Audio();
+    this.video = new Video($('canvas'));
     this.rewindIntervalId = 0;
     this.gpId = -1;
     this.gpPrev = new Array(vm.input.length);
     this.gpIntervalId = 0;
-
     this.lastRafSec = 0;
-    this.leftoverTicks = 0;
+    this.isRewinding = false;
+    this.isRewindingToTicks = false;
+    this.ticks = 0;
     this.fps = 60;
-    this.mouseFracX = 0;
-    this.mouseFracY = 0;
+    this.rewind = {
+      oldestTicks: 0,
+      newestTicks: 0,
+      newestTicks: 0,
+    };
 
+    this.bindEvents();
+
+    const transfer = [romBuffer, this.audio.workletNode.port];
     if (prgRamBuffer) {
-      this.loadPrgRam(prgRamBuffer);
+      transfer.push(prgRamBuffer);
     }
-
-    this.bindKeys();
-    this.updateControllerType();
+    emulatorWorker.postMessage({
+        msg: 'start',
+        romBuffer,
+        prgRamBuffer,
+        AUDIO_FRAMES,
+        sampleRate: Audio.ctx.sampleRate,
+        inputTypes: vm.input.type,
+        port: this.audio.workletNode.port,
+      }, transfer);
   }
 
   destroy() {
-    this.unbindKeys();
+    emulatorWorker.postMessage({msg: 'stop'});
+    this.unbindEvents();
     this.releaseGamepad();
     this.cancelAnimationFrame();
     clearInterval(this.rewindIntervalId);
-    this.rewind.destroy();
-    this.module._emulator_delete(this.e);
-    this.module._free(this.romDataPtr);
-  }
-
-  withNewFileData(cb) {
-    const fileDataPtr = this.module._prg_ram_file_data_new(this.e);
-    const buffer = makeWasmBuffer(
-        this.module, this.module._get_file_data_ptr(fileDataPtr),
-        this.module._get_file_data_size(fileDataPtr));
-    const result = cb(fileDataPtr, buffer);
-    this.module._file_data_delete2(fileDataPtr);
-    return result;
-  }
-
-  loadPrgRam(prgRamBuffer) {
-    this.withNewFileData((fileDataPtr, buffer) => {
-      if (buffer.byteLength === prgRamBuffer.byteLength) {
-        buffer.set(new Uint8Array(prgRamBuffer));
-        this.module._emulator_read_prg_ram(this.e, fileDataPtr);
-      }
-    });
-  }
-
-  getPrgRam() {
-    return this.withNewFileData((fileDataPtr, buffer) => {
-      this.module._emulator_write_prg_ram(this.e, fileDataPtr);
-      return new Uint8Array(buffer);
-    });
   }
 
   get isPaused() {
@@ -589,26 +553,23 @@ class Emulator {
     }
   }
 
-  get isRewinding() {
-    return this.rewind.isRewinding;
-  }
-
   beginRewind() {
-    this.rewind.beginRewind();
+    this.isRewinding = true;
+    emulatorWorker.postMessage({msg: 'beginRewind'});
   }
 
   rewindToTicks(ticks) {
-    if (this.rewind.rewindToTicks(ticks)) {
-      this.runUntil(ticks);
-      this.video.renderTexture();
+    if (!this.isRewindingToTicks) {
+      emulatorWorker.postMessage({msg: 'rewindToTicks', ticks});
+      this.isRewindingToTicks = true;
     }
   }
 
   endRewind() {
-    this.rewind.endRewind();
+    emulatorWorker.postMessage({msg: 'endRewind'});
     this.lastRafSec = 0;
     this.leftoverTicks = 0;
-    this.audio.startSec = 0;
+    this.isRewinding = false;
   }
 
   set autoRewind(enabled) {
@@ -637,31 +598,19 @@ class Emulator {
     this.rafCancelToken = null;
   }
 
-  run() {
-    this.requestAnimationFrame();
+  setReset(active) {
+    emulatorWorker.postMessage({msg: 'setReset', active})
   }
 
-  get ticks() {
-    return this.module._emulator_get_ticks_f64(this.e);
-  }
-
-  runUntil(ticks) {
-    while (true) {
-      const event = this.module._emulator_run_until_f64(this.e, ticks);
-      if (event & EVENT_NEW_FRAME) {
-        this.rewind.pushBuffer();
-        this.video.uploadTexture();
-      }
-      if ((event & EVENT_AUDIO_BUFFER_FULL) && !this.isRewinding) {
-        this.audio.pushBuffer();
-      }
-      if (event & EVENT_UNTIL_TICKS) {
-        break;
-      }
+  async getPrgRam() {
+    if (this.getPrgRamPromise !== null) {
+      return this.getPrgRamPromise;
     }
-    if (this.module._emulator_was_prg_ram_updated(this.e)) {
-      vm.prgRamUpdated = true;
-    }
+    emulatorWorker.postMessage({msg: 'getPrgRam'})
+    this.getPrgRamPromise = new Promise(resolve => {
+      this.resolveGetPrgRam = resolve;
+    });
+    return this.getPrgRamPromise;
   }
 
   rafCallback(startMs) {
@@ -670,61 +619,56 @@ class Emulator {
     if (!this.isRewinding) {
       const startSec = startMs / 1000;
       deltaSec = Math.max(startSec - (this.lastRafSec || startSec), 0);
-      const startTicks = this.ticks;
-      const deltaTicks =
-          Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
-      const runUntilTicks = (startTicks + deltaTicks - this.leftoverTicks);
-      this.runUntil(runUntilTicks);
-      this.leftoverTicks = (this.ticks - runUntilTicks) | 0;
       this.lastRafSec = startSec;
+      const startTicks = this.ticks;
+      const deltaTicks = Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
+      const runUntilTicks = startTicks + deltaTicks - this.leftoverTicks;
+      emulatorWorker.postMessage({msg: 'runUntil', ticks})
     }
-    const lerp = (from, to, alpha) => (alpha * from) + (1 - alpha) * to;
+    const lerp = (from, to, alpha) => alpha * from + (1 - alpha) * to;
     this.fps = lerp(this.fps, Math.min(1 / deltaSec, 10000), 0.3);
-    this.video.renderTexture();
-  }
-
-  setReset(active) {
-    this.module._emulator_set_reset(this.e, active);
   }
 
   updateControllerType() {
-    for (let i = 0; i < 2; ++i) {
-      let type;
-      switch (vm.input.type[i]) {
-        default: case 'joypad': type = CONTROLLER_JOYPAD; break;
-        case 'zapper': type = CONTROLLER_ZAPPER; break;
-        case 'snesmouse': type = CONTROLLER_SNES_MOUSE; break;
-      }
-      this.module._set_controller_type(this.e, i, type);
+    emulatorWorker.postMessage({msg: 'updateControllerType', inputType: vm.input.type})
+  }
+
+  workerMessageEvent(e) {
+    switch (e.data.msg) {
+      case 'uploadTexture':
+        this.video.uploadTexture(e.data.buffer);
+        break;
+      case 'getPrgRam:result':
+        this.resolveGetPrgRam(e.data.buffer)
+        this.getPrgRamPromise = null;
+        break;
+      case 'runUntil:result':
+        this.ticks = e.data.ticks;
+        vm.prgRamUpdated = e.data.prgRamUpdated;
+        this.leftoverTicks = e.data.leftoverTicks;
+        this.video.renderTexture();
+        break;
+      case 'rewindToTicks:result':
+        this.ticks = e.data.ticks;
+        this.video.renderTexture();
+        this.isRewindingToTicks = false;
+        break;
+      case 'rewindStatus':
+        this.rewind.oldestTicks = e.data.oldestTicks;
+        this.rewind.newestTicks = e.data.newestTicks;
+        break;
     }
   }
 
-  bindKeys() {
-    this.keyFuncs = [  // Order matches input.list
-      this.module._set_joyp_up.bind(null, this.e, 0),
-      this.module._set_joyp_down.bind(null, this.e, 0),
-      this.module._set_joyp_left.bind(null, this.e, 0),
-      this.module._set_joyp_right.bind(null, this.e, 0),
-      this.module._set_joyp_B.bind(null, this.e, 0),
-      this.module._set_joyp_A.bind(null, this.e, 0),
-      this.module._set_joyp_start.bind(null, this.e, 0),
-      this.module._set_joyp_select.bind(null, this.e, 0),
-      this.module._set_joyp_up.bind(null, this.e, 1),
-      this.module._set_joyp_down.bind(null, this.e, 1),
-      this.module._set_joyp_left.bind(null, this.e, 1),
-      this.module._set_joyp_right.bind(null, this.e, 1),
-      this.module._set_joyp_B.bind(null, this.e, 1),
-      this.module._set_joyp_A.bind(null, this.e, 1),
-      this.module._set_joyp_start.bind(null, this.e, 1),
-      this.module._set_joyp_select.bind(null, this.e, 1),
-      this.keyRewind.bind(this),
-      this.keyPause.bind(this),
-    ];
+  bindEvents() {
+    this.boundWorkerMessage = this.workerMessageEvent.bind(this);
     this.boundKeyDown = this.keyEvent.bind(this, true);
     this.boundKeyUp = this.keyEvent.bind(this, false);
     this.boundGamepadConnected = this.gamepadEvent.bind(this, true);
     this.boundGamepadDisconnected = this.gamepadEvent.bind(this, false);
     this.boundMouseEvent = this.mouseEvent.bind(this);
+
+    emulatorWorker.addEventListener('message', this.boundWorkerMessage);
 
     window.addEventListener('keydown', this.boundKeyDown);
     window.addEventListener('keyup', this.boundKeyUp);
@@ -741,7 +685,8 @@ class Emulator {
     canvas.addEventListener('mouseenter', this.boundMouseEvent, false);
   }
 
-  unbindKeys() {
+  unbindEvents() {
+    emulatorWorker.removeEventListener('message', this.boundWorkerMessage);
     window.removeEventListener('keydown', this.boundKeyDown);
     window.removeEventListener('keyup', this.boundKeyUp);
     window.removeEventListener('gamepadconnected', this.boundGamepadConnected);
@@ -757,7 +702,12 @@ class Emulator {
         let option = options[j];
         if (option && option.type === 'key' && event.code === option.code) {
           event.preventDefault();
-          return this.keyFuncs[i](isKeyDown);
+          switch (inputList[i].name) {
+            case 'Rewind': this.keyRewind(isKeyDown); break;
+            case 'Pause': this.keyPause(isKeyDown); break;
+            default: emulatorWorker.postMessage({msg: 'key', index: i, keyDown: isKeyDown}); break;
+          }
+          return;
         }
       }
     }
@@ -847,7 +797,7 @@ class Emulator {
           }
         }
         if (this.gpPrev[i] !== isDown) {
-          this.keyFuncs[i](isDown);
+          emulatorWorker.postMessage({msg: 'key', index: i, keyDown: isDown});
           this.gpPrev[i] = isDown;
         }
       }
@@ -864,7 +814,7 @@ class Emulator {
           const x = this.video.el.width * (event.offsetX / rect.width);
           const y = this.video.el.height * (event.offsetY / rect.height);
           const trigger = event.buttons & 1;
-          this.module._set_zapper(this.e, i, x, y, trigger);
+          emulatorWorker.postMessage({msg: 'zapper', index: i, x, y, trigger});
           break;
         case 'snesmouse':
           if (!this.isPaused && event.type === 'mousedown') {
@@ -877,10 +827,9 @@ class Emulator {
           const idy = Math.trunc(dy);
           this.mouseFracX = dx - idx;
           this.mouseFracY = dy - idy;
-          this.module._add_snesmouse_delta(this.e, i, idx, idy);
           const lmb = event.buttons & 1;
           const rmb = (event.buttons >> 1) & 1;
-          this.module._set_snesmouse_buttons(this.e, i, lmb, rmb);
+          emulatorWorker.postMessage({msg: 'snesmouse', index: i, idx, idy, lmb, rmb});
           break;
       }
     }
@@ -889,40 +838,33 @@ class Emulator {
 }
 
 class Audio {
-  constructor(module, e) {
-    this.module = module;
-    this.buffer = new Float32Array(module.HEAP8.buffer,
-      this.module._get_audio_buffer_ptr(e),
-      this.module._get_audio_buffer_capacity(e));
-    this.startSec = 0;
+  static ctx = new AudioContext;
+  static addedModule = false;
+
+  static async maybeAddWorkletModule() {
+    if (!this.addedModule) {
+      await Audio.ctx.audioWorklet.addModule('./audioWorklet.js');
+      this.addedModule = true;
+    }
+  }
+
+  constructor() {
     this.resume();
+    this.workletNode = new AudioWorkletNode(Audio.ctx, 'processor', {
+      numberOfInputs: 0,
+      numberOfOutputs: 1,
+      outputChannelCount: [1],
+    });
+    this.gainNode = Audio.ctx.createGain(this.volume, Audio.ctx.currentTime);
+    this.workletNode.connect(this.gainNode);
+    this.gainNode.connect(Audio.ctx.destination);
+    this.updateVolume();
   }
 
   get sampleRate() { return Audio.ctx.sampleRate; }
 
-  pushBuffer() {
-    const nowSec = Audio.ctx.currentTime;
-    const nowPlusLatency = nowSec + AUDIO_LATENCY_SEC;
-    const volume = vm.volume;
-    this.startSec = (this.startSec || nowPlusLatency);
-    if (this.startSec >= nowSec) {
-      const buffer = Audio.ctx.createBuffer(1, AUDIO_FRAMES, this.sampleRate);
-      const channel = buffer.getChannelData(0);
-      for (let i = 0; i < AUDIO_FRAMES; i++) {
-        channel[i] = this.buffer[i] * volume;
-      }
-      const bufferSource = Audio.ctx.createBufferSource();
-      bufferSource.buffer = buffer;
-      bufferSource.connect(Audio.ctx.destination);
-      bufferSource.start(this.startSec);
-      const bufferSec = AUDIO_FRAMES / this.sampleRate;
-      this.startSec += bufferSec;
-    } else {
-      console.log(
-          'Resetting audio (' + this.startSec.toFixed(2) + ' < ' +
-          nowSec.toFixed(2) + ')');
-      this.startSec = nowPlusLatency;
-    }
+  updateVolume() {
+     this.gainNode.gain.setValueAtTime(vm.volume, Audio.ctx.currentTime);
   }
 
   pause() {
@@ -934,11 +876,8 @@ class Audio {
   }
 }
 
-Audio.ctx = new AudioContext;
-
 class Video {
-  constructor(module, e, el) {
-    this.module = module;
+  constructor(el) {
     this.el = el;
     try {
       this.renderer = new WebGLRenderer(el);
@@ -946,13 +885,10 @@ class Video {
       console.log(`Error creating WebGLRenderer: ${error}`);
       this.renderer = new Canvas2DRenderer(el);
     }
-    this.buffer = new Uint16Array(module.HEAP16.buffer,
-      this.module._get_frame_buffer_ptr(e),
-      this.module._get_frame_buffer_size(e) >> 1);
   }
 
-  uploadTexture() {
-    this.renderer.uploadTexture(this.buffer);
+  uploadTexture(buffer) {
+    this.renderer.uploadTexture(buffer);
   }
 
   renderTexture() {
@@ -1073,59 +1009,5 @@ class WebGLRenderer {
     this.gl.texSubImage2D(
         this.gl.TEXTURE_2D, 0, 0, 0, SCREEN_WIDTH, SCREEN_HEIGHT,
         this.gl.RED_INTEGER, this.gl.UNSIGNED_SHORT, buffer);
-  }
-}
-
-class Rewind {
-  constructor(module, e) {
-    this.module = module;
-    this.e = e;
-    this.joypadPtr = this.module._joypad_new_simple(this.e);
-    this.statePtr = 0;
-    this.bufferPtr = this.module._rewind_new_simple(
-        e, REWIND_FRAMES_PER_BASE_STATE, REWIND_BUFFER_CAPACITY);
-  }
-
-  destroy() {
-    this.module._rewind_delete(this.bufferPtr);
-    this.module._joypad_delete(this.joypadPtr);
-  }
-
-  get oldestTicks() {
-    return this.module._rewind_get_oldest_ticks_f64(this.bufferPtr);
-  }
-
-  get newestTicks() {
-    return this.module._rewind_get_newest_ticks_f64(this.bufferPtr);
-  }
-
-  pushBuffer() {
-    if (!this.isRewinding) {
-      this.module._rewind_append(this.bufferPtr, this.e);
-    }
-  }
-
-  get isRewinding() {
-    return this.statePtr !== 0;
-  }
-
-  beginRewind() {
-    if (this.isRewinding) return;
-    this.statePtr =
-        this.module._rewind_begin(this.e, this.bufferPtr, this.joypadPtr);
-    this.module._joypad_begin_rewind_playback(this.joypadPtr);
-  }
-
-  rewindToTicks(ticks) {
-    if (!this.isRewinding) return;
-    return this.module._rewind_to_ticks_wrapper(this.statePtr, ticks) ===
-        RESULT_OK;
-  }
-
-  endRewind() {
-    if (!this.isRewinding) return;
-    this.module._joypad_end_rewind_playback(this.joypadPtr);
-    this.module._rewind_end(this.statePtr);
-    this.statePtr = 0;
   }
 }
