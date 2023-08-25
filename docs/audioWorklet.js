@@ -1,3 +1,5 @@
+const MAX_QUEUE_LENGTH = 3;
+
 class Processor extends AudioWorkletProcessor {
     constructor(options) {
         super(options)
@@ -9,6 +11,10 @@ class Processor extends AudioWorkletProcessor {
 
     onmessage(e) {
         const buffer = e.data;
+        if (this.queue.length > MAX_QUEUE_LENGTH) {
+            this.queue.shift();
+            this.srcOffset = 0;
+        }
         this.queue.push(buffer);
     }
 

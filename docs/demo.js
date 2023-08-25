@@ -14,6 +14,8 @@ const MAX_UPDATE_SEC = 5 / 60;
 const PPU_TICKS_PER_SECOND = 5369318;
 const REWIND_FACTOR = 1.5;
 const REWIND_UPDATE_MS = 16;
+const FAST_FORWARD_FACTOR = 2.0;
+const FAST_FORWARD_UPDATE_MS = 16;
 const GAMEPAD_POLLING_INTERVAL = 1000 / 60 / 4; // When activated, poll for gamepad input about ~4 times per frame (~240 times second)
 
 // From FrakenGraphics, based on FBX Smooth:
@@ -96,6 +98,7 @@ let data = {
       {name: 'P1 START', options:[key('KeyO'), null, null]},
       {name: 'P1 SELECT', options:[key('KeyI'), null, null]},
       {name: 'Rewind', options:[key('Backspace'), gpbutton(7), null]},
+      {name: 'FastForward', options:[key('ShiftLeft'), null, null]},
       {name: 'Pause', options:[key('Space'), null, null]},
     ],
     setting: false,
@@ -493,6 +496,7 @@ class Emulator {
     this.audio = new Audio();
     this.video = new Video($('canvas'));
     this.rewindIntervalId = 0;
+    this.fastForwardIntervalId = 0;
     this.gpId = -1;
     this.gpPrev = new Array(vm.input.length);
     this.gpIntervalId = 0;
@@ -529,7 +533,8 @@ class Emulator {
     this.unbindEvents();
     this.releaseGamepad();
     this.cancelAnimationFrame();
-    clearInterval(this.rewindIntervalId);
+    this.autoRewind = false;
+    this.autoFastForward = false;
   }
 
   get isPaused() {
@@ -581,11 +586,25 @@ class Emulator {
             REWIND_FACTOR * REWIND_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
         const rewindTo = Math.max(oldest, start - delta);
         this.rewindToTicks(rewindTo);
-        vm.ticks = emulator.ticks;
       }, REWIND_UPDATE_MS);
     } else {
       clearInterval(this.rewindIntervalId);
       this.rewindIntervalId = 0;
+    }
+  }
+
+  set autoFastForward(enabled) {
+    if (enabled) {
+      this.isFastForwarding = true;
+      this.fastForwardIntervalId = setInterval(() => {
+        const delta =
+            FAST_FORWARD_FACTOR * FAST_FORWARD_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
+        this.runUntil(this.ticks + delta);
+      }, FAST_FORWARD_UPDATE_MS);
+    } else {
+      clearInterval(this.fastForwardIntervalId);
+      this.fastForwardIntervalId = 0;
+      this.isFastForwarding = false;
     }
   }
 
@@ -596,6 +615,10 @@ class Emulator {
   cancelAnimationFrame() {
     cancelAnimationFrame(this.rafCancelToken);
     this.rafCancelToken = null;
+  }
+
+  runUntil(ticks) {
+    emulatorWorker.postMessage({msg: 'runUntil', ticks})
   }
 
   setReset(active) {
@@ -623,7 +646,7 @@ class Emulator {
       const startTicks = this.ticks;
       const deltaTicks = Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
       const runUntilTicks = startTicks + deltaTicks - this.leftoverTicks;
-      emulatorWorker.postMessage({msg: 'runUntil', ticks})
+      this.runUntil(runUntilTicks);
     }
     const lerp = (from, to, alpha) => alpha * from + (1 - alpha) * to;
     this.fps = lerp(this.fps, Math.min(1 / deltaSec, 10000), 0.3);
@@ -644,12 +667,14 @@ class Emulator {
         break;
       case 'runUntil:result':
         this.ticks = e.data.ticks;
+        vm.ticks = emulator.ticks;
         vm.prgRamUpdated = e.data.prgRamUpdated;
         this.leftoverTicks = e.data.leftoverTicks;
         this.video.renderTexture();
         break;
       case 'rewindToTicks:result':
         this.ticks = e.data.ticks;
+        vm.ticks = emulator.ticks;
         this.video.renderTexture();
         this.isRewindingToTicks = false;
         break;
@@ -704,6 +729,7 @@ class Emulator {
           event.preventDefault();
           switch (inputList[i].name) {
             case 'Rewind': this.keyRewind(isKeyDown); break;
+            case 'FastForward': this.keyFastForward(isKeyDown); break;
             case 'Pause': this.keyPause(isKeyDown); break;
             default: emulatorWorker.postMessage({msg: 'key', index: i, keyDown: isKeyDown}); break;
           }
@@ -718,10 +744,28 @@ class Emulator {
     if (this.isRewinding !== isKeyDown) {
       if (isKeyDown) {
         vm.paused = true;
+        this.isFastForwarding = false;
         this.autoRewind = true;
       } else {
         this.autoRewind = false;
         vm.paused = false;
+      }
+    }
+  }
+
+  keyFastForward(isKeyDown) {
+    if (!vm.inputAllowed) return;
+    if (this.isFastForwarding !== isKeyDown) {
+      if (isKeyDown) {
+        console.log('fast forwarding...');
+        vm.paused = false;
+        this.autoRewind = false;
+        this.cancelAnimationFrame();
+        this.autoFastForward = true;
+      } else {
+        console.log('end fast forwarding...');
+        this.requestAnimationFrame();
+        this.autoFastForward = false;
       }
     }
   }
@@ -843,7 +887,7 @@ class Audio {
 
   static async maybeAddWorkletModule() {
     if (!this.addedModule) {
-      await Audio.ctx.audioWorklet.addModule('./audioWorklet.js');
+      await Audio.ctx.audioWorklet.addModule('./audioWorklet.js?t=7');
       this.addedModule = true;
     }
   }

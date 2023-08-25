@@ -93,7 +93,6 @@ class Emulator {
         }
 
         this.rewind = new Rewind(module, this.e);
-        this.rewindIntervalId = 0;
         this.mouseFracX = 0;
         this.mouseFracY = 0;
 
@@ -179,8 +178,8 @@ class Emulator {
         ticks = Math.min(Math.max(ticks, this.rewind.oldestTicks), this.rewind.newestTicks);
         if (this.rewind.rewindToTicks(ticks)) {
             this.runUntil(ticks);
-            self.postMessage({msg: 'rewindToTicks:result', ticks: this.ticks});
         }
+        self.postMessage({msg: 'rewindToTicks:result', ticks: this.ticks});
     }
 
     endRewind() {
