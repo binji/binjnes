@@ -219,28 +219,24 @@ let vm = new Vue({
       },
     },
   },
-  watch: {
-    paused: function(newPaused, oldPaused) {
+  methods: {
+    toggleFullscreen: function() { $('canvas').requestFullscreen(); },
+    setPaused(newPaused) {
       if (!emulator) return;
-      if (newPaused == oldPaused) return;
+      if (newPaused == this.paused) return;
       if (newPaused) {
         emulator.pause();
-        this.updateTicks();
-        this.rewind.minTicks = emulator.rewind.oldestTicks;
-        this.rewind.maxTicks = emulator.rewind.newestTicks;
       } else {
         emulator.resume();
       }
+      this.paused = newPaused;
     },
-  },
-  methods: {
-    toggleFullscreen: function() { $('canvas').requestFullscreen(); },
     updateTicks: function() {
       this.ticks = emulator.ticks;
     },
     togglePause: function() {
       if (!this.loaded) return;
-      this.paused = !this.paused;
+      this.setPaused(!this.paused);
     },
     setVolume: function(event) {
       if (!emulator) return;
@@ -250,7 +246,6 @@ let vm = new Vue({
     rewindTo: function(event) {
       if (!emulator) return;
       emulator.rewindToTicks(+event.target.value);
-      this.updateTicks();
     },
     selectFile: function(index) {
       this.files.selected = index;
@@ -260,7 +255,7 @@ let vm = new Vue({
         readFile(file.rom),
         file.prgRam ? readFile(file.prgRam) : Promise.resolve(null)
       ]);
-      this.paused = false;
+      this.setPaused(false);
       this.loaded = true;
       this.canvas.show = true;
       this.files.show = false;
@@ -282,7 +277,7 @@ let vm = new Vue({
       if (this.loadedFile && this.loadedFile.sha1 === file.sha1) {
         this.loaded = false;
         this.loadedFile = null;
-        this.paused = true;
+        this.setPaused(true);
         this.canvas.show = false;
         Emulator.stop();
       }
@@ -363,14 +358,14 @@ let vm = new Vue({
       this.files.show = !this.files.show;
       if (this.files.show) {
         this.input.show = false;
-        this.paused = true;
+        this.setPaused(this.paused);
       }
     },
     toggleInputDialog: function() {
       this.input.show = !this.input.show;
       if (this.input.show) {
         this.files.show = false;
-        this.paused = true;
+        this.setPaused(paused);
       }
     },
     reset: function(active) {
@@ -476,6 +471,11 @@ let vm = new Vue({
   }
 });
 
+const EMULATOR_STATE_PAUSE = 0
+const EMULATOR_STATE_RUN = 1
+const EMULATOR_STATE_AUTO_REWIND = 2
+const EMULATOR_STATE_AUTO_FAST_FORWARD = 3
+
 class Emulator {
   static async start(romBuffer, prgRamBuffer) {
     await Audio.maybeAddWorkletModule()
@@ -495,21 +495,30 @@ class Emulator {
   constructor(romBuffer, prgRamBuffer) {
     this.audio = new Audio();
     this.video = new Video($('canvas'));
-    this.rewindIntervalId = 0;
-    this.fastForwardIntervalId = 0;
-    this.gpId = -1;
-    this.gpPrev = new Array(vm.input.length);
-    this.gpIntervalId = 0;
+    this.state = EMULATOR_STATE_RUN;
+    this.lastState = EMULATOR_STATE_RUN;
+    this.intervalId = 0;
+    this.rafCancelToken = null;
     this.lastRafSec = 0;
-    this.isRewinding = false;
     this.isRewindingToTicks = false;
     this.ticks = 0;
     this.fps = 60;
+    this.gpId = -1;
+    this.gpPrev = new Array(vm.input.length);
+    this.gpIntervalId = 0;
     this.rewind = {
       oldestTicks: 0,
       newestTicks: 0,
       newestTicks: 0,
     };
+    this.getPrgRamPromise = null;
+    this.resolveGetPrgRam = null;
+    this.boundWorkerMessage = null;
+    this.boundKeyDown = null;
+    this.boundKeyUp = null;
+    this.boundGamepadConnected = null;
+    this.boundGamepadDisconnected = null;
+    this.boundMouseEvent = null;
 
     this.bindEvents();
 
@@ -533,88 +542,130 @@ class Emulator {
     this.unbindEvents();
     this.releaseGamepad();
     this.cancelAnimationFrame();
-    this.autoRewind = false;
-    this.autoFastForward = false;
+    this.clearInterval();
   }
 
   get isPaused() {
-    return this.rafCancelToken === null;
+    return this.state === EMULATOR_STATE_PAUSE;
   }
 
-  pause() {
-    if (!this.isPaused) {
-      this.cancelAnimationFrame();
-      this.audio.pause();
-      this.beginRewind();
-      document.exitPointerLock();
-    }
+  get isAutoRewinding() {
+    return this.state === EMULATOR_STATE_AUTO_REWIND;
   }
 
-  resume() {
-    if (this.isPaused) {
-      this.endRewind();
-      this.requestAnimationFrame();
-      this.audio.resume();
+  get isAutoFastForwarding() {
+    return this.state === EMULATOR_STATE_AUTO_FAST_FORWARD;
+  }
+
+  setState(newState) {
+    if (this.state === newState) return;
+    this.cancelAnimationFrame();
+    switch (this.state) {
+      case EMULATOR_STATE_PAUSE:
+        this.endRewind();
+        vm.paused = false;
+        break;
+      case EMULATOR_STATE_RUN:
+        break;
+      case EMULATOR_STATE_AUTO_REWIND:
+        this.endRewind();
+        this.clearInterval();
+        break;
+      case EMULATOR_STATE_AUTO_FAST_FORWARD:
+        this.clearInterval();
+        break;
     }
+    switch (newState) {
+      case EMULATOR_STATE_PAUSE:
+        this.beginRewind();
+        this.audio.pause();
+        document.exitPointerLock();
+        vm.paused = true;
+        break;
+      case EMULATOR_STATE_RUN:
+        this.requestAnimationFrame();
+        this.audio.resume();
+        break;
+      case EMULATOR_STATE_AUTO_REWIND:
+        this.autoRewindInterval();
+        this.beginRewind();
+        this.intervalId = setInterval(this.autoRewindInterval.bind(this), REWIND_UPDATE_MS);
+        break;
+      case EMULATOR_STATE_AUTO_FAST_FORWARD:
+        this.autoFastForwardInterval();
+        this.intervalId = setInterval(this.autoFastForwardInterval.bind(this), FAST_FORWARD_UPDATE_MS);
+        break;
+    }
+    this.lastState = this.state;
+    this.state = newState;
+  }
+
+  clearInterval() {
+    clearInterval(this.intervalId);
+    this.intervalId = 0;
   }
 
   beginRewind() {
-    this.isRewinding = true;
     emulatorWorker.postMessage({msg: 'beginRewind'});
-  }
-
-  rewindToTicks(ticks) {
-    if (!this.isRewindingToTicks) {
-      emulatorWorker.postMessage({msg: 'rewindToTicks', ticks});
-      this.isRewindingToTicks = true;
-    }
   }
 
   endRewind() {
     emulatorWorker.postMessage({msg: 'endRewind'});
     this.lastRafSec = 0;
     this.leftoverTicks = 0;
-    this.isRewinding = false;
   }
 
-  set autoRewind(enabled) {
-    if (enabled) {
-      this.rewindIntervalId = setInterval(() => {
-        const oldest = this.rewind.oldestTicks;
-        const start = this.ticks;
-        const delta =
-            REWIND_FACTOR * REWIND_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
-        const rewindTo = Math.max(oldest, start - delta);
-        this.rewindToTicks(rewindTo);
-      }, REWIND_UPDATE_MS);
-    } else {
-      clearInterval(this.rewindIntervalId);
-      this.rewindIntervalId = 0;
+  pause() {
+    this.setState(EMULATOR_STATE_PAUSE);
+  }
+
+  resume() {
+    this.setState(EMULATOR_STATE_RUN);
+  }
+
+  beginAutoRewind() {
+    this.setState(EMULATOR_STATE_AUTO_REWIND);
+  }
+
+  endAutoRewind() {
+    const newState =
+      this.lastState === EMULATOR_STATE_PAUSE || this.lastState === EMULATOR_STATE_RUN
+      ? this.lastState
+      : EMULATOR_STATE_RUN
+    this.setState(newState);
+  }
+
+  beginAutoFastForward() {
+    this.setState(EMULATOR_STATE_AUTO_FAST_FORWARD);
+  }
+
+  endAutoFastForward() {
+    const newState =
+      this.lastState === EMULATOR_STATE_PAUSE || this.lastState === EMULATOR_STATE_RUN
+      ? this.lastState
+      : EMULATOR_STATE_RUN
+    this.setState(newState);
+  }
+
+  autoRewindInterval() {
+    const oldest = this.rewind.oldestTicks;
+    const start = this.ticks;
+    const delta = REWIND_FACTOR * REWIND_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
+    const rewindTo = Math.max(oldest, start - delta);
+    this.rewindToTicks(rewindTo);
+  }
+
+  autoFastForwardInterval() {
+    const delta = FAST_FORWARD_FACTOR * FAST_FORWARD_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
+    this.runUntil(this.ticks + delta);
+  }
+
+  rewindToTicks(ticks) {
+    if (!this.isPaused && !this.isAutoRewinding) return;
+    if (!this.isRewindingToTicks) {
+      emulatorWorker.postMessage({msg: 'rewindToTicks', ticks});
+      this.isRewindingToTicks = true;
     }
-  }
-
-  set autoFastForward(enabled) {
-    if (enabled) {
-      this.isFastForwarding = true;
-      this.fastForwardIntervalId = setInterval(() => {
-        const delta =
-            FAST_FORWARD_FACTOR * FAST_FORWARD_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
-        this.runUntil(this.ticks + delta);
-      }, FAST_FORWARD_UPDATE_MS);
-    } else {
-      clearInterval(this.fastForwardIntervalId);
-      this.fastForwardIntervalId = 0;
-      this.isFastForwarding = false;
-    }
-  }
-
-  requestAnimationFrame() {
-    this.rafCancelToken = requestAnimationFrame(this.rafCallback.bind(this));
-  }
-
-  cancelAnimationFrame() {
-    cancelAnimationFrame(this.rafCancelToken);
-    this.rafCancelToken = null;
   }
 
   runUntil(ticks) {
@@ -636,18 +687,27 @@ class Emulator {
     return this.getPrgRamPromise;
   }
 
+  requestAnimationFrame() {
+    this.rafCancelToken = requestAnimationFrame(this.rafCallback.bind(this));
+  }
+
+  cancelAnimationFrame() {
+    if (this.rafCancelToken !== null) {
+      cancelAnimationFrame(this.rafCancelToken);
+      this.rafCancelToken = null;
+    }
+  }
+
   rafCallback(startMs) {
     this.requestAnimationFrame();
     let deltaSec = 0;
-    if (!this.isRewinding) {
-      const startSec = startMs / 1000;
-      deltaSec = Math.max(startSec - (this.lastRafSec || startSec), 0);
-      this.lastRafSec = startSec;
-      const startTicks = this.ticks;
-      const deltaTicks = Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
-      const runUntilTicks = startTicks + deltaTicks - this.leftoverTicks;
-      this.runUntil(runUntilTicks);
-    }
+    const startSec = startMs / 1000;
+    deltaSec = Math.max(startSec - (this.lastRafSec || startSec), 0);
+    this.lastRafSec = startSec;
+    const startTicks = this.ticks;
+    const deltaTicks = Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
+    const runUntilTicks = startTicks + deltaTicks - this.leftoverTicks;
+    this.runUntil(runUntilTicks);
     const lerp = (from, to, alpha) => alpha * from + (1 - alpha) * to;
     this.fps = lerp(this.fps, Math.min(1 / deltaSec, 10000), 0.3);
   }
@@ -667,20 +727,20 @@ class Emulator {
         break;
       case 'runUntil:result':
         this.ticks = e.data.ticks;
-        vm.ticks = emulator.ticks;
+        vm.updateTicks();
         vm.prgRamUpdated = e.data.prgRamUpdated;
         this.leftoverTicks = e.data.leftoverTicks;
         this.video.renderTexture();
         break;
       case 'rewindToTicks:result':
         this.ticks = e.data.ticks;
-        vm.ticks = emulator.ticks;
+        vm.updateTicks();
         this.video.renderTexture();
         this.isRewindingToTicks = false;
         break;
       case 'rewindStatus':
-        this.rewind.oldestTicks = e.data.oldestTicks;
-        this.rewind.newestTicks = e.data.newestTicks;
+        vm.rewind.minTicks = this.rewind.oldestTicks = e.data.oldestTicks;
+        vm.rewind.maxTicks = this.rewind.newestTicks = e.data.newestTicks;
         break;
     }
   }
@@ -741,32 +801,21 @@ class Emulator {
 
   keyRewind(isKeyDown) {
     if (!vm.inputAllowed) return;
-    if (this.isRewinding !== isKeyDown) {
-      if (isKeyDown) {
-        vm.paused = true;
-        this.isFastForwarding = false;
-        this.autoRewind = true;
-      } else {
-        this.autoRewind = false;
-        vm.paused = false;
-      }
+    if (this.isAutoRewinding === isKeyDown) return;
+    if (isKeyDown) {
+      this.beginAutoRewind();
+    } else {
+      this.endAutoRewind();
     }
   }
 
   keyFastForward(isKeyDown) {
     if (!vm.inputAllowed) return;
-    if (this.isFastForwarding !== isKeyDown) {
-      if (isKeyDown) {
-        console.log('fast forwarding...');
-        vm.paused = false;
-        this.autoRewind = false;
-        this.cancelAnimationFrame();
-        this.autoFastForward = true;
-      } else {
-        console.log('end fast forwarding...');
-        this.requestAnimationFrame();
-        this.autoFastForward = false;
-      }
+    if (this.isAutoFastForwarding === isKeyDown) return;
+    if (isKeyDown) {
+      this.beginAutoFastForward();
+    } else {
+      this.endAutoFastForward();
     }
   }
 
