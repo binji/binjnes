@@ -47,6 +47,9 @@ onmessage = async function(e) {
         case 'snesmouse':
             if (emulator) { emulator.inputSnesMouse(e.data.index, e.data.idx, e.data.idy, e.data.lmb, e.data.rmb); }
             break;
+        case 'updateControllerType':
+            if (emulator) { emulator.updateControllerType(e.data.inputType); }
+            break;
     }
 };
 
@@ -247,7 +250,7 @@ class Emulator {
 
     inputSnesMouse(index, idx, idy, lmb, rmb) {
         this.module._add_snesmouse_delta(this.e, index, idx, idy);
-        this.module._set_snesmouse_buttons(this.e, indedx, lmb, rmb);
+        this.module._set_snesmouse_buttons(this.e, index, lmb, rmb);
     }
 }
 

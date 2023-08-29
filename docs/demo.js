@@ -358,14 +358,14 @@ let vm = new Vue({
       this.files.show = !this.files.show;
       if (this.files.show) {
         this.input.show = false;
-        this.setPaused(this.paused);
+        this.setPaused(true);
       }
     },
     toggleInputDialog: function() {
       this.input.show = !this.input.show;
       if (this.input.show) {
         this.files.show = false;
-        this.setPaused(paused);
+        this.setPaused(true);
       }
     },
     reset: function(active) {
@@ -519,6 +519,8 @@ class Emulator {
     this.boundGamepadConnected = null;
     this.boundGamepadDisconnected = null;
     this.boundMouseEvent = null;
+    this.mouseFracX = 0;
+    this.mouseFracY = 0;
 
     this.bindEvents();
 
