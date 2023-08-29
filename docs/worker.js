@@ -29,6 +29,9 @@ onmessage = async function(e) {
         case 'runUntil':
             if (emulator) { emulator.runUntil(e.data.ticks); }
             break;
+        case 'setReset':
+            if (emulator) { emulator.setReset(e.data.ticks); }
+            break;
         case 'beginRewind':
             if (emulator) { emulator.beginRewind(); }
             break;
