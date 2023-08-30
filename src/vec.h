@@ -141,7 +141,7 @@ static inline v128 v128_bcast_u8(u8 a) {
 
 static inline v128 v128_eqz_u8(v128 a) {
 #if BINJNES_VEC_EXTENSIONS
-  return (v128)(a.vu8 == 0);
+  return (v128){.vu8 = a.vu8 == 0};
 #elif BINJNES_VEC_SSE2 || BINJNES_VEC_SSE4
   return (v128){.vi128 = _mm_cmpeq_epi8(a.vi128, _mm_setzero_si128())};
 #else
@@ -301,7 +301,7 @@ static inline v128 v128_sub_u32(v128 a, v128 b) {
 
 static inline v128 v128_eqz_u32(v128 a) {
 #if BINJNES_VEC_EXTENSIONS
-  return (v128)(a.vu32 == 0);
+  return (v128){.vu32 = a.vu32 == 0};
 #elif BINJNES_VEC_SSE2 || BINJNES_VEC_SSE4
   return (v128){.vi128 = _mm_cmpeq_epi32(a.vi128, _mm_setzero_si128())};
 #else
@@ -355,7 +355,7 @@ static inline v128 v128_mul_f32(v128 a, v128 b) {
 
 static inline v128 v128_ne_f32(v128 a, v128 b) {
 #if BINJNES_VEC_EXTENSIONS
-  return (v128)(a.vf32 != b.vf32);
+  return (v128){.vf32 = a.vf32 != b.vf32};
 #elif BINJNES_VEC_SSE2 || BINJNES_VEC_SSE4
   return (v128){.v128 = _mm_cmpneq_ps(a.v128, b.v128)};
 #else
