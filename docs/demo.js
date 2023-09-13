@@ -10,7 +10,6 @@ const SCREEN_WIDTH = 256;
 const SCREEN_HEIGHT = 240;
 const AUDIO_FRAMES = 4096;
 const AUDIO_LATENCY_SEC = 0.1;
-const MAX_UPDATE_SEC = 5 / 60;
 const PPU_TICKS_PER_SECOND = 5369318;
 const REWIND_FACTOR = 1.5;
 const REWIND_UPDATE_MS = 16;
@@ -18,25 +17,9 @@ const FAST_FORWARD_FACTOR = 2.0;
 const FAST_FORWARD_UPDATE_MS = 16;
 const GAMEPAD_POLLING_INTERVAL = 1000 / 60 / 4; // When activated, poll for gamepad input about ~4 times per frame (~240 times second)
 
-// From FrakenGraphics, based on FBX Smooth:
-// https://www.patreon.com/posts/nes-palette-for-47391225
-const NESPAL = [
-  0xff616161, 0xff880000, 0xff990d1f, 0xff791337, 0xff601256, 0xff10005d,
-  0xff000e52, 0xff08233a, 0xff0c3521, 0xff0e410d, 0xff174417, 0xff1f3a00,
-  0xff572f00, 0xff000000, 0xff000000, 0xff000000, 0xffaaaaaa, 0xffc44d0d,
-  0xffde244b, 0xffcf1269, 0xffad1490, 0xff481c9d, 0xff043492, 0xff055073,
-  0xff13695d, 0xff117a16, 0xff088013, 0xff497612, 0xff91661c, 0xff000000,
-  0xff000000, 0xff000000, 0xfffcfcfc, 0xfffc9a63, 0xfffc7e8a, 0xfffc6ab0,
-  0xfff26ddd, 0xffab71e7, 0xff5886e3, 0xff229ecc, 0xff00b1a8, 0xff00c172,
-  0xff4ecd5a, 0xff8ec234, 0xffcebe4f, 0xff424242, 0xff000000, 0xff000000,
-  0xfffcfcfc, 0xfffcd4be, 0xfffccaca, 0xfffcc4d9, 0xfffcc1ec, 0xffe7c3fa,
-  0xffc3cef7, 0xffa7cde2, 0xff9cdbda, 0xff9ee3c8, 0xffb8e5bf, 0xffc8ebb2,
-  0xffebe5b7, 0xffacacac, 0xff000000, 0xff000000,
-];
-
 const $ = document.querySelector.bind(document);
 let emulator = null;
-let emulatorWorker = new Worker('./worker.js');
+const emulatorWorker = new Worker('./worker.js');
 
 const dbPromise = idb.open('db', 1, upgradeDb => {
   const objectStore = upgradeDb.createObjectStore('games', {keyPath : 'sha1'});
@@ -58,7 +41,7 @@ function gpbutton(button) { return {type:'button', button}; }
 function clamp(x, min, max) { return Math.min(Math.max(x, min), max); }
 
 let data = {
-  fps: 60,
+  msPerFrame: 0,
   ticks: 0,
   loaded: false,
   loadedFile: null,
@@ -66,7 +49,7 @@ let data = {
   prgRamUpdated: false,
   canvas: {
     show: false,
-    scale: 3,
+    scale: 2,
   },
   rewind: {
     minTicks: 0,
@@ -116,7 +99,7 @@ let vm = new Vue({
   data: data,
   created: function() {
     setInterval(() => {
-      this.fps = emulator ? emulator.fps : 60;
+      this.msPerFrame = emulator ? emulator.msPerFrame : 0;
     }, 500);
     setInterval(() => {
       if (this.prgRamUpdated) {
@@ -149,17 +132,11 @@ let vm = new Vue({
     $('.main').classList.add('ready');
   },
   computed: {
-    canvasWidth: function() {
-      return 256;
-    },
-    canvasHeight: function() {
-      return 240;
-    },
     canvasWidthPx: function() {
-      return (this.canvasWidth * this.canvas.scale) + 'px';
+      return (SCREEN_WIDTH * this.canvas.scale) + 'px';
     },
     canvasHeightPx: function() {
-      return (this.canvasHeight * this.canvas.scale) + 'px';
+      return (SCREEN_HEIGHT * this.canvas.scale) + 'px';
     },
     rewindTime: function() {
       const zeroPadLeft = (num, width) => ('' + (num | 0)).padStart(width, '0');
@@ -220,7 +197,7 @@ let vm = new Vue({
     },
   },
   methods: {
-    toggleFullscreen: function() { $('canvas').requestFullscreen(); },
+    toggleFullscreen: function() { canvasEl.requestFullscreen(); },
     setPaused(newPaused) {
       if (!emulator) return;
       if (newPaused == this.paused) return;
@@ -341,7 +318,7 @@ let vm = new Vue({
       if (!emulator) return;
       const prgRamArrayBuffer = await emulator.getPrgRam();
       const prgRamBlob = new Blob([prgRamArrayBuffer]);
-      const imageDataURL = $('canvas').toDataURL();
+      const imageDataURL = canvasEl.toDataURL();
       const db = await dbPromise;
       const tx = db.transaction('games', 'readwrite');
       const cursor = await tx.objectStore('games').openCursor(
@@ -471,6 +448,9 @@ let vm = new Vue({
   }
 });
 
+// Assign this after Vue has started, since it seems to create a new element.
+const canvasEl = $('canvas');
+
 const EMULATOR_STATE_PAUSE = 0
 const EMULATOR_STATE_RUN = 1
 const EMULATOR_STATE_AUTO_REWIND = 2
@@ -494,15 +474,13 @@ class Emulator {
 
   constructor(romBuffer, prgRamBuffer) {
     this.audio = new Audio();
-    this.video = new Video($('canvas'));
+    this.video = new Video(canvasEl);
     this.state = EMULATOR_STATE_RUN;
     this.lastState = EMULATOR_STATE_RUN;
     this.intervalId = 0;
-    this.rafCancelToken = null;
-    this.lastRafSec = 0;
     this.isRewindingToTicks = false;
     this.ticks = 0;
-    this.fps = 60;
+    this.msPerFrame = 0;
     this.gpId = -1;
     this.gpPrev = new Array(vm.input.length);
     this.gpIntervalId = 0;
@@ -613,8 +591,6 @@ class Emulator {
 
   endRewind() {
     emulatorWorker.postMessage({msg: 'endRewind'});
-    this.lastRafSec = 0;
-    this.leftoverTicks = 0;
   }
 
   pause() {
@@ -690,28 +666,11 @@ class Emulator {
   }
 
   requestAnimationFrame() {
-    this.rafCancelToken = requestAnimationFrame(this.rafCallback.bind(this));
+    emulatorWorker.postMessage({msg: 'requestAnimationFrame'});
   }
 
   cancelAnimationFrame() {
-    if (this.rafCancelToken !== null) {
-      cancelAnimationFrame(this.rafCancelToken);
-      this.rafCancelToken = null;
-    }
-  }
-
-  rafCallback(startMs) {
-    this.requestAnimationFrame();
-    let deltaSec = 0;
-    const startSec = startMs / 1000;
-    deltaSec = Math.max(startSec - (this.lastRafSec || startSec), 0);
-    this.lastRafSec = startSec;
-    const startTicks = this.ticks;
-    const deltaTicks = Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
-    const runUntilTicks = startTicks + deltaTicks - this.leftoverTicks;
-    this.runUntil(runUntilTicks);
-    const lerp = (from, to, alpha) => alpha * from + (1 - alpha) * to;
-    this.fps = lerp(this.fps, Math.min(1 / deltaSec, 10000), 0.3);
+    emulatorWorker.postMessage({msg: 'cancelAnimationFrame'});
   }
 
   updateControllerType() {
@@ -730,19 +689,17 @@ class Emulator {
       case 'runUntil:result':
         this.ticks = e.data.ticks;
         vm.updateTicks();
-        vm.prgRamUpdated = e.data.prgRamUpdated;
-        this.leftoverTicks = e.data.leftoverTicks;
+        vm.prgRamUpdated ||= e.data.prgRamUpdated;
         this.video.renderTexture();
+        this.msPerFrame = e.data.msPerFrame;
+        vm.rewind.minTicks = this.rewind.oldestTicks = e.data.oldestTicks;
+        vm.rewind.maxTicks = this.rewind.newestTicks = e.data.newestTicks;
         break;
       case 'rewindToTicks:result':
         this.ticks = e.data.ticks;
         vm.updateTicks();
         this.video.renderTexture();
         this.isRewindingToTicks = false;
-        break;
-      case 'rewindStatus':
-        vm.rewind.minTicks = this.rewind.oldestTicks = e.data.oldestTicks;
-        vm.rewind.maxTicks = this.rewind.newestTicks = e.data.newestTicks;
         break;
     }
   }
@@ -764,12 +721,11 @@ class Emulator {
     window.addEventListener('gamepadconnected', this.boundGamepadConnected);
     window.addEventListener('gamepaddisconnected', this.boundGamepadDisconnected);
 
-    let canvas = this.video.el;
-    canvas.addEventListener('mousedown', this.boundMouseEvent, false);
-    canvas.addEventListener('mouseup', this.boundMouseEvent, false);
-    canvas.addEventListener('mousemove', this.boundMouseEvent, false);
-    canvas.addEventListener('mouseleave', this.boundMouseEvent, false);
-    canvas.addEventListener('mouseenter', this.boundMouseEvent, false);
+    canvasEl.addEventListener('mousedown', this.boundMouseEvent, false);
+    canvasEl.addEventListener('mouseup', this.boundMouseEvent, false);
+    canvasEl.addEventListener('mousemove', this.boundMouseEvent, false);
+    canvasEl.addEventListener('mouseleave', this.boundMouseEvent, false);
+    canvasEl.addEventListener('mouseenter', this.boundMouseEvent, false);
   }
 
   unbindEvents() {
@@ -905,15 +861,15 @@ class Emulator {
     for (let i = 0; i < vm.input.type.length; ++i) {
       switch (vm.input.type[i]) {
         case 'zapper':
-          const rect = this.video.el.getBoundingClientRect();
-          const x = this.video.el.width * (event.offsetX / rect.width);
-          const y = this.video.el.height * (event.offsetY / rect.height);
+          const rect = canvasEl.getBoundingClientRect();
+          const x = canvasEl.width * (event.offsetX / rect.width);
+          const y = canvasEl.height * (event.offsetY / rect.height);
           const trigger = event.buttons & 1;
           emulatorWorker.postMessage({msg: 'zapper', index: i, x, y, trigger});
           break;
         case 'snesmouse':
           if (!this.isPaused && event.type === 'mousedown') {
-            this.video.el.requestPointerLock().catch(() => {})
+            canvasEl.requestPointerLock().catch(() => {})
           }
           const sensitivity = Math.exp(vm.input.snesMouseSensitivity);
           const dx = this.mouseFracX + event.movementX * sensitivity;
@@ -971,6 +927,22 @@ class Audio {
   }
 }
 
+// From FrakenGraphics, based on FBX Smooth:
+// https://www.patreon.com/posts/nes-palette-for-47391225
+const NESPAL = [
+  0xff616161, 0xff880000, 0xff990d1f, 0xff791337, 0xff601256, 0xff10005d,
+  0xff000e52, 0xff08233a, 0xff0c3521, 0xff0e410d, 0xff174417, 0xff1f3a00,
+  0xff572f00, 0xff000000, 0xff000000, 0xff000000, 0xffaaaaaa, 0xffc44d0d,
+  0xffde244b, 0xffcf1269, 0xffad1490, 0xff481c9d, 0xff043492, 0xff055073,
+  0xff13695d, 0xff117a16, 0xff088013, 0xff497612, 0xff91661c, 0xff000000,
+  0xff000000, 0xff000000, 0xfffcfcfc, 0xfffc9a63, 0xfffc7e8a, 0xfffc6ab0,
+  0xfff26ddd, 0xffab71e7, 0xff5886e3, 0xff229ecc, 0xff00b1a8, 0xff00c172,
+  0xff4ecd5a, 0xff8ec234, 0xffcebe4f, 0xff424242, 0xff000000, 0xff000000,
+  0xfffcfcfc, 0xfffcd4be, 0xfffccaca, 0xfffcc4d9, 0xfffcc1ec, 0xffe7c3fa,
+  0xffc3cef7, 0xffa7cde2, 0xff9cdbda, 0xff9ee3c8, 0xffb8e5bf, 0xffc8ebb2,
+  0xffebe5b7, 0xffacacac, 0xff000000, 0xff000000,
+];
+
 class Video {
   constructor(el) {
     this.el = el;
@@ -995,11 +967,6 @@ class Canvas2DRenderer {
   constructor(el) {
     this.ctx = el.getContext('2d');
     this.imageData = this.ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
-
-    this.overlayCanvas = document.createElement('canvas');
-    this.overlayCanvas.width = SCREEN_WIDTH;
-    this.overlayCanvas.height = SCREEN_HEIGHT;
-    this.overlayCtx = this.overlayCanvas.getContext('2d');
   }
 
   uploadTexture(buffer) {

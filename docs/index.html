@@ -216,8 +216,7 @@
   <script src="vue.min.js"></script>
   <script src="idb.min.js"></script>
   <div class="main">
-    <canvas
-       v-bind:width="canvasWidth" v-bind:height="canvasHeight"
+    <canvas width="256" height="240"
        v-show="canvas.show"
        v-bind:style="{width:canvasWidthPx, height:canvasHeightPx}">
     </canvas>
@@ -396,7 +395,7 @@
               @click="togglePause">{{pauseLabel}}</button>
         </div>
         <div class="right">
-          <span>{{fps.toFixed(1)}}</span> FPS
+          <span>{{msPerFrame.toFixed(1)}}</span>ms
         </div>
       </div>
       <div v-if="loaded && paused">

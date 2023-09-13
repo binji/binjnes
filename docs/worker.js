@@ -11,6 +11,8 @@ const REWIND_BUFFER_CAPACITY = 4 * 1024 * 1024;
 const CONTROLLER_JOYPAD = 0
 const CONTROLLER_ZAPPER = 1
 const CONTROLLER_SNES_MOUSE = 2
+const PPU_TICKS_PER_SECOND = 5369318;
+const MAX_UPDATE_SEC = (341 * 262) / PPU_TICKS_PER_SECOND;
 
 self.emulator = null;
 
@@ -25,6 +27,12 @@ onmessage = async function(e) {
             break;
         case 'getPrgRam':
             if (emulator) { emulator.getPrgRam(); }
+            break;
+        case 'requestAnimationFrame':
+            if (emulator) { emulator.requestAnimationFrame(); }
+            break;
+        case 'cancelAnimationFrame':
+            if (emulator) { emulator.cancelAnimationFrame(); }
             break;
         case 'runUntil':
             if (emulator) { emulator.runUntil(e.data.ticks); }
@@ -98,6 +106,10 @@ class Emulator {
             throw new Error('Invalid ROM.');
         }
 
+        this.msPerFrame = 0;
+        this.rafCancelToken = null;
+        this.lastRafSec = 0;
+        this.leftoverTicks = 0;
         this.rewind = new Rewind(module, this.e);
         this.mouseFracX = 0;
         this.mouseFracY = 0;
@@ -190,14 +202,8 @@ class Emulator {
 
     endRewind() {
         this.rewind.endRewind();
-    }
-
-    postRewindStatus() {
-        self.postMessage({
-            msg: 'rewindStatus',
-            oldestTicks: this.rewind.oldestTicks,
-            newestTicks: this.rewind.newestTicks,
-        });
+        this.lastRafSec = 0;
+        this.leftoverTicks = 0;
     }
 
     get ticks() {
@@ -221,10 +227,47 @@ class Emulator {
             }
         }
         const ticks = this.ticks;
+        const msPerFrame = this.msPerFrame;
         const prgRamUpdated = this.module._emulator_was_prg_ram_updated(this.e);
-        const leftoverTicks = (ticks - runUntilTicks) | 0;
-        self.postMessage({msg: 'runUntil:result', ticks, prgRamUpdated, leftoverTicks});
-        this.postRewindStatus();
+        this.leftoverTicks = (ticks - runUntilTicks) | 0;
+        self.postMessage({
+            msg: 'runUntil:result',
+            ticks,
+            prgRamUpdated,
+            msPerFrame,
+            oldestTicks: this.rewind.oldestTicks,
+            newestTicks: this.rewind.newestTicks,
+        });
+    }
+
+    rafCallback(rafStartMs) {
+        this.requestAnimationFrame();
+        let deltaSec = 0;
+        const startSec = rafStartMs / 1000;
+        deltaSec = Math.max(startSec - (this.lastRafSec || startSec), 0);
+        this.lastRafSec = startSec;
+        const startTicks = this.ticks;
+        const deltaTicks =
+            Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
+        const runUntilTicks = startTicks + deltaTicks - this.leftoverTicks;
+        const startMs = performance.now();
+        this.runUntil(runUntilTicks);
+        const endMs = performance.now();
+        const lerp = (from, to, alpha) => alpha * from + (1 - alpha) * to;
+        // this.msPerFrame = lerp(this.msPerFrame, deltaSec * 1000, 0.3);
+        this.msPerFrame = endMs - startMs;
+    }
+
+    requestAnimationFrame() {
+        this.rafCancelToken =
+            requestAnimationFrame(this.rafCallback.bind(this));
+    }
+
+    cancelAnimationFrame() {
+        if (this.rafCancelToken !== null) {
+            cancelAnimationFrame(this.rafCancelToken);
+            this.rafCancelToken = null;
+        }
     }
 
     setReset(active) {
