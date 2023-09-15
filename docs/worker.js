@@ -12,7 +12,7 @@ const CONTROLLER_JOYPAD = 0
 const CONTROLLER_ZAPPER = 1
 const CONTROLLER_SNES_MOUSE = 2
 const PPU_TICKS_PER_SECOND = 5369318;
-const MAX_UPDATE_SEC = (341 * 262) / PPU_TICKS_PER_SECOND;
+const MAX_UPDATE_SEC = 5 / 60;
 
 self.emulator = null;
 
@@ -89,7 +89,6 @@ class Emulator {
         const inputTypes = data.inputTypes;
         const workletPort = data.port;
 
-        this.sampleRate = sampleRate; // XXX
         this.AUDIO_FRAMES = AUDIO_FRAMES;
 
         this.module = module;

@@ -894,7 +894,7 @@ class Audio {
 
   static async maybeAddWorkletModule() {
     if (!this.addedModule) {
-      await Audio.ctx.audioWorklet.addModule('./audioWorklet.js?t=7');
+      await Audio.ctx.audioWorklet.addModule('./audioWorklet.js?t=9');
       this.addedModule = true;
     }
   }
