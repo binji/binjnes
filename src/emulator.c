@@ -789,6 +789,7 @@ static void apu_tick(E *e, u64 cy) {
   #undef TIMER_DIFF
   timer0 = v128_and(timer0, a->play_mask);
 
+  f32x4 sample = a->sample;
   if (timer0.au16[0] | timer0.au16[1] | timer0.au16[2] | timer0.au16[3] |
       timer0.au16[4]) {
     // Advance the sequence for reloaded timers.
@@ -796,20 +797,20 @@ static void apu_tick(E *e, u64 cy) {
                       V128_MAKE_U16(7, 7, 31, 0, 7, 0, 0, 0));
 
     if (timer0.au16[0]) {
-      a->sample.af32[0] = pduty[a->reg[0] >> 6][a->seq.au16[0]];
+      sample.af32[0] = pduty[a->reg[0] >> 6][a->seq.au16[0]];
     }
     if (timer0.au16[1]) {
-      a->sample.af32[1] = pduty[a->reg[4] >> 6][a->seq.au16[1]];
+      sample.af32[1] = pduty[a->reg[4] >> 6][a->seq.au16[1]];
     }
     if (timer0.au16[2]) {
-      a->sample.af32[2] = trisamp[a->seq.au16[2]];
+      sample.af32[2] = trisamp[a->seq.au16[2]];
     }
     if (timer0.au16[3]) {
       a->noise =
           (a->noise >> 1) |
           (((a->noise << 14) ^ (a->noise << ((a->reg[0xe] & 0x80) ? 8 : 13))) &
            0x4000);
-      a->sample.af32[3] = (f32)(a->noise & 1);
+      sample.af32[3] = (f32)(a->noise & 1);
     }
     if (timer0.au16[4]) {
       if (a->dmcbufstate) {
@@ -832,6 +833,7 @@ static void apu_tick(E *e, u64 cy) {
         }
       }
     }
+    a->sample = sample;
     a->update = true;
   }
 
@@ -862,7 +864,7 @@ static void apu_tick(E *e, u64 cy) {
         v128_or(a->swmute_mask, V128_MAKE_U16(0, 0, ~0, ~0, ~0, 0, 0, 0)));
     u32x4 play_mask4 =
         v128_or(v128_sext_s16_s32(play_mask), V128_MAKE_S32(0, 0, -1, 0));
-    f32x4 sampvol = v128_mul_f32(v128_and(a->sample, play_mask4), a->vol);
+    f32x4 sampvol = v128_mul_f32(v128_and(sample, play_mask4), a->vol);
 
     // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
     // Started from a 31-entry table and calculated a quadratic regression.
