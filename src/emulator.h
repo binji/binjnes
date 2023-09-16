@@ -26,6 +26,8 @@ extern "C" {
 #define MAX_CHRRAM_SIZE 0x8000
 #define CHRRAM1K_MASK ((MAX_CHRRAM_SIZE >> 10) - 1)
 
+struct Emulator;
+typedef void (*StepFunc)(struct Emulator* e);
 typedef void (*JoypadCallback)(struct SystemInput *input, void *user_data,
                                bool strobe);
 
@@ -303,6 +305,7 @@ typedef struct Emulator {
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
+  StepFunc* ppu_steps;
 } Emulator;
 
 
