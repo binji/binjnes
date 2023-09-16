@@ -304,6 +304,47 @@
       ["test78/test78-submapper2.nes", 10, "29a4080e2a1f6ac9accdcb1fd0f3cee50e3d8e6a"],
       ["test78/test78-submapper3.nes", 10, "2afcb324f2699fc07ea4911650d430d8f4b3f385"]
     ]
+  },
+
+  "holy_mapperel": {
+    "dir": "test/holy-mapperel-bin-0.02/testroms/",
+    "tests": [
+      ["M0_P32K_C8K_V.nes", 80, "8700b32d0d0e42a72ff86d1a264380d9f67c12e2"],
+      ["M0_P32K_CR32K_V.nes", 160, "62a7487028661a135bf905d23d134531b7a1e07e"],
+      ["M0_P32K_CR8K_V.nes", 160, "62a7487028661a135bf905d23d134531b7a1e07e"],
+      ["M10_P128K_C64K_S8K.nes", 80, "0e81cf51c1a0a5e0ed0203d04b1452f2e21a3272"],
+      ["M10_P128K_C64K_W8K.nes", 80, "0e81cf51c1a0a5e0ed0203d04b1452f2e21a3272"],
+      ["M11_P64K_C64K_V.nes", 80, "0e7f9a4d7964b9ebcd8bb2f9f4f1a12bd43232c1"],
+      ["M11_P64K_CR32K_V.nes", 360, "d9233114b6af6ee683544933719d764f167d064f"],
+      ["M1_P128K_C128K.nes", 100, "f668aac498234bd0f8eae815511038d437a856a4"],
+      ["M1_P128K_C128K_S8K.nes", 100, "f668aac498234bd0f8eae815511038d437a856a4"],
+      ["M1_P128K_C128K_W8K.nes", 100, "f668aac498234bd0f8eae815511038d437a856a4"],
+      ["M1_P128K_C32K.nes", 100, "24fe594e553b6304d8f9868f506e252b59e35c53"],
+      ["M1_P128K_C32K_S8K.nes", 100, "24fe594e553b6304d8f9868f506e252b59e35c53"],
+      ["M1_P128K_C32K_W8K.nes", 100, "24fe594e553b6304d8f9868f506e252b59e35c53"],
+      ["M1_P128K_CR8K.nes", 160, "4a5c844e2b86f5f1f409bcaf026daf82f3a22d62"],
+      ["M1_P128K.nes", 160, "ca83e54f027b4da09c61da1fc6f38442c5a20962"],
+      ["M1_P512K_CR8K_S32K.nes", 128, "!53a1d84446d1e8be63091b210c4a8757d39da008"],
+      ["M1_P512K_CR8K_S8K.nes", 128, "!53a1d84446d1e8be63091b210c4a8757d39da008"],
+      ["M1_P512K_S32K.nes", 128, "!53a1d84446d1e8be63091b210c4a8757d39da008"],
+      ["M1_P512K_S8K.nes", 128, "!53a1d84446d1e8be63091b210c4a8757d39da008"],
+      ["M28_P512K_CR32K.nes", 500, "9b887fd97034a489cb7846fc442d94bf3ea62cee"],
+      ["M28_P512K.nes", 280, "4f9be3441b445a11527b9049f37ec4a6308afe2b"],
+      ["M2_P128K_CR8K_V.nes", 160, "79959f8f6214e766924b48159fdbb450c48709c8"],
+      ["M2_P128K_V.nes", 160, "64c30fa53d1aafe63a51afeba9a1fdfb769eac45"],
+      ["M3_P32K_C32K_H.nes", 80, "a2910bb64e175a9567b7490fea89343c37a49385"],
+      ["M4_P128K_CR32K.nes", 400, "a4fc9252cd67c11fc82b13487f4144f292eac6e2"],
+      ["M4_P128K_CR8K.nes", 180, "22698bfe661b1446f8828f62abcd07c16ac48c13"],
+      ["M4_P128K.nes", 180, "cb80e285b6ef3745d11093098116d6ec57b5c8cc"],
+      ["M4_P256K_C256K.nes", 90, "8e047b454b919f00db7d58d68cd7903db4670414"],
+      ["M66_P64K_C16K_V.nes", 80, "ed08374542a8f4d265c71f4e527cacb9c6ef3d4a"],
+      ["M69_P128K_C64K_S8K.nes", 80, "b4918541f94a59a22a60c6846ffd679f44ba175b"],
+      ["M69_P128K_C64K_W8K.nes", 80, "b4918541f94a59a22a60c6846ffd679f44ba175b"],
+      ["M78.3_P128K_C64K.nes", 80, "f18c3ec171fb151fc96d13c8e3735acfb356f4d4"],
+      ["M7_P128K_CR8K.nes", 160, "d2aceb2e17ccd0bf118a9a32bc15e3ced1b83173"],
+      ["M7_P128K.nes", 160, "c6978a6dbed707b5283555f68964ffae52f81446"],
+      ["M9_P128K_C64K.nes", 80, "48a320a3673b1e88fbb1a2663e73a85b03f39491"]
+    ]
   }
 }
 
