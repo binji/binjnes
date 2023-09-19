@@ -206,13 +206,12 @@ typedef union {
 } u16pair;
 
 typedef struct {
-  u64 bits;
   u16 step, next_step, dmc_step;
   u16pair PC, T, bus, oam;
   u8 fixhi, veclo;
   u8 A, X, Y, S;
   u8 ram[0x800], prg_ram[0x10000];
-  u8 opcode, open_bus, irq;
+  u8 bits, opcode, open_bus, irq;
   bool C, Z, I, D, V, N; // Flags.
   bool req_nmi, req_reset, has_nmi, has_irq, has_reset, reset_active;
   u64 set_vec_cy;
@@ -250,11 +249,11 @@ typedef struct {
   u32x4 start, cvol, envdiv, envloop, envreload;         // envelope
   u16x8 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
   f32x4 sample, vol, decay;
-  f32 mixed, base_mixed;
+  f32 pulse_mixed, tridmc_mixed, mixed, base_mixed;
 
   u16 state, noise, dmcbytes, dmcaddr;
-  u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate;
-  bool update, trireload, dmcen, dmcfetch;
+  u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate, update;
+  bool trireload, dmcen, dmcfetch;
   u64 cy, resetcy; // XXX
 } A;
 
@@ -299,7 +298,7 @@ typedef struct Emulator {
   u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
   void (*mapper_cpu_step)(struct Emulator*);
   void (*mapper_update_nt_map)(struct Emulator*);
-  void (*mapper_apu_tick)(struct Emulator*, bool update);
+  void (*mapper_apu_tick)(struct Emulator*, u8 update);
   void (*mapper_on_ppu_addr_updated)(struct Emulator*, u16);
   void (*mapper_on_chr_read)(struct Emulator*, u16);
   FrameBuffer frame_buffer;

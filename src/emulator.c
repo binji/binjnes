@@ -412,8 +412,6 @@ static inline void sprfetch(E* e) {
   spr->s = 0;
 }
 
-static void ppu_step(E *);
-
 static void ppu1(E *e) {
   DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
   e->s.p.ppustatus = 0;
@@ -751,10 +749,14 @@ static inline bool is_power_of_two(u32 x) {
   return x == 0 || (x & (x - 1)) == 0;
 }
 
+static inline void apu_update_chan(A *a, int chan) {
+  a->update |= 1 << chan;
+}
+
 static void set_vol(A* a, int chan, u8 val) {
   if (val & 0x10) {
     a->vol.af32[chan] = (f32)(val & 0xf);
-    a->update = true;
+    apu_update_chan(a, chan);
   }
   a->envreload.au32[chan] = val & 0xf;
   a->cvol.au32[chan] = (val & 0x10) ? ~0 : 0;
@@ -776,7 +778,8 @@ static u16x8 get_sweep_target_or_mute(A* a) {
       a->swneg);
   u16x8 mute = v128_or(v128_lt_u16(a->period, v128_bcast_u16(8)),
                       v128_gt_u16(target, v128_bcast_u16(0x7ff)));
-  a->swmute_mask = v128_not(mute);
+  a->swmute_mask =
+      v128_or(v128_not(mute), V128_MAKE_U16(0, 0, ~0, ~0, ~0, 0, 0, 0));
   return target;
 }
 
@@ -817,7 +820,7 @@ static void start_chan(A* a, int chan, u8 val) {
     if (chan < 2) {
       a->seq.au16[chan] = 0;
     }
-    a->update = true;
+    apu_update_chan(a, chan);
   }
 }
 
@@ -874,12 +877,15 @@ static void apu_tick(E *e, u64 cy) {
 
     if (timer0.au16[0]) {
       sample.af32[0] = pduty[a->reg[0] >> 6][a->seq.au16[0]];
+      apu_update_chan(a, 0);
     }
     if (timer0.au16[1]) {
       sample.af32[1] = pduty[a->reg[4] >> 6][a->seq.au16[1]];
+      apu_update_chan(a, 1);
     }
     if (timer0.au16[2]) {
       sample.af32[2] = trisamp[a->seq.au16[2]];
+      apu_update_chan(a, 2);
     }
     if (timer0.au16[3]) {
       a->noise =
@@ -887,6 +893,7 @@ static void apu_tick(E *e, u64 cy) {
           (((a->noise << 14) ^ (a->noise << ((a->reg[0xe] & 0x80) ? 8 : 13))) &
            0x4000);
       sample.af32[3] = (f32)(a->noise & 1);
+      apu_update_chan(a, 3);
     }
     if (timer0.au16[4]) {
       if (a->dmcbufstate) {
@@ -910,7 +917,6 @@ static void apu_tick(E *e, u64 cy) {
       }
     }
     a->sample = sample;
-    a->update = true;
   }
 
   if (a->dmcfetch) {
@@ -933,25 +939,31 @@ static void apu_tick(E *e, u64 cy) {
     a->dmcfetch = false;
   }
 
-  bool update = a->update;
+  u8 update = a->update;
   if (a->update) {
-    u16x8 play_mask = v128_and(
-        a->play_mask,
-        v128_or(a->swmute_mask, V128_MAKE_U16(0, 0, ~0, ~0, ~0, 0, 0, 0)));
+    u16x8 play_mask = v128_and(a->play_mask, a->swmute_mask);
     u32x4 play_mask4 =
         v128_or(v128_sext_s16_s32(play_mask), V128_MAKE_S32(0, 0, -1, 0));
     f32x4 sampvol = v128_mul_f32(v128_and(sample, play_mask4), a->vol);
 
-    // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
-    // Started from a 31-entry table and calculated a quadratic regression.
-    static const f32 PB = 0.01133789176986089272f, PC = -0.00009336679655005083f;
-    // Started from a 203-entry table and calculated a cubic regression.
-    static const f32 TB = 0.00653531668798749448f, TC = -0.00002097005655295220f,
-                     TD = 0.00000003402641447451f;
-    f32 p = sampvol.af32[0] + sampvol.af32[1];
-    f32 t = 3 * sampvol.af32[2] + 2 * sampvol.af32[3] + a->dmcout;
-    a->base_mixed = a->mixed = p * (PB + p * PC) + t * (TB + t * (TC + t * TD));
-    a->update = false;
+    if (a->update & 0b11) {
+      // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
+      // Started from a 31-entry table and calculated a quadratic regression.
+      static const f32 PB = 0.01133789176986089272f,
+                       PC = -0.00009336679655005083f;
+      f32 p = sampvol.af32[0] + sampvol.af32[1];
+      a->pulse_mixed = p * (PB + p * PC);
+    }
+    if (a->update & 0b1100) {
+      // Started from a 203-entry table and calculated a cubic regression.
+      static const f32 TB = 0.00653531668798749448f,
+                       TC = -0.00002097005655295220f,
+                       TD = 0.00000003402641447451f;
+      f32 t = 3 * sampvol.af32[2] + 2 * sampvol.af32[3] + a->dmcout;
+      a->tridmc_mixed = t * (TB + t * (TC + t * TD));
+    }
+    a->base_mixed = a->mixed = a->pulse_mixed + a->tridmc_mixed;
+    a->update = 0;
   }
 
   if (e->mapper_apu_tick) {
@@ -1043,7 +1055,12 @@ static void apu_quarter(A *a) {
   a->envdiv = v128_blendv(v128_sub_u32(a->envdiv, v128_bcast_u32(1)),
                           a->envreload, env0_start);
   a->vol = v128_blendv(a->decay, a->vol, a->cvol);
-  a->update = v128_any_true(v128_ne_f32(a->vol, oldvol));
+  u32x4 volchanged = v128_ne_f32(a->vol, oldvol);
+  for (int i = 0; i < 4; ++i) {
+    if (volchanged.au32[i]) {
+      apu_update_chan(a, i);
+    }
+  }
   a->start = V128_MAKE_U32(0, 0, 0, 0);
 
   // triangle linear counter
@@ -1052,14 +1069,14 @@ static void apu_quarter(A *a) {
     // ... the linear counter is reloaded with the counter reload value.
     a->tricnt = a->reg[8] & 0x7f;
     update_tri_play_mask(a);
-    a->update = true;
+    apu_update_chan(a, 2);
   } else if (a->tricnt) {
     // ... otherwise if the linear counter is non-zero, it is decremented.
     --a->tricnt;
   }
   if (a->play_mask.au16[2] && a->tricnt == 0) {
     update_tri_play_mask(a);
-    a->update = true;
+    apu_update_chan(a, 2);
   }
   // If the control flag is clear, the linear counter reload flag is cleared.
   if (!(a->reg[8] & 0x80)) {
@@ -1078,10 +1095,10 @@ static void apu_half(A *a) {
   // sweep unit
   u16x8 target = get_sweep_target_or_mute(a);
   u16x8 swdiv0 = v128_eqz_u16(a->swdiv), swshift0 = v128_eqz_u16(a->swshift),
-       swupdate =
-           v128_and(v128_and(v128_and(v128_not(swshift0), swdiv0), a->swen),
-                    a->swmute_mask),
-       swdec = v128_not(v128_or(swdiv0, a->swreload));
+        swupdate =
+            v128_and(v128_and(v128_and(v128_not(swshift0), swdiv0), a->swen),
+                     a->swmute_mask),
+        swdec = v128_not(v128_or(swdiv0, a->swreload));
   a->period = v128_blendv(a->period, target, swupdate);
   a->swdiv = v128_blendv(a->swperiod, v128_sub_u16(a->swdiv, v128_bcast_u16(1)),
                          swdec);
@@ -1450,7 +1467,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         goto apu;
       case 0x11:
         a->dmcout = val & 0x7f;
-        a->update = true;
+        apu_update_chan(a, 4);
         goto apu;
       case 0x12: case 0x13: goto apu;
 
@@ -1482,7 +1499,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         for (int i = 0; i < 4; ++i) {
           if (!(val & (1 << i))) { a->len.au16[i] = 0; }
         }
-        a->update |= !!(val & 0x1f);
+        a->update |= 0x1f;
         c->irq &= ~IRQ_DMC;
         goto apu;
 
@@ -2717,7 +2734,7 @@ static void mapper19_cpu_step(E* e) {
   }
 }
 
-static void mapper19_apu_tick(E* e, bool update) {
+static void mapper19_apu_tick(E* e, u8 update) {
   M* m = &e->s.m;
   if (update || m->namco163.update_audio) {
     f32 mixed = 0;
@@ -3034,7 +3051,7 @@ static void mapper_vrc_cpu_step(E *e) {
   }
 }
 
-static void mapper_vrc6_apu_tick(E* e, bool update) {
+static void mapper_vrc6_apu_tick(E* e, u8 update) {
   M *m = &e->s.m;
   #define TIMER_DIFF V128_MAKE_U16(2, 2, 1, 0, 0, 0, 0, 0)
   u16x8 timer0 = v128_lt_u16(m->vrc.a6.timer, TIMER_DIFF);
@@ -5473,7 +5490,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.len.au16[4] = 1;
   s->a.halt.au16[4] = ~0;
   s->a.play_mask.au16[4] = ~0;
-  // Default to all channels unmuted. Using scalar - vector hack for broadcast.
+  // Default to all channels unmuted.
   s->a.swmute_mask = v128_bcast_u16(~0);
   s->a.state = 4;
   sched_init(e);
