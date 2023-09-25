@@ -228,7 +228,8 @@ static u8 ppu_read(E *e, u16 addr) {
 static void update_palette(E *e) {
   u8 mask = e->s.p.ppumask & 1 ? 0x30 : 0x3f;
   for (int addr = 0; addr < 32; ++addr) {
-    e->s.p.palette[addr] = e->s.p.palram[addr & 3 ? addr : 0] & mask;
+    e->s.p.palette[addr] =
+        e->s.p.emphasis | (e->s.p.palram[addr & 3 ? addr : 0] & mask);
   }
 }
 
@@ -320,57 +321,49 @@ static inline u8 ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void shift_en(E *e) {
   P* p = &e->s.p;
-  Spr* spr = &p->spr;
-  int palidx = 0;
-
-  // Decrement inactive counters. Active counters are always 0.
-  u8x16 active;
-  if (spr->any_active) {
-    active = v128_eqz_u8(spr->counter);
-    spr->counter =
-        v128_sub_u8(spr->counter, v128_and(v128_bcast_u8(1), v128_not(active)));
-  }
-
-  if (LIKELY(p->ppumask & 8)) { // Show BG.
-    palidx = p->bgatshift & 0xf;
-  }
-
-  if (spr->any_active && v128_any_true(active) &&
-      (p->ppumask & 0x10)) {  // Show sprites.
-    assert(scany(p) != 0);
-    // Find first non-zero sprite, if any. Check only the low bit of the lane
-    // (the pixel that might be drawn).
-    u64x2 non0x2 = v128_and(v128_and(spr->shift, active), v128_bcast_u8(1));
-    u64 non0 = non0x2.au64[0] | non0x2.au64[1];
-    if (non0) {
-      // Sprite 0 hit only occurs:
-      //  * When sprite and background are both enabled
-      //  * When sprite and background pixel are both opaque
-      //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
-      //  * When x!=255
-      //  * (sprite priority doesn't matter)
-      u8 bgpx = palidx & 3;
-      if ((non0 & spr->spr0mask) && bgpx && scanx(p) != 255) {
-        DEBUG("[%3u:%3u] sprite0\n", ppu_dot(e), ppu_line(e));
-        p->ppustatus |= 0x40;
-      }
-
-      // Check if sprite is on transparent BG pixel, or has priority.
-      if (!bgpx || (non0 & (-non0) & spr->pri)) {
-        int sidx = ctzll(non0) >> 3;
-        u8 sprpx =
-            ((spr->shift.au8[sidx + 8] << 1) & 2) | (spr->shift.au8[sidx] & 1);
-        palidx = spr->pal.au8[sidx] | sprpx;
-      }
-    }
-
-    spr->shift = v128_blendv(spr->shift, v128_srl_u8(spr->shift, 1), active);
-  }
-
+  u8 palidx = p->bgatshift & p->bgmask;
   p->bgatshift >>= 4;
 
+  // Decrement inactive counters. Active counters are always 0.
+  Spr* spr = &p->spr;
+  if (spr->any_active) {
+    u8x16 active = v128_eqz_u8(spr->counter);
+    spr->counter = v128_add_u8(spr->counter, v128_not(active));
+
+    if (v128_any_true(active) && (p->ppumask & 0x10)) {  // Show sprites.
+      assert(scany(p) != 0);
+      u8x16 shift = spr->shift;
+      spr->shift = v128_blendv(shift, v128_srl_u8(shift, 1), active);
+
+      // Find first non-zero sprite, if any. Check only the low bit of the lane
+      // (the pixel that might be drawn).
+      u64x2 non0x2 = v128_and(shift, v128_and(active, v128_bcast_u8(1)));
+      u64 non0 = non0x2.au64[0] | non0x2.au64[1];
+      if (non0) {
+        // Sprite 0 hit only occurs:
+        //  * When sprite and background are both enabled
+        //  * When sprite and background pixel are both opaque
+        //  * When pixel is not masked (x=0..7 when ppuctrl:{1,2}==0)
+        //  * When x!=255
+        //  * (sprite priority doesn't matter)
+        u8 bgpx = palidx & 3;
+        if ((non0 & spr->spr0mask) && bgpx && scanx(p) != 255) {
+          DEBUG("[%3u:%3u] sprite0\n", ppu_dot(e), ppu_line(e));
+          p->ppustatus |= 0x40;
+        }
+
+        // Check if sprite is on transparent BG pixel, or has priority.
+        if (!bgpx || (non0 & (-non0) & spr->pri)) {
+          int sidx = ctzll(non0) >> 3;
+          palidx = spr->pal.au8[sidx] | ((shift.au8[sidx + 8] & 1) << 1) |
+                   (shift.au8[sidx] & 1);
+        }
+      }
+    }
+  }
+
   assert(p->fbidx < SCREEN_WIDTH * SCREEN_HEIGHT);
-  e->frame_buffer[p->fbidx++] = p->emphasis | p->palette[palidx];
+  e->frame_buffer[p->fbidx++] = p->palette[palidx];
 }
 
 static void shift_dis(E *e) {
@@ -1361,6 +1354,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         p->enabled_changed_cy = e->s.cy;
       }
       p->ppumask = val;
+      p->bgmask = (p->ppumask & 8) ? 0xf : 0;
       p->next_enabled = !!(val & 0x18);
       p->emphasis = (val << 3) & 0x1c0;
       update_palette(e);

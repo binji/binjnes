@@ -237,7 +237,7 @@ typedef struct {
   u16 v, t, atb, last_a12, emphasis, palette[32];
   u8 x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
   bool enabled, next_enabled, w, oddframe, a12_low;
-  u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr;
+  u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr, bgmask;
   Spr spr;
   u64 read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy, a12_low_count,
       enabled_changed_cy;

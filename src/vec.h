@@ -156,19 +156,19 @@ static inline v128 v128_eqz_u8(v128 a) {
 #endif
 }
 
-static inline v128 v128_sub_u8(v128 a, v128 b) {
+static inline v128 v128_add_u8(v128 a, v128 b) {
 #if BINJNES_VEC_EXTENSIONS
-  return (v128)(a.vu8 - b.vu8);
+  return (v128)(a.vu8 + b.vu8);
 #elif BINJNES_VEC_SSE2 || BINJNES_VEC_SSE4
-  return (v128){.vi128 = _mm_sub_epi8(a.vi128, b.vi128)};
+  return (v128){.vi128 = _mm_add_epi8(a.vi128, b.vi128)};
 #else
   return (v128){
-      .au8 = {a.au8[0] - b.au8[0], a.au8[1] - b.au8[1], a.au8[2] - b.au8[2],
-              a.au8[3] - b.au8[3], a.au8[4] - b.au8[4], a.au8[5] - b.au8[5],
-              a.au8[6] - b.au8[6], a.au8[7] - b.au8[7], a.au8[8] - b.au8[8],
-              a.au8[9] - b.au8[9], a.au8[10] - b.au8[10], a.au8[11] - b.au8[11],
-              a.au8[12] - b.au8[12], a.au8[13] - b.au8[13],
-              a.au8[14] - b.au8[14], a.au8[15] - b.au8[15]}};
+      .au8 = {a.au8[0] + b.au8[0], a.au8[1] + b.au8[1], a.au8[2] + b.au8[2],
+              a.au8[3] + b.au8[3], a.au8[4] + b.au8[4], a.au8[5] + b.au8[5],
+              a.au8[6] + b.au8[6], a.au8[7] + b.au8[7], a.au8[8] + b.au8[8],
+              a.au8[9] + b.au8[9], a.au8[10] + b.au8[10], a.au8[11] + b.au8[11],
+              a.au8[12] + b.au8[12], a.au8[13] + b.au8[13],
+              a.au8[14] + b.au8[14], a.au8[15] + b.au8[15]}};
 #endif
 }
 
