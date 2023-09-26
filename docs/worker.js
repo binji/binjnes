@@ -155,6 +155,7 @@ class Emulator {
     }
 
     destroy() {
+        this.cancelAnimationFrame();
         this.rewind.destroy();
         this.module._emulator_delete(this.e);
         this.module._free(this.romDataPtr);
