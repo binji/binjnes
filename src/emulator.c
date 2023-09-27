@@ -842,7 +842,7 @@ static void set_period_hi(A* a, int chan, u8 val) {
 }
 
 static void apu_tick(E *e, u64 cy) {
-  #define TIMER_DIFF V128_MAKE_U16(1, 1, 2, 1, 1, 0, 0, 0)
+  #define TIMER_DIFF V128_MAKE_U16(1, 1, 2, 2, 1, 0, 0, 0)
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
                                 {0, 1, 1, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 1, 1, 1, 1},
