@@ -1252,21 +1252,21 @@ static void oam_write(E* e, u8 addr, u8 val) {
 }
 
 static u8 cpu_read(E *e, u16 addr) {
+  C* c = &e->s.c;
   if (LIKELY(addr >= 0x8000)) {
-    return e->prg_rom_map[(addr >> 13) & 3][addr & 0x1fff];
+    return c->open_bus = e->prg_rom_map[(addr >> 13) & 3][addr & 0x1fff];
   }
 
   A* a = &e->s.a;
-  C* c = &e->s.c;
   switch (addr >> 12) {
   case 0: case 1: // Internal RAM
-    return c->ram[addr & 0x7ff];
+    return c->open_bus = c->ram[addr & 0x7ff];
 
   case 2: case 3: { // PPU
     P *p = &e->s.p;
     switch (addr & 7) {
       case 0: case 1: case 3: case 5: case 6:
-        return p->ppulast;
+        return c->open_bus = p->ppulast;
 
       case 2: {
         u8 result = (p->ppustatus & 0xe0) | (p->ppulast & 0x1f);
@@ -1276,16 +1276,16 @@ static u8 cpu_read(E *e, u16 addr) {
         if (e->s.cy - p->nmi_cy <= 3) { e->s.c.req_nmi = false; }
         DEBUG("     [%" PRIu64 "] ppu:status=%02hhx w=0 fbx=%d fby=%d\n",
               e->s.cy, result, scanx(p), scany(p));
-        return result;
+        return c->open_bus = result;
       }
       case 4:
-        return p->oam[p->oamaddr];
+        return c->open_bus = p->oam[p->oamaddr];
       case 7: {
         u8 result = p->ppulast = ppu_read(e, p->v);
         inc_ppu_addr(p);
         if (e->mapper_on_ppu_addr_updated)
           e->mapper_on_ppu_addr_updated(e, p->v);
-        return result;
+        return c->open_bus = result;
       }
     }
   }
@@ -1303,21 +1303,21 @@ static u8 cpu_read(E *e, u16 addr) {
               e->s.cy, (e->s.cy - a->resetcy) / 3);
         return result;
       }
-      case 0x16: return read_joyp(e, 0, false, 0);  // JOY1
-      case 0x17: return read_joyp(e, 1, false, 0);  // JOY2
+      case 0x16: return c->open_bus = read_joyp(e, 0, false, 0);  // JOY1
+      case 0x17: return c->open_bus = read_joyp(e, 1, false, 0);  // JOY2
     }
     // fallthrough
   case 5:
     break;
 
   case 6: case 7:
-    return e->mapper_prg_ram_read(e, addr);
+    return c->open_bus = e->mapper_prg_ram_read(e, addr);
 
    // ROM
   default:
     UNREACHABLE();
   }
-  return e->mapper_read(e, addr);
+  return c->open_bus = e->mapper_read(e, addr);
 }
 
 static void cpu_write(E *e, u16 addr, u8 val) {
@@ -3474,7 +3474,7 @@ static void cpu0(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->PC.val++;
   #if DISASM
     disasm(e, c->PC.val - 1);
@@ -3483,7 +3483,7 @@ static void cpu0(E* e, u8 busval) {
 }
 static void cpu125(E* e, u8 busval) {
   C* c = &e->s.c;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  cpu_read(e, c->bus.val);
 }
 static void cpu1(E* e, u8 busval) {
   C* c = &e->s.c;
@@ -3499,7 +3499,7 @@ static void cpu2(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   return cpu126(e, busval);
 }
@@ -3512,7 +3512,7 @@ static void cpu3(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu127(e, busval);
 }
 static void cpu129(E* e, u8 busval) {
@@ -3528,21 +3528,21 @@ static void cpu128(E* e, u8 busval) {
 static void cpu4(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->X, &c->T.lo);
   return cpu128(e, busval);
 }
 static void cpu5(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->X, &c->T.lo);
   return cpu127(e, busval);
 }
 static void cpu6(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   return cpu128(e, busval);
 }
@@ -3550,7 +3550,7 @@ static void cpu7(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  cpu_read(e, c->bus.val);
   c->T.hi += c->fixhi;
 }
 static void cpu130(E* e, u8 busval) {
@@ -3561,7 +3561,7 @@ static void cpu8(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus.val = get_u16(1, c->S);
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu130(e, busval);
 }
 static void cpu131(E* e, u8 busval) {
@@ -3573,7 +3573,7 @@ static void cpu9(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   u16 result = c->PC.lo + (s8)c->T.lo;
   c->fixhi = result >> 8;
   c->PC.lo = (u8)result;
@@ -3583,7 +3583,7 @@ static void cpu10(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->PC.hi += c->fixhi;
   return cpu131(e, busval);
 }
@@ -3591,27 +3591,27 @@ static void cpu11(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->X, &c->T.lo);
 }
 static void cpu12(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
 }
 static void cpu13(E* e, u8 busval) {
   C* c = &e->s.c;
   ++c->bus.lo;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   c->T.hi = busval;
   return cpu129(e, busval);
 }
 static void cpu132(E* e, u8 busval) {
   C* c = &e->s.c;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
 }
 static void cpu14(E* e, u8 busval) {
@@ -3628,7 +3628,7 @@ static void cpu15(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   ++c->bus.lo;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu133(e, busval);
 }
 static void cpu135(E* e, u8 busval) {
@@ -3653,7 +3653,7 @@ static void cpu17(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus.val = get_u16(1, c->S);
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   ++c->S;
   return cpu136(e, busval);
@@ -3675,7 +3675,7 @@ static void cpu18(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu137(e, busval);
 }
 static void cpu139(E* e, u8 busval) {
@@ -3687,7 +3687,7 @@ static void cpu19(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu139(e, busval);
 }
 static void cpu140(E* e, u8 busval) {
@@ -3706,7 +3706,7 @@ static void cpu21(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->N = !!(busval & 0x80);
   c->V = !!(busval & 0x40);
   c->Z = (c->A & busval) == 0;
@@ -3721,7 +3721,7 @@ static void cpu22(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu141(e, busval);
 }
 static void cpu142(E* e, u8 busval) {
@@ -3733,7 +3733,7 @@ static void cpu23(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->X;
   return cpu142(e, busval);
 }
@@ -3741,7 +3741,7 @@ static void cpu24(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->Y;
   return cpu142(e, busval);
 }
@@ -3762,7 +3762,7 @@ static void cpu26(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu143(e, busval);
 }
 static void cpu27(E* e, u8 busval) {
@@ -3782,7 +3782,7 @@ static void cpu28(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   c->A = c->T.lo;
   return cpu144(e, busval);
@@ -3794,7 +3794,7 @@ static void cpu146(E* e, u8 busval) {
 }
 static void cpu145(E* e, u8 busval) {
   C* c = &e->s.c;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   return cpu146(e, busval);
 }
@@ -3808,7 +3808,7 @@ static void cpu30(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   return cpu144(e, busval);
 }
@@ -3821,7 +3821,7 @@ static void cpu31(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   return cpu147(e, busval);
 }
@@ -3835,7 +3835,7 @@ static void cpu32(E* e, u8 busval) {
 }
 static void cpu148(E* e, u8 busval) {
   C* c = &e->s.c;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu131(e, busval);
 }
 static void cpu33(E* e, u8 busval) {
@@ -3859,7 +3859,7 @@ static void cpu35(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu149(e, busval);
 }
 static void cpu36(E* e, u8 busval) {
@@ -3886,7 +3886,7 @@ static void cpu38(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->T;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu150(e, busval);
 }
 static void cpu151(E* e, u8 busval) {
@@ -4026,7 +4026,7 @@ static void cpu56(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = (c->A |= busval);
   return cpu153(e, busval);
 }
@@ -4034,7 +4034,7 @@ static void cpu57(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->A;
   c->C = !!(c->T.lo & 0x80); c->T.lo <<= 1;
   return cpu146(e, busval);
@@ -4048,7 +4048,7 @@ static void cpu58(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->N;
   return cpu154(e, busval);
 }
@@ -4061,7 +4061,7 @@ static void cpu59(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = 0;
   return cpu155(e, busval);
 }
@@ -4134,7 +4134,7 @@ static void cpu66(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus.val = get_u16(1, c->S);
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   set_P(e, c->T.lo);
   return cpu131(e, busval);
@@ -4143,7 +4143,7 @@ static void cpu67(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = (c->A &= busval);
   return cpu153(e, busval);
 }
@@ -4151,7 +4151,7 @@ static void cpu68(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->A;
   rol(c->T.lo, c->C, &c->T.lo, &c->C);
   return cpu146(e, busval);
@@ -4165,7 +4165,7 @@ static void cpu69(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->N;
   return cpu157(e, busval);
 }
@@ -4173,14 +4173,14 @@ static void cpu70(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = 1;
   return cpu155(e, busval);
 }
 static void cpu71(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus.val = get_u16(1, c->S);
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   set_P(e, c->T.lo);
   return cpu130(e, busval);
@@ -4192,7 +4192,7 @@ static void cpu159(E* e, u8 busval) {
 }
 static void cpu158(E* e, u8 busval) {
   C* c = &e->s.c;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu159(e, busval);
 }
 static void cpu72(E* e, u8 busval) {
@@ -4213,7 +4213,7 @@ static void cpu74(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = (c->A ^= busval);
   return cpu153(e, busval);
 }
@@ -4221,14 +4221,14 @@ static void cpu75(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->A;
   c->C = !!(c->T.lo & 0x01); c->T.lo >>= 1;
   return cpu146(e, busval);
 }
 static void cpu160(E* e, u8 busval) {
   C* c = &e->s.c;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->PC.lo = c->T.lo;
   return cpu159(e, busval);
 }
@@ -4242,7 +4242,7 @@ static void cpu77(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->V;
   return cpu154(e, busval);
 }
@@ -4250,7 +4250,7 @@ static void cpu78(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   busval = rare_opcode(e, busval);
   return cpu131(e, busval);
 }
@@ -4258,7 +4258,7 @@ static void cpu79(E* e, u8 busval) {
   C* c = &e->s.c;
   check_irq(e);
   c->bus.val = get_u16(1, c->S);
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->PC.hi = busval;
 }
 static void cpu161(E* e, u8 busval) {
@@ -4288,14 +4288,14 @@ static void cpu82(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu162(e, busval);
 }
 static void cpu83(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->A;
   ror(c->T.lo, c->C, &c->T.lo, &c->C);
   return cpu146(e, busval);
@@ -4310,7 +4310,7 @@ static void cpu85(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->V;
   return cpu157(e, busval);
 }
@@ -4318,14 +4318,14 @@ static void cpu86(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu161(e, busval);
 }
 static void cpu87(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->Y;
   --c->T.lo;
   return cpu147(e, busval);
@@ -4334,7 +4334,7 @@ static void cpu88(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->X;
   return cpu146(e, busval);
 }
@@ -4342,14 +4342,14 @@ static void cpu89(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->C;
   return cpu154(e, busval);
 }
 static void cpu90(E* e, u8 busval) {
   C* c = &e->s.c;
   ++c->bus.lo;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   return cpu133(e, busval);
 }
@@ -4357,14 +4357,14 @@ static void cpu91(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->Y;
   return cpu146(e, busval);
 }
 static void cpu92(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->fixhi = add_overflow(c->T.lo, c->Y, &c->T.lo);
   return cpu127(e, busval);
 }
@@ -4372,7 +4372,7 @@ static void cpu93(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   c->Y = c->T.lo;
   return cpu153(e, busval);
@@ -4386,7 +4386,7 @@ static void cpu94(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   return cpu163(e, busval);
 }
@@ -4394,7 +4394,7 @@ static void cpu95(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->A;
   return cpu147(e, busval);
 }
@@ -4407,7 +4407,7 @@ static void cpu96(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   return cpu164(e, busval);
 }
@@ -4415,7 +4415,7 @@ static void cpu97(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->A;
   return cpu144(e, busval);
 }
@@ -4423,7 +4423,7 @@ static void cpu98(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->C;
   return cpu157(e, busval);
 }
@@ -4434,7 +4434,7 @@ static void cpu165(E* e, u8 busval) {
 static void cpu99(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   return cpu165(e, busval);
 }
 static void cpu166(E* e, u8 busval) {
@@ -4446,7 +4446,7 @@ static void cpu100(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->Y;
   return cpu166(e, busval);
 }
@@ -4454,7 +4454,7 @@ static void cpu101(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->Y;
   ++c->T.lo;
   return cpu147(e, busval);
@@ -4463,7 +4463,7 @@ static void cpu102(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->C = c->A >= busval; c->T.lo = (c->A - busval);
   return cpu153(e, busval);
 }
@@ -4471,7 +4471,7 @@ static void cpu103(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->X;
   --c->T.lo;
   return cpu144(e, busval);
@@ -4480,7 +4480,7 @@ static void cpu104(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->Z;
   return cpu154(e, busval);
 }
@@ -4488,7 +4488,7 @@ static void cpu105(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->X;
   return cpu166(e, busval);
 }
@@ -4496,7 +4496,7 @@ static void cpu106(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   busval = ~busval;
   return cpu162(e, busval);
 }
@@ -4504,7 +4504,7 @@ static void cpu107(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->X;
   ++c->T.lo;
   return cpu144(e, busval);
@@ -4513,7 +4513,7 @@ static void cpu108(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = c->Z;
   return cpu157(e, busval);
 }
@@ -4521,7 +4521,7 @@ static void cpu167(E* e, u8 busval) {
   C* c = &e->s.c;
   c->bus.val = get_u16(0xff, c->veclo);
   c->I = 1;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   return cpu136(e, busval);
 }
@@ -4602,7 +4602,7 @@ static void cpu120(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.lo = (c->A &= busval);
   c->C = !!(c->T.lo & 0x01); c->T.lo >>= 1;
   return cpu164(e, busval);
@@ -4611,7 +4611,7 @@ static void cpu121(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   busval = rare_opcode(e, busval);
   return cpu153(e, busval);
 }
@@ -4619,7 +4619,7 @@ static void cpu122(E* e, u8 busval) {
   C* c = &e->s.c;
   set_next_step(e);
   c->bus = c->PC;
-  c->open_bus = busval = cpu_read(e, c->bus.val);
+  busval = cpu_read(e, c->bus.val);
   c->T.val = busval;
   c->A = c->T.lo;
   return cpu163(e, busval);
