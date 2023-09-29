@@ -4,10 +4,12 @@
 "_emulator_get_ticks_f64",
 "_emulator_new_simple",
 "_emulator_read_prg_ram",
+"_emulator_read_state",
 "_emulator_run_until_f64",
 "_emulator_set_reset",
 "_emulator_was_prg_ram_updated",
 "_emulator_write_prg_ram",
+"_emulator_write_state",
 "_file_data_delete",
 "_file_data_delete2",
 "_free",
@@ -32,6 +34,8 @@
 "_rewind_new_simple",
 "_rewind_to_ticks_wrapper",
 "_set_controller_type",
+"_set_file_data_ptr",
+"_set_file_data_size",
 "_set_joyp_A",
 "_set_joyp_B",
 "_set_joyp_down",
@@ -41,5 +45,6 @@
 "_set_joyp_start",
 "_set_joyp_up",
 "_set_snesmouse_buttons",
-"_set_zapper"
+"_set_zapper",
+"_state_file_data_new"
 ]

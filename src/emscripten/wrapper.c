@@ -132,6 +132,12 @@ size_t get_audio_buffer_size(Emulator* e) {
   return audio_buffer->position - audio_buffer->data;
 }
 
+FileData* state_file_data_new(void) {
+  FileData* file_data = xmalloc(sizeof(FileData));
+  emulator_init_state_file_data(file_data);
+  return file_data;
+}
+
 FileData* prg_ram_file_data_new(Emulator* e) {
   FileData* file_data = xmalloc(sizeof(FileData));
   emulator_init_prg_ram_file_data(e, file_data);
@@ -144,6 +150,14 @@ void* get_file_data_ptr(FileData* file_data) {
 
 size_t get_file_data_size(FileData* file_data) {
   return file_data->size;
+}
+
+void set_file_data_ptr(FileData* file_data, void* ptr) {
+  file_data->data = ptr;
+}
+
+void set_file_data_size(FileData* file_data, size_t size) {
+  file_data->size = size;
 }
 
 void file_data_delete(FileData* file_data) {
