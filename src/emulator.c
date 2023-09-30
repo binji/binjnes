@@ -1371,8 +1371,6 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         // x:              CBA = d: .....CBA
         p->x = val & 7;
         p->t = (p->t & 0xffe0) | (val >> 3);
-        u8 shamt = (p->x + (p->fbidx & 7)) * 2;
-        p->bgatshift = interleave2(p->atshift >> shamt, p->bgshift >> shamt);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx x=%02hhx w=0\n",
               e->s.cy, ppu_dot(e), ppu_line(e), val, p->t, p->x);
       } else {
