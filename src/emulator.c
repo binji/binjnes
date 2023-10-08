@@ -893,7 +893,10 @@ static void apu_tick(E *e, u64 cy) {
         DEBUG("   dmc timer overflow (cy: %" PRIu64 ") (seq=%u) (timer=>%u)\n",
               cy, a->seq.au16[4], a->timer.au16[4]);
         u8 newdmcout = a->dmcout + ((a->dmcshift & 1) << 2) - 2;
-        if (newdmcout <= 127) { a->dmcout = newdmcout; }
+        if (newdmcout <= 127) {
+          a->dmcout = newdmcout;
+          apu_update_chan(a, 4);
+        }
         a->dmcshift >>= 1;
       }
       if (a->seq.au16[4] == 0) {
@@ -947,7 +950,7 @@ static void apu_tick(E *e, u64 cy) {
       f32 p = sampvol.af32[0] + sampvol.af32[1];
       a->pulse_mixed = p * (PB + p * PC);
     }
-    if (a->update & 0b1100) {
+    if (a->update & 0b11100) {
       // Started from a 203-entry table and calculated a cubic regression.
       static const f32 TB = 0.00653531668798749448f,
                        TC = -0.00002097005655295220f,
