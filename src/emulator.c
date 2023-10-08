@@ -1792,20 +1792,16 @@ static bool mapper_mmc1_shared_pre_write(E *e, u16 addr, u8 val) {
 
 static void mapper_mmc1_shared_post_write(E *e, u16 addr) {
   M* m = &e->s.m;
-  u8 chr4k = !!(m->mmc1.ctrl & 0x10);
   switch (addr >> 13) {
     case 4:
       m->mmc1.ctrl = m->mmc1.data;
       set_mirror(e, m->mmc1.data & 3);
       break;
     case 5:
-      m->chr_bank[0] =
-          m->mmc1.data & ~(chr4k ? 0 : 1) & (e->ci.chr4k_banks - 1);
+      m->chr_bank[0] = m->mmc1.data;
       break;
     case 6:
-      if (chr4k) {
-        m->chr_bank[1] = m->mmc1.data & (e->ci.chr4k_banks - 1);
-      }
+      m->chr_bank[1] = m->mmc1.data;
       break;
     case 7:
       assert(is_power_of_two(e->ci.prg16k_banks));
