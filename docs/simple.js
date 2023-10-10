@@ -18,22 +18,6 @@ const EVENT_NEW_FRAME = 1;
 const EVENT_AUDIO_BUFFER_FULL = 2;
 const EVENT_UNTIL_TICKS = 4;
 
-// From FrakenGraphics, based on FBX Smooth:
-// https://www.patreon.com/posts/nes-palette-for-47391225
-const NESPAL = [
-  0xff616161, 0xff880000, 0xff990d1f, 0xff791337, 0xff601256, 0xff10005d,
-  0xff000e52, 0xff08233a, 0xff0c3521, 0xff0e410d, 0xff174417, 0xff1f3a00,
-  0xff572f00, 0xff000000, 0xff000000, 0xff000000, 0xffaaaaaa, 0xffc44d0d,
-  0xffde244b, 0xffcf1269, 0xffad1490, 0xff481c9d, 0xff043492, 0xff055073,
-  0xff13695d, 0xff117a16, 0xff088013, 0xff497612, 0xff91661c, 0xff000000,
-  0xff000000, 0xff000000, 0xfffcfcfc, 0xfffc9a63, 0xfffc7e8a, 0xfffc6ab0,
-  0xfff26ddd, 0xffab71e7, 0xff5886e3, 0xff229ecc, 0xff00b1a8, 0xff00c172,
-  0xff4ecd5a, 0xff8ec234, 0xffcebe4f, 0xff424242, 0xff000000, 0xff000000,
-  0xfffcfcfc, 0xfffcd4be, 0xfffccaca, 0xfffcc4d9, 0xfffcc1ec, 0xffe7c3fa,
-  0xffc3cef7, 0xffa7cde2, 0xff9cdbda, 0xff9ee3c8, 0xffb8e5bf, 0xffc8ebb2,
-  0xffebe5b7, 0xffacacac, 0xff000000, 0xff000000,
-];
-
 const $ = document.querySelector.bind(document);
 let emulator = null;
 
@@ -299,20 +283,25 @@ Audio.ctx = new AudioContext;
 
 class Video {
   constructor(module, e, el) {
-    this.module = module;
+    this.buffer = new Uint16Array(module.HEAP16.buffer,
+        module._get_frame_buffer_ptr(e),
+        module._get_frame_buffer_size(e) >> 1);
+    this.rgbaBuffer = new Uint32Array(module.HEAP32.buffer,
+        module._get_rgba_frame_buffer_ptr(e),
+        module._get_rgba_frame_buffer_size(e) >> 2);
+    const palette = new Uint32Array(module.HEAP16.buffer,
+        module._get_palette_ptr(e),
+        module._get_palette_size(e) >> 2)
     try {
-      this.renderer = new WebGLRenderer(el);
+      this.renderer = new WebGLRenderer(el, palette);
     } catch (error) {
       console.log(`Error creating WebGLRenderer: ${error}`);
-      this.renderer = new Canvas2DRenderer(el);
+      this.renderer = new Canvas2DRenderer(module, e, el);
     }
-    this.buffer = new Uint16Array(module.HEAP16.buffer,
-        this.module._get_frame_buffer_ptr(e),
-        this.module._get_frame_buffer_size(e) >> 1);
   }
 
   uploadTexture() {
-    this.renderer.uploadTexture(this.buffer);
+    this.renderer.uploadTexture(this.buffer, this.rgbaBuffer);
   }
 
   renderTexture() {
@@ -321,8 +310,10 @@ class Video {
 }
 
 class Canvas2DRenderer {
-  constructor(el) {
+  constructor(module, e, el) {
     this.ctx = el.getContext('2d');
+    this.module = module;
+    this.e = e;
     this.imageData = this.ctx.createImageData(el.width, el.height);
   }
 
@@ -330,13 +321,16 @@ class Canvas2DRenderer {
     this.ctx.putImageData(this.imageData, 0, 0);
   }
 
-  uploadTexture(buffer) {
-    this.imageData.data.set(buffer);
+  uploadTexture(buffer, rgbaBuffer) {
+    this.module._emulator_convert_frame_buffer_simple(this.e);
+    const clamped = new Uint8ClampedArray(
+        rgbaBuffer.buffer, rgbaBuffer.byteOffset, rgbaBuffer.byteLength);
+    this.imageData.data.set(clamped);
   }
 }
 
 class WebGLRenderer {
-  constructor(el) {
+  constructor(el, palette) {
     const gl = this.gl = el.getContext('webgl2', {preserveDrawingBuffer: true});
     if (gl === null) {
       throw new Error('unable to create webgl context');
@@ -385,9 +379,9 @@ class WebGLRenderer {
         in vec2 vTexCoord;
         out vec4 outColor;
         uniform highp usampler2D uSampler;
-        uniform uint uPalette[64];
+        uniform uint uPalette[512];
         void main(void) {
-          uint color = uPalette[texture(uSampler, vTexCoord).r & 63u];
+          uint color = uPalette[texture(uSampler, vTexCoord).r & 511u];
           outColor = vec4(
             float((color >> 0) & 0xffu) / 255.5f,
             float((color >> 8) & 0xffu) / 255.5f,
@@ -415,7 +409,7 @@ class WebGLRenderer {
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, gl.FALSE, 16, 0);
     gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, gl.FALSE, 16, 8);
     gl.uniform1i(uSampler, 0);
-    gl.uniform1uiv(uPalette, NESPAL);
+    gl.uniform1uiv(uPalette, palette);
   }
 
   renderTexture() {

@@ -679,6 +679,9 @@ class Emulator {
 
   workerMessageEvent(e) {
     switch (e.data.msg) {
+      case 'setPalette':
+        this.video.setPalette(e.data.buffer);
+        break;
       case 'uploadTexture':
         this.video.uploadTexture(e.data.buffer);
         break;
@@ -927,31 +930,17 @@ class Audio {
   }
 }
 
-// From FrakenGraphics, based on FBX Smooth:
-// https://www.patreon.com/posts/nes-palette-for-47391225
-const NESPAL = [
-  0xff616161, 0xff880000, 0xff990d1f, 0xff791337, 0xff601256, 0xff10005d,
-  0xff000e52, 0xff08233a, 0xff0c3521, 0xff0e410d, 0xff174417, 0xff1f3a00,
-  0xff572f00, 0xff000000, 0xff000000, 0xff000000, 0xffaaaaaa, 0xffc44d0d,
-  0xffde244b, 0xffcf1269, 0xffad1490, 0xff481c9d, 0xff043492, 0xff055073,
-  0xff13695d, 0xff117a16, 0xff088013, 0xff497612, 0xff91661c, 0xff000000,
-  0xff000000, 0xff000000, 0xfffcfcfc, 0xfffc9a63, 0xfffc7e8a, 0xfffc6ab0,
-  0xfff26ddd, 0xffab71e7, 0xff5886e3, 0xff229ecc, 0xff00b1a8, 0xff00c172,
-  0xff4ecd5a, 0xff8ec234, 0xffcebe4f, 0xff424242, 0xff000000, 0xff000000,
-  0xfffcfcfc, 0xfffcd4be, 0xfffccaca, 0xfffcc4d9, 0xfffcc1ec, 0xffe7c3fa,
-  0xffc3cef7, 0xffa7cde2, 0xff9cdbda, 0xff9ee3c8, 0xffb8e5bf, 0xffc8ebb2,
-  0xffebe5b7, 0xffacacac, 0xff000000, 0xff000000,
-];
-
 class Video {
   constructor(el) {
-    this.el = el;
     try {
       this.renderer = new WebGLRenderer(el);
     } catch (error) {
       console.log(`Error creating WebGLRenderer: ${error}`);
-      this.renderer = new Canvas2DRenderer(el);
     }
+  }
+
+  setPalette(palette) {
+    this.renderer.setPalette(palette);
   }
 
   uploadTexture(buffer) {
@@ -960,21 +949,6 @@ class Video {
 
   renderTexture() {
     this.renderer.renderTexture();
-  }
-}
-
-class Canvas2DRenderer {
-  constructor(el) {
-    this.ctx = el.getContext('2d');
-    this.imageData = this.ctx.createImageData(SCREEN_WIDTH, SCREEN_HEIGHT);
-  }
-
-  uploadTexture(buffer) {
-    this.imageData.data.set(buffer);
-  }
-
-  renderTexture() {
-    this.ctx.putImageData(this.imageData, 0, 0);
   }
 }
 
@@ -1028,9 +1002,9 @@ class WebGLRenderer {
         in vec2 vTexCoord;
         out vec4 outColor;
         uniform highp usampler2D uSampler;
-        uniform uint uPalette[64];
+        uniform uint uPalette[512];
         void main(void) {
-          uint color = uPalette[texture(uSampler, vTexCoord).r & 63u];
+          uint color = uPalette[texture(uSampler, vTexCoord).r & 511u];
           outColor = vec4(
             float((color >> 0) & 0xffu) / 255.5f,
             float((color >> 8) & 0xffu) / 255.5f,
@@ -1058,7 +1032,12 @@ class WebGLRenderer {
     gl.vertexAttribPointer(aPos, 2, gl.FLOAT, gl.FALSE, 16, 0);
     gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, gl.FALSE, 16, 8);
     gl.uniform1i(uSampler, 0);
-    gl.uniform1uiv(uPalette, NESPAL);
+    gl.uniform1uiv(uPalette, new Uint32Array(512));
+    this.uPalette = uPalette;
+  }
+
+  setPalette(palette) {
+    this.gl.uniform1uiv(this.uPalette, palette);
   }
 
   renderTexture() {

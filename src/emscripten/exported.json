@@ -1,5 +1,6 @@
 [
 "_add_snesmouse_delta",
+"_emulator_convert_frame_buffer_simple",
 "_emulator_delete",
 "_emulator_get_ticks_f64",
 "_emulator_new_simple",
@@ -19,6 +20,10 @@
 "_get_file_data_size",
 "_get_frame_buffer_ptr",
 "_get_frame_buffer_size",
+"_get_palette_ptr",
+"_get_palette_size",
+"_get_rgba_frame_buffer_ptr",
+"_get_rgba_frame_buffer_size",
 "_joypad_begin_rewind_playback",
 "_joypad_delete",
 "_joypad_end_rewind_playback",

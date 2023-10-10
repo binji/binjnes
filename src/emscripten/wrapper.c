@@ -25,6 +25,7 @@ static Emulator* e;
 
 static EmulatorInit s_init;
 static SystemInput s_input;
+static RGBAFrameBuffer s_frame_buffer;
 
 Emulator* emulator_new_simple(void* rom_data, size_t rom_size,
                               int audio_frequency, int audio_frames) {
@@ -117,6 +118,27 @@ void* get_frame_buffer_ptr(Emulator* e) {
 }
 
 size_t get_frame_buffer_size(Emulator* e) { return sizeof(FrameBuffer); }
+
+void emulator_convert_frame_buffer_simple(Emulator* e) {
+  emulator_convert_frame_buffer(e, s_frame_buffer);
+}
+
+void* get_rgba_frame_buffer_ptr(Emulator* e) {
+  return s_frame_buffer;
+}
+
+size_t get_rgba_frame_buffer_size(Emulator* e) {
+  return sizeof(RGBAFrameBuffer);
+}
+
+const void* get_palette_ptr(void) {
+  extern const RGBA s_nespal[];
+  return s_nespal;
+}
+
+size_t get_palette_size(void) {
+  return 512 * sizeof(u32);
+}
 
 void* get_audio_buffer_ptr(Emulator* e) {
   return emulator_get_audio_buffer(e)->data;

@@ -127,6 +127,11 @@ class Emulator {
             this.module.HEAP8.buffer,
             this.module._get_audio_buffer_ptr(this.e),
             this.module._get_audio_buffer_capacity(this.e));
+        const palette = new Uint32Array(
+            module.HEAP32.buffer,
+            this.module._get_palette_ptr(this.e),
+            this.module._get_palette_size(this.e) >> 2);
+        self.postMessage({ msg: 'setPalette', buffer: palette });
 
         this.keyFuncs = [  // Order matches input.list
             this.module._set_joyp_up.bind(null, this.e, 0),

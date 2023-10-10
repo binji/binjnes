@@ -46,7 +46,7 @@ typedef EmulatorInit EInit;
 
 // see
 // https://github.com/Gumball2415/palgen-persune/blob/main/docs/example_palettes/2C02-2C07_aps_ela_persune_neutral.pal
-static const RGBA s_nespal[] = {
+const RGBA s_nespal[] = {
     0xff575757, 0xff681600, 0xff7b0607, 0xff75002a, 0xff590048, 0xff21004e,
     0xff00004c, 0xff001138, 0xff002920, 0xff003200, 0xff003800, 0xff063400,
     0xff412d00, 0xff000000, 0xff000000, 0xff000000, 0xffa5a5a5, 0xffbb4c18,
