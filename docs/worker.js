@@ -1,7 +1,7 @@
 let simdCheck = new Uint8Array([
-  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60,
-  0x01, 0x7b, 0x00, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x04, 0x01, 0x02, 0x00,
-  0x0b
+    0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x05, 0x01, 0x60,
+    0x01, 0x7b, 0x00, 0x03, 0x02, 0x01, 0x00, 0x0a, 0x04, 0x01, 0x02, 0x00,
+    0x0b
 ]);
 let hasSimd = WebAssembly.validate(simdCheck);
 importScripts(hasSimd ? 'binjnes-simd.js' : 'binjnes.js')
@@ -313,54 +313,54 @@ class Emulator {
 
 class Rewind {
   constructor(module, e) {
-    this.module = module;
-    this.e = e;
-    this.joypadPtr = this.module._joypad_new_simple(this.e);
-    this.statePtr = 0;
-    this.bufferPtr = this.module._rewind_new_simple(
-        e, REWIND_FRAMES_PER_BASE_STATE, REWIND_BUFFER_CAPACITY);
+      this.module = module;
+      this.e = e;
+      this.joypadPtr = this.module._joypad_new_simple(this.e);
+      this.statePtr = 0;
+      this.bufferPtr = this.module._rewind_new_simple(
+          e, REWIND_FRAMES_PER_BASE_STATE, REWIND_BUFFER_CAPACITY);
   }
 
   destroy() {
-    this.module._rewind_delete(this.bufferPtr);
-    this.module._joypad_delete(this.joypadPtr);
+      this.module._rewind_delete(this.bufferPtr);
+      this.module._joypad_delete(this.joypadPtr);
   }
 
   get oldestTicks() {
-    return this.module._rewind_get_oldest_ticks_f64(this.bufferPtr);
+      return this.module._rewind_get_oldest_ticks_f64(this.bufferPtr);
   }
 
   get newestTicks() {
-    return this.module._rewind_get_newest_ticks_f64(this.bufferPtr);
+      return this.module._rewind_get_newest_ticks_f64(this.bufferPtr);
   }
 
   pushBuffer() {
-    if (!this.isRewinding) {
-      this.module._rewind_append(this.bufferPtr, this.e);
-    }
+      if (!this.isRewinding) {
+          this.module._rewind_append(this.bufferPtr, this.e);
+      }
   }
 
   get isRewinding() {
-    return this.statePtr !== 0;
+      return this.statePtr !== 0;
   }
 
   beginRewind() {
-    if (this.isRewinding) return;
-    this.statePtr =
-        this.module._rewind_begin(this.e, this.bufferPtr, this.joypadPtr);
-    this.module._joypad_begin_rewind_playback(this.joypadPtr);
+      if (this.isRewinding) return;
+      this.statePtr =
+          this.module._rewind_begin(this.e, this.bufferPtr, this.joypadPtr);
+      this.module._joypad_begin_rewind_playback(this.joypadPtr);
   }
 
   rewindToTicks(ticks) {
-    if (!this.isRewinding) return;
-    return this.module._rewind_to_ticks_wrapper(this.statePtr, ticks) ===
-        RESULT_OK;
+      if (!this.isRewinding) return;
+      return this.module._rewind_to_ticks_wrapper(this.statePtr, ticks) ===
+          RESULT_OK;
   }
 
   endRewind() {
-    if (!this.isRewinding) return;
-    this.module._joypad_end_rewind_playback(this.joypadPtr);
-    this.module._rewind_end(this.statePtr);
-    this.statePtr = 0;
+      if (!this.isRewinding) return;
+      this.module._joypad_end_rewind_playback(this.joypadPtr);
+      this.module._rewind_end(this.statePtr);
+      this.statePtr = 0;
   }
 }
