@@ -307,6 +307,9 @@ static void update_palette(E *e) {
   }
 }
 
+static inline u8 ppu_dot(E* e) { return e->s.p.state % 341; }
+static inline u8 ppu_line(E* e) { return e->s.p.state / 341; }
+
 static void ppu_write(E *e, u16 addr, u8 val) {
   if (e->mapper_on_ppu_addr_updated)
     e->mapper_on_ppu_addr_updated(e, addr);
@@ -390,8 +393,6 @@ static void shift_bg(E *e) { e->s.p.bgatshift >>= 4; }
 
 static inline u8 scanx(P* p) { return p->fbidx & 255; }
 static inline u8 scany(P* p) { return p->fbidx >> 8; }
-static inline u8 ppu_dot(E* e) { return e->s.p.state % 341; }
-static inline u8 ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void shift_en(E *e) {
   P* p = &e->s.p;
@@ -1002,7 +1003,7 @@ static void apu_tick(E *e, u64 cy) {
       e->s.c.step = STEP_DMC + (4 - stall);
       e->s.c.bits = s_opcode_bits[e->s.c.step++];
       DEBUG(" QUEUE dmcfetch (cy: %" PRIu64 " (stall %d, step %d, seq %d):\n",
-            cy, stall, step, a->seq[4]);
+            cy, stall, step, a->seq.au16[4]);
     } else {
       DEBUG(" dmcfetch skipped (cy: %" PRIu64 "):\n", cy);
     }
@@ -1546,12 +1547,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
             if (!a->dmcbufstate) {
               DEBUG("STARTing DMC with fetch (cy: %" PRIu64
                     ") (bufstate=%u) (seq=%u)\n",
-                    e->s.cy, a->dmcbufstate, a->seq[4]);
+                    e->s.cy, a->dmcbufstate, a->seq.au16[4]);
               a->dmcfetch = true;
               sched_at(e, SCHED_DMC_FETCH, e->s.cy + !(a->state & 1) * 3);
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
-                    e->s.cy, a->seq[4]);
+                    e->s.cy, a->seq.au16[4]);
               sched_at(e, SCHED_DMC_FETCH,
                        e->s.cy +
                            ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
