@@ -498,6 +498,26 @@ static void sched_next_nmi(E *e) {
   sched_at(e, SCHED_NMI, e->s.cy + next_nmi - 1);
 }
 
+static void sched_next_frame(E *e) {
+  P* p = &e->s.p;
+  int next_frame = 82183 - p->state;
+  bool will_skip_cycle = false;
+  if (next_frame <= 0) {
+    will_skip_cycle =
+        !(p->frame & 1) &&
+        !(e->s.p.ppumask & 0x18) ==
+            (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
+    next_frame += 89342 - will_skip_cycle;
+  }
+#if 0
+  printf("    sched_next_frame for %" PRIu64 " (state=%u skip=%u) diff=%u\n",
+         e->s.cy + next_frame, p->state, will_skip_cycle, next_frame);
+#endif
+#if 1
+  sched_at(e, SCHED_EVENT, e->s.cy + next_frame - 1);
+#endif
+}
+
 static void ppu1(E *e) {
   DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
   e->s.p.ppustatus = 0;
@@ -514,9 +534,16 @@ static void ppu2(E *e) {
   }
   e->s.c.read_input = false;
   e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-  sched_at(e, SCHED_EVENT, e->s.cy);
-  DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", e->s.cy, e->s.p.frame,
-        e->s.p.ppustatus);
+#if 1
+  sched_occurred(e, SCHED_EVENT);
+#endif
+#if 0
+  static Ticks last_frame = 0;
+  printf("(%" PRIu64 "): [#%u] ppustatus = %02x (%" PRIu64 ")\n", e->s.cy,
+         e->s.p.frame, e->s.p.ppustatus, e->s.cy - last_frame);
+  last_frame = e->s.cy;
+#endif
+  sched_next_frame(e);
 }
 static void ppu3(E *e) {
   if (e->s.p.ppuctrl & 0x80) {
@@ -1495,6 +1522,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       if (p->ppuctrl & 0x80) {
         sched_next_nmi(e);
       }
+      sched_next_frame(e);
       p->bgmask = (p->ppumask & 8) ? 0xf : 0;
       p->next_enabled = !!(val & 0x18);
       p->emphasis = (val << 1) & 0x1c0;
@@ -5622,6 +5650,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.state = 4;
   sched_init(e);
   sched_at(e, SCHED_FRAME_IRQ, 89481);
+  sched_next_frame(e);
 
   switch (init->ram_init) {
     case RAM_INIT_ZERO: break;
@@ -5700,7 +5729,9 @@ u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
 static void emulator_substep_loop(E *e, Ticks check_ticks) {
+#if 0
   sched_clear(e, SCHED_EVENT);
+#endif
   sched_at(e, SCHED_RUN_UNTIL, check_ticks);
   while (e->s.event == 0 && e->s.cy < check_ticks) {
     sched_run(e);
