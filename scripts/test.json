@@ -20,7 +20,7 @@
       ["02.len_table.nes", 20, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
       ["03.irq_flag.nes", 20, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
       ["04.clock_jitter.nes", 20, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
-      ["05.len_timing_mode0.nes", 21, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
+      ["05.len_timing_mode0.nes", 25, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
       ["06.len_timing_mode1.nes", 30, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
       ["07.irq_flag_timing.nes", 20, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
       ["08.irq_timing.nes", 20, "e139a0f9f12b82f13c3063147f4542b24bc9a127"],
@@ -173,7 +173,7 @@
     "tests": [
       ["1-clocking.nes", 25, "7c7ea2f09728a1aa7b071702e704e790fe2afd07"],
       ["2-details.nes", 50, "d7336a5bce1e88372e9454f83b9c4b883d6d6738"],
-      ["3-A12_clocking.nes", 24, "3071e19641a77226ce1f2c9ecbb5bc8aa0161da0"],
+      ["3-A12_clocking.nes", 25, "3071e19641a77226ce1f2c9ecbb5bc8aa0161da0"],
       ["4-scanline_timing.nes", 320, "2ee83c2124a28ec36052134ce9432e2a4694744c"],
       ["5-MMC3.nes", 24, "48580471a2f8e4a7e8fe27b073bd88ea48f6b7bc"],
       ["6-MMC3_alt.nes", 50, "!e87f0bc705b7675aec286800c0fd5f34625fcf8d"]
@@ -254,7 +254,7 @@
     "tests": [
       ["01.basics.nes", 50, "6d5a4b2263c0e5b6818e90278c81956ec808cfd7"],
       ["02.alignment.nes", 50, "c9c03cd2778c8dd820947bd70f4de4dc2cb5817f"],
-      ["03.corners.nes", 20, "3be9aa0130b73941f7ef46057cdfc27c06ddc870"],
+      ["03.corners.nes", 25, "3be9aa0130b73941f7ef46057cdfc27c06ddc870"],
       ["04.flip.nes", 20, "cb29b4853ed6ac3b74f72c9d136708cca88063fc"],
       ["05.left_clip.nes", 50, "bbac165f83a3846a62839d7b78f22a4b95cee571"],
       ["06.right_edge.nes", 50, "bfca85db435aabb9671fa140f4f66120235e900f"],
@@ -282,7 +282,7 @@
     "tests": [
       ["1.frame_basics.nes", 200, "9dd0f21d7fcf521966ba13ad1f815bc695367927"],
       ["2.vbl_timing.nes", 200, "a65db61bcb2711c62a231bb63135f30986226c0d"],
-      ["3.even_odd_frames.nes", 100, "47790632ce42e52b673a480e4fdd4e4cdfda5ec5"],
+      ["3.even_odd_frames.nes", 110, "47790632ce42e52b673a480e4fdd4e4cdfda5ec5"],
       ["4.vbl_clear_timing.nes", 200, "9e89a03c745862605379477ff65a71b800e4be05"],
       ["5.nmi_suppression.nes", 200, "cbc205c8453a700887b6507e0b7e89fdf253ff1e"],
       ["6.nmi_disable.nes", 300, "f6052bfb8d99f56f157b06bf5be96418cf292e46"],

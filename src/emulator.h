@@ -90,6 +90,7 @@ typedef enum {
   SCHED_FRAME_IRQ,
   SCHED_DMC_FETCH,
   SCHED_RESET_CHANGE,
+  SCHED_NMI,
   SCHED_COUNT,
 } Sched;
 
@@ -242,11 +243,10 @@ typedef struct {
   u32 state, fbidx, frame;
   u16 v, t, atb, last_a12, emphasis, palette[32];
   u8 x, ntb, ptbl, ptbh, readbuf, a12_irq_counter;
-  bool enabled, next_enabled, w, oddframe, a12_low;
+  bool enabled, next_enabled, w, a12_low, toggled_rendering_near_skipped_cycle;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr, bgmask;
   Spr spr;
-  u64 read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy, a12_low_count,
-      enabled_changed_cy;
+  u64 read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy, a12_low_count;
   Mirror mirror;
 } P;
 
