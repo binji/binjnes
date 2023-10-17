@@ -139,7 +139,7 @@ static void print_info(E *e);
 static void cpu_step(E *e);
 static void ppu_sync(E *e, const char*);
 static void apu_sync(E *e);
-static void spr_step(E *e);
+static void spr_step(E *e, Ticks);
 
 static const u8 s_opcode_bits[781+1+7+7+514+4], s_dmc_stall[125];
 static const u16 s_opcode_loc[256];
@@ -154,7 +154,8 @@ static const u16 s_opcode_loc[256];
 // Scheduler stuff /////////////////////////////////////////////////////////////
 
 static const char* s_sched_names[] = {
-    "event", "run until", "frame irq", "dmc fetch", "reset", "nmi",
+    "event", "run until", "frame irq",  "dmc fetch",
+    "reset", "nmi",       "mapper irq",
 };
 _Static_assert(ARRAY_SIZE(s_sched_names) == SCHED_COUNT, "s_sched_names count mismatch");
 
@@ -266,16 +267,16 @@ static inline u32 interleave2(u16 h, u16 l) {
 
 static void set_chr4k_map(E *, u16, u16);
 
-static inline u8 chr_read(E *e, u8 *map[16], u16 addr) {
+static inline u8 chr_read(E *e, u8 *map[16], u16 addr, Ticks cy) {
   u8 result = map[(addr >> 10) & 0xf][addr & 0x3ff];
   if (e->mapper_on_chr_read)
-    e->mapper_on_chr_read(e, addr);
+    e->mapper_on_chr_read(e, addr, cy);
   return result;
 }
 
-static inline u8 nt_read(E *e, u16 addr) {
+static inline u8 nt_read(E *e, u16 addr, Ticks cy) {
   if (e->mapper_on_ppu_addr_updated)
-    e->mapper_on_ppu_addr_updated(e, addr);
+    e->mapper_on_ppu_addr_updated(e, addr, cy);
   return e->ppu_map[(addr >> 10) & 0xf][addr & 0x3ff];
 }
 
@@ -284,7 +285,7 @@ static u8 ppu_read(E *e, u16 addr) {
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      buffer = chr_read(e, e->ppu_map, addr);
+      buffer = chr_read(e, e->ppu_map, addr, e->s.cy);
       break;
 
     case 15:
@@ -296,7 +297,7 @@ static u8 ppu_read(E *e, u16 addr) {
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
-      buffer = nt_read(e, addr);
+      buffer = nt_read(e, addr, e->s.cy);
       break;
   }
   e->s.p.readbuf = buffer;
@@ -316,7 +317,7 @@ static inline u8 ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void ppu_write(E *e, u16 addr, u8 val) {
   if (e->mapper_on_ppu_addr_updated)
-    e->mapper_on_ppu_addr_updated(e, addr);
+    e->mapper_on_ppu_addr_updated(e, addr, e->s.cy);
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
@@ -345,11 +346,11 @@ static void ppu_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static inline void read_ntb(E *e) {
-  e->s.p.ntb = nt_read(e, 0x2000 | (e->s.p.v & 0xfff));
+static inline void read_ntb(E *e, Ticks cy) {
+  e->s.p.ntb = nt_read(e, 0x2000 | (e->s.p.v & 0xfff), cy);
 }
 
-static inline void read_atb(E *e) {
+static inline void read_atb(E *e, Ticks cy) {
   u8 atb1;
   if (e->s.m.is_mmc5_ex_attr_mode) {
     atb1 = e->s.p.ram[(2 << 10) + (e->s.p.v & 0x3ff)] >> 6;
@@ -357,14 +358,14 @@ static inline void read_atb(E *e) {
     u16 v = e->s.p.v;
     u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
     int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
-    atb1 = (nt_read(e, at) >> shift) & 3;
+    atb1 = (nt_read(e, at, cy) >> shift) & 3;
   }
   u8 atb2 = (atb1 << 2) | atb1;
   u8 atb4 = (atb2 << 4) | atb2;
   e->s.p.atb = (atb4 << 8) | atb4;
 }
 
-static inline u8 read_ptb(E *e, u8 addend) {
+static inline u8 read_ptb(E *e, u8 addend, Ticks cy) {
   u16 addr = (((e->s.p.ppuctrl << 8) & 0x1000) | (e->s.p.ntb << 4) |
               (e->s.p.v >> 12)) +
              addend;
@@ -372,10 +373,10 @@ static inline u8 read_ptb(E *e, u8 addend) {
     u8 exbyte = e->s.p.ram[(2 << 10) + (e->s.p.v & 0x3ff)];
     u8 bank = exbyte & 0x3f & (e->ci.chr4k_banks - 1);
     if (e->mapper_on_ppu_addr_updated)
-      e->mapper_on_ppu_addr_updated(e, addr);
+      e->mapper_on_ppu_addr_updated(e, addr, cy);
     return e->ppu_bg_map[(addr >> 10) & 0x3][(bank << 12) + (addr & 0x3ff)];
   }
-  return chr_read(e, e->ppu_bg_map, addr);
+  return chr_read(e, e->ppu_bg_map, addr, cy);
 }
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
@@ -563,30 +564,30 @@ static void ppu3(E *e, Ticks cy) {
 }
 static void ppu4(E *e, Ticks cy) { inch(&e->s.p); }
 static void ppu5(E *e, Ticks cy) { inch(&e->s.p); shift_bg(e); }
-static void ppu6(E *e, Ticks cy) { inch(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu6(E *e, Ticks cy) { inch(&e->s.p); shift_en(e); spr_step(e, cy); }
 static void ppu7(E *e, Ticks cy) { inch(&e->s.p); incv(&e->s.p); }
-static void ppu8(E *e, Ticks cy) { inch(&e->s.p); incv(&e->s.p); shift_en(e); spr_step(e); }
-static void ppu9(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); }
-static void ppu10(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); shift_bg(e); }
-static void ppu11(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); spr_step(e); }
-static void ppu12(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); }
-static void ppu13(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); shift_bg(e); }
-static void ppu14(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); spr_step(e); }
+static void ppu8(E *e, Ticks cy) { inch(&e->s.p); incv(&e->s.p); shift_en(e); spr_step(e, cy); }
+static void ppu9(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8, cy); }
+static void ppu10(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8, cy); shift_bg(e); }
+static void ppu11(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8, cy); shift_en(e); spr_step(e, cy); }
+static void ppu12(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0, cy); }
+static void ppu13(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0, cy); shift_bg(e); }
+static void ppu14(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0, cy); shift_en(e); spr_step(e, cy); }
 static void ppu15(E *e, Ticks cy) { e->s.p.state = -1; }
-static void ppu16(E *e, Ticks cy) { read_atb(e); }
-static void ppu17(E *e, Ticks cy) { read_atb(e); shift_bg(e); }
-static void ppu18(E *e, Ticks cy) { read_atb(e); shift_en(e); spr_step(e); }
-static void ppu19(E *e, Ticks cy) { read_ntb(e); }
-static void ppu20(E *e, Ticks cy) { read_ntb(e); shift_bg(e); reload(e, false); }
-static void ppu21(E *e, Ticks cy) { read_ntb(e); shift_en(e); reload(e, false); spr_step(e); }
-static void ppu22(E *e, Ticks cy) { read_ntb(e); spr_step(e); }
+static void ppu16(E *e, Ticks cy) { read_atb(e, cy); }
+static void ppu17(E *e, Ticks cy) { read_atb(e, cy); shift_bg(e); }
+static void ppu18(E *e, Ticks cy) { read_atb(e, cy); shift_en(e); spr_step(e, cy); }
+static void ppu19(E *e, Ticks cy) { read_ntb(e, cy); }
+static void ppu20(E *e, Ticks cy) { read_ntb(e, cy); shift_bg(e); reload(e, false); }
+static void ppu21(E *e, Ticks cy) { read_ntb(e, cy); shift_en(e); reload(e, false); spr_step(e, cy); }
+static void ppu22(E *e, Ticks cy) { read_ntb(e, cy); spr_step(e, cy); }
 static void ppu23(E *e, Ticks cy) { shift_bg(e); }
 static void ppu24(E *e, Ticks cy) { shift_dis(e); }
 static void ppu25(E *e, Ticks cy) { shift_dis(e); sprfetch(e); }
-static void ppu26(E *e, Ticks cy) { shift_en(e); reload(e, false); sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
-static void ppu27(E *e, Ticks cy) { shift_en(e); spr_step(e); }
-static void ppu28(E *e, Ticks cy) { spr_step(e); }
-static void ppu29(E *e, Ticks cy) { spr_step(e); ppu_t_to_v(&e->s.p, 0x7be0); }
+static void ppu26(E *e, Ticks cy) { shift_en(e); reload(e, false); sprfetch(e); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu27(E *e, Ticks cy) { shift_en(e); spr_step(e, cy); }
+static void ppu28(E *e, Ticks cy) { spr_step(e, cy); }
+static void ppu29(E *e, Ticks cy) { spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x7be0); }
 static void ppu30(E *e, Ticks cy) { sprclear(e); }
 static void ppu31(E *e, Ticks cy) {
   sprclear(e);
@@ -604,18 +605,18 @@ static void ppu31(E *e, Ticks cy) {
   e->s.p.toggled_rendering_near_skipped_cycle = false;
 }
 static void ppu32(E *e, Ticks cy) { sprfetch(e); }
-static void ppu33(E *e, Ticks cy) { sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
-static void ppu34(E *e, Ticks cy) { spreval(e); inch(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu33(E *e, Ticks cy) { sprfetch(e); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu34(E *e, Ticks cy) { spreval(e); inch(&e->s.p); shift_en(e); spr_step(e, cy); }
 static void ppu35(E *e, Ticks cy) { spreval(e); shift_dis(e); }
 
-static void ppu36(E *e, Ticks cy) { read_ntb(e); }
+static void ppu36(E *e, Ticks cy) { read_ntb(e, cy); }
 static void ppu37(E *e, Ticks cy) { shift_en(e); }
-static void ppu38(E *e, Ticks cy) { read_atb(e); shift_en(e); }
-static void ppu39(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); }
-static void ppu40(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); }
+static void ppu38(E *e, Ticks cy) { read_atb(e, cy); shift_en(e); }
+static void ppu39(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0, cy); shift_en(e); }
+static void ppu40(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8, cy); shift_en(e); }
 static void ppu41(E *e, Ticks cy) { inch(&e->s.p); shift_en(e); }
-static void ppu42(E *e, Ticks cy) { read_ntb(e); shift_en(e); reload(e, false); }
-static void ppu43(E *e, Ticks cy) { read_ntb(e); shift_bg(e); reload(e, true); }
+static void ppu42(E *e, Ticks cy) { read_ntb(e, cy); shift_en(e); reload(e, false); }
+static void ppu43(E *e, Ticks cy) { read_ntb(e, cy); shift_bg(e); reload(e, true); }
 
 static void init_ppu_steps(E* e) {
   const int num_dots = 341;
@@ -786,36 +787,41 @@ static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
     ((ppuctrl & 8) << 9) | (tile << 4) | (y & 7);
 }
 
-static inline u8 spr_ptb(E* e, u8 tile, u8 addend) {
+static inline u8 spr_ptb(E* e, u8 tile, u8 addend, Ticks cy) {
   return chr_read(e, e->ppu_spr_map,
-                  spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend);
+                  spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend,
+                  cy);
 }
 
-static void spr4(E* e);
-static void spr7(E* e);
+static void spr4(E* e, Ticks cy);
+static void spr7(E* e, Ticks cy);
 
-static void spr1(E *e) { e->s.p.spr.t = e->s.p.oam[e->s.p.spr.s++]; }
-static void spr2(E *e) {
-  if (!y_in_range(&e->s.p, e->s.p.spr.t)) { e->s.p.spr.s += 3; spr4(e); return; }
+static void spr1(E *e, Ticks cy) { e->s.p.spr.t = e->s.p.oam[e->s.p.spr.s++]; }
+static void spr2(E *e, Ticks cy) {
+  if (!y_in_range(&e->s.p, e->s.p.spr.t)) {
+    e->s.p.spr.s += 3;
+    spr4(e, cy);
+    return;
+  }
   if (e->s.p.spr.s == 1) e->s.p.spr.spr0 = true;
   if (e->s.p.spr.d <= 32 - 3) { e->s.p.oam2[e->s.p.spr.d++] = e->s.p.spr.t; }
 }
-static void spr3(E *e) { e->s.p.oam2[e->s.p.spr.d++] = e->s.p.oam[e->s.p.spr.s++]; }
-static void spr4(E *e) { e->s.p.spr.state = e->s.p.spr.s >= 256 ? 17 : e->s.p.spr.d >= 32 ? 9 : 1; }
-static void spr5(E *e) {
+static void spr3(E *e, Ticks cy) { e->s.p.oam2[e->s.p.spr.d++] = e->s.p.oam[e->s.p.spr.s++]; }
+static void spr4(E *e, Ticks cy) { e->s.p.spr.state = e->s.p.spr.s >= 256 ? 17 : e->s.p.spr.d >= 32 ? 9 : 1; }
+static void spr5(E *e, Ticks cy) {
   if (!y_in_range(&e->s.p, e->s.p.spr.t)) {
     if (e->s.p.spr.s & 3) e->s.p.spr.s += 4;
-    spr7(e);
+    spr7(e, cy);
     return;
   }
   e->s.p.ppustatus |= 0x20;
 }
-static void spr6(E *e) { ++e->s.p.spr.s; }
-static void spr7(E *e) { e->s.p.spr.state = e->s.p.spr.s >= 256 ? 17 : 9; }
-static void spr8(E *e) { e->s.p.spr.state = 17; }
-static void spr9(E *e) { read_ntb(e); }  // garbage read}
-static void spr10(E *e) { read_atb(e); } // garbage read
-static void spr11(E *e) {
+static void spr6(E *e, Ticks cy) { ++e->s.p.spr.s; }
+static void spr7(E *e, Ticks cy) { e->s.p.spr.state = e->s.p.spr.s >= 256 ? 17 : 9; }
+static void spr8(E *e, Ticks cy) { e->s.p.spr.state = 17; }
+static void spr9(E *e, Ticks cy) { read_ntb(e, cy); }  // garbage read}
+static void spr10(E *e, Ticks cy) { read_atb(e, cy); } // garbage read
+static void spr11(E *e, Ticks cy) {
   P* p = &e->s.p;
   Spr* spr = &e->s.p.spr;
   spr->y = (scany(p) - 1) - p->oam2[spr->s];
@@ -825,20 +831,20 @@ static void spr11(E *e) {
     if (spr->at & 0x80) {
       spr->y = ~spr->y;
     } // Flip Y.
-    spr->ptbl = spr_ptb(e, spr->tile, 0);
+    spr->ptbl = spr_ptb(e, spr->tile, 0, cy);
   } else {
     // Dummy read for MMC3 IRQ
-    spr_ptb(e, 0xff, 0);
+    spr_ptb(e, 0xff, 0, cy);
   }
 }
-static void spr12(E *e) {
+static void spr12(E *e, Ticks cy) {
   P* p = &e->s.p;
   Spr* spr = &e->s.p.spr;
   int idx = spr->s >> 2;
   u8 x = p->oam2[spr->s + 3];
 
   if (spr->s + 4 <= spr->d) {
-    u8 ptbh = spr_ptb(e, spr->tile, 8);
+    u8 ptbh = spr_ptb(e, spr->tile, 8, cy);
     if (!(spr->at & 0x40)) {
       spr->ptbl = reverse(spr->ptbl);
       ptbh = reverse(ptbh);
@@ -853,7 +859,7 @@ static void spr12(E *e) {
     spr->next_any_active = p->state < 341 * 261;
   } else {
     // Dummy read for MMC3 IRQ
-    spr_ptb(e, 0xff, 8);
+    spr_ptb(e, 0xff, 8, cy);
     // empty sprite.
     spr->shift.au8[idx] = spr->shift.au8[idx + 8] = 0;
     spr->pal.au8[idx] = 4 << 2;
@@ -863,10 +869,10 @@ static void spr12(E *e) {
   }
   spr->s += 4;
 }
-static void spr13(E *e) { e->s.p.spr.state = 18; }
+static void spr13(E *e, Ticks cy) { e->s.p.spr.state = 18; }
 
-static void spr_step(E *e) {
-  static const StepFunc steps[] = {
+static void spr_step(E *e, Ticks cy) {
+  static const PPUStepFunc steps[] = {
       NULL,
       // Sprite eval
       &spr1, &spr2, &spr3, NULL, &spr3, NULL, &spr3, &spr4,  // 65 .. 256
@@ -877,8 +883,8 @@ static void spr_step(E *e) {
       // Sprite fetch
       &spr9, NULL, &spr10, NULL, &spr11, NULL, &spr12, &spr13,  // 257 .. 320
   };
-  StepFunc f = steps[e->s.p.spr.state++];
-  if (f) f(e);
+  PPUStepFunc f = steps[e->s.p.spr.state++];
+  if (f) f(e, cy);
 }
 
 // APU stuff ///////////////////////////////////////////////////////////////////
@@ -1443,7 +1449,7 @@ static u8 cpu_read(E *e, u16 addr) {
         u8 result = p->ppulast = ppu_read(e, p->v);
         inc_ppu_addr(p);
         if (e->mapper_on_ppu_addr_updated)
-          e->mapper_on_ppu_addr_updated(e, p->v);
+          e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy);
         return c->open_bus = result;
       }
     }
@@ -1579,7 +1585,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         // v                   = t
         p->v = p->t = (p->t & 0xff00) | val;
         if (e->mapper_on_ppu_addr_updated)
-          e->mapper_on_ppu_addr_updated(e, p->v);
+          e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:v=%04hx t=%04hx w=1\n",
               e->s.cy, ppu_dot(e), ppu_line(e), val, p->v, p->t);
       }
@@ -1589,7 +1595,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       ppu_write(e, p->v, val);
       inc_ppu_addr(p);
       if (e->mapper_on_ppu_addr_updated)
-        e->mapper_on_ppu_addr_updated(e, p->v);
+        e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy);
       DEBUG("  (%" PRIu64 ") [%3u:%3u]: ppu:write(%04hx)=%02hhx, v=%04hx\n",
             e->s.cy, ppu_dot(e), ppu_line(e), oldv, val, p->v);
       goto io;
@@ -2203,48 +2209,49 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void mapper4_on_ppu_addr_updated(E* e, u16 addr) {
+static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
   M* m = &e->s.m;
   P* p = &e->s.p;
 
   bool low = (addr & 0x1000) == 0;
   if (p->a12_low) {
-    p->a12_low_count += e->s.cy - p->last_vram_access_cy;
+    p->a12_low_count += cy - p->last_vram_access_cy;
   }
   DEBUG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
         ") (frame = %u) (ly=%u [odd=%u]) (ppuctrl=%02x)\n",
-        e->s.cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame,
-        p->fbidx >> 8, p->frame & 1, p->ppuctrl);
+        cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, p->fbidx >> 8,
+        p->frame & 1, p->ppuctrl);
 
   if (!low) {
     if (p->a12_low_count >= 10) {
       bool trigger_irq = false;
       if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
         DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) (scany=%u)\n",
-              e->s.cy, p->frame, p->fbidx >> 8);
+              cy, p->frame, p->fbidx >> 8);
         p->a12_irq_counter = m->mmc3.irq_latch;
         m->mmc3.irq_reload = false;
         if (e->ci.board != BOARD_TXROM_MMC3A && p->a12_irq_counter == 0) {
           trigger_irq = true;
         }
       } else {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) (scany=%u)\n",
-              e->s.cy, p->frame, p->fbidx >> 8);
+        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) (scany=%u)\n", cy,
+              p->frame, p->fbidx >> 8);
         if (--p->a12_irq_counter == 0) {
           trigger_irq = true;
         }
       }
 
       if (trigger_irq && m->mmc3.irq_enable) {
-        DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) (scany=%u)\n", e->s.cy,
+        DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) (scany=%u)\n", cy,
               p->frame, p->fbidx >> 8);
         e->s.c.irq |= IRQ_MAPPER;
+        sched_occurred(e, SCHED_MAPPER_IRQ, cy);
       }
     }
     p->a12_low_count = 0;
   }
   p->a12_low = low;
-  p->last_vram_access_cy = e->s.cy;
+  p->last_vram_access_cy = cy;
 }
 
 static u8 mapper4_hkrom_prg_ram_read(E* e, u16 addr) {
@@ -2590,7 +2597,7 @@ static void mapper5_cpu_step(E* e) {
   }
 }
 
-static void mapper5_on_ppu_addr_updated(E* e, u16 addr) {
+static void mapper5_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
   M* m = &e->s.m;
   if ((addr & 0x3000) == 0x2000 && addr == m->mmc5.lastaddr) {
     LOG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", ppu_dot(e),
@@ -2619,7 +2626,7 @@ static void mapper5_on_ppu_addr_updated(E* e, u16 addr) {
     m->mmc5.match_count = 0;
   }
   m->mmc5.lastaddr = addr;
-  e->s.p.last_vram_access_cy = e->s.cy;
+  e->s.p.last_vram_access_cy = cy;
 }
 
 
@@ -2672,7 +2679,7 @@ static void mapper9_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void mmc2_on_chr_read(E* e, u16 addr) {
+static void mmc2_on_chr_read(E* e, u16 addr, Ticks cy) {
   M* m = &e->s.m;
   switch (addr & 0x1ff8) {
     default: break;

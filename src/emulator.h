@@ -92,6 +92,7 @@ typedef enum {
   SCHED_DMC_FETCH,
   SCHED_RESET_CHANGE,
   SCHED_NMI,
+  SCHED_MAPPER_IRQ,
   SCHED_COUNT,
 } Sched;
 
@@ -306,8 +307,8 @@ typedef struct Emulator {
   void (*mapper_cpu_step)(struct Emulator*);
   void (*mapper_update_nt_map)(struct Emulator*);
   void (*mapper_apu_tick)(struct Emulator*, u8 update);
-  void (*mapper_on_ppu_addr_updated)(struct Emulator*, u16);
-  void (*mapper_on_chr_read)(struct Emulator*, u16);
+  void (*mapper_on_ppu_addr_updated)(struct Emulator*, u16, Ticks);
+  void (*mapper_on_chr_read)(struct Emulator*, u16, Ticks);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
