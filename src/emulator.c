@@ -312,8 +312,8 @@ static void update_palette(E *e) {
   }
 }
 
-static inline u8 ppu_dot(E* e) { return e->s.p.state % 341; }
-static inline u8 ppu_line(E* e) { return e->s.p.state / 341; }
+static inline int ppu_dot(E* e) { return e->s.p.state % 341; }
+static inline int ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void ppu_write(E *e, u16 addr, u8 val) {
   if (e->mapper_on_ppu_addr_updated)
@@ -479,7 +479,7 @@ static inline void spreval(E *e) {
   spr->s = spr->d = 0;
 }
 
-static inline void sprfetch(E* e) {
+static inline void sprfetch(E* e, Ticks cy) {
   Spr* spr = &e->s.p.spr;
   spr->state = 18;
   spr->s = 0;
@@ -583,8 +583,8 @@ static void ppu21(E *e, Ticks cy) { read_ntb(e, cy); shift_en(e); reload(e, fals
 static void ppu22(E *e, Ticks cy) { read_ntb(e, cy); spr_step(e, cy); }
 static void ppu23(E *e, Ticks cy) { shift_bg(e); }
 static void ppu24(E *e, Ticks cy) { shift_dis(e); }
-static void ppu25(E *e, Ticks cy) { shift_dis(e); sprfetch(e); }
-static void ppu26(E *e, Ticks cy) { shift_en(e); reload(e, false); sprfetch(e); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu25(E *e, Ticks cy) { shift_dis(e); sprfetch(e, cy); }
+static void ppu26(E *e, Ticks cy) { shift_en(e); reload(e, false); sprfetch(e, cy); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
 static void ppu27(E *e, Ticks cy) { shift_en(e); spr_step(e, cy); }
 static void ppu28(E *e, Ticks cy) { spr_step(e, cy); }
 static void ppu29(E *e, Ticks cy) { spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x7be0); }
@@ -604,8 +604,8 @@ static void ppu31(E *e, Ticks cy) {
   }
   e->s.p.toggled_rendering_near_skipped_cycle = false;
 }
-static void ppu32(E *e, Ticks cy) { sprfetch(e); }
-static void ppu33(E *e, Ticks cy) { sprfetch(e); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu32(E *e, Ticks cy) { sprfetch(e, cy); }
+static void ppu33(E *e, Ticks cy) { sprfetch(e, cy); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
 static void ppu34(E *e, Ticks cy) { spreval(e); inch(&e->s.p); shift_en(e); spr_step(e, cy); }
 static void ppu35(E *e, Ticks cy) { spreval(e); shift_dis(e); }
 
@@ -788,9 +788,12 @@ static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
 }
 
 static inline u8 spr_ptb(E* e, u8 tile, u8 addend, Ticks cy) {
-  return chr_read(e, e->ppu_spr_map,
-                  spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend,
-                  cy);
+  u8 result =
+      chr_read(e, e->ppu_spr_map,
+               spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend, cy);
+  DEBUG("        [%" PRIu64 "] spr_ptb state=%u [%u:%u]\n", cy, e->s.p.state,
+        ppu_dot(e), ppu_line(e));
+  return result;
 }
 
 static void spr4(E* e, Ticks cy);
@@ -869,7 +872,9 @@ static void spr12(E *e, Ticks cy) {
   }
   spr->s += 4;
 }
-static void spr13(E *e, Ticks cy) { e->s.p.spr.state = 18; }
+static void spr13(E* e, Ticks cy) {
+  e->s.p.spr.state = 18;
+}
 
 static void spr_step(E *e, Ticks cy) {
   static const PPUStepFunc steps[] = {
@@ -2125,6 +2130,27 @@ static void mapper206_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static void sched_next_mapper4_irq(E* e, Ticks cy) {
+  M* m = &e->s.m;
+  P* p = &e->s.p;
+  printf("[%" PRIu64 "] scheduling irq state=%u [%u:%u] latch=%u counter=%u\n",
+         cy, p->state, ppu_dot(e), ppu_line(e), m->mmc3.irq_latch,
+         p->a12_irq_counter);
+  switch (e->s.p.ppuctrl & 0x18) {
+    case 0x08:
+      // sched_at_ppu_state(e, SCHED_MAPPER_IRQ, 82182, cy, reason);
+      break;
+    case 0x10:
+      break;
+    default:
+      fprintf(stderr, "unsupported mapper4 irq configuration %02x\n",
+              e->s.p.ppuctrl);
+      fflush(stdout);
+      abort();
+      break;
+  }
+}
+
 static void mapper4_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   switch (addr >> 12) {
@@ -2190,20 +2216,23 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       if (addr & 1) {
         m->mmc3.irq_reload = true;
         e->s.p.a12_irq_counter = 0;
-        DEBUG("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
+        printf("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
       } else {
         m->mmc3.irq_latch = val;
-        DEBUG("     [%" PRIu64 "] mmc3 irq latch = %u\n", e->s.cy, val);
+        sched_next_mapper4_irq(e, e->s.cy);
+        printf("     [%" PRIu64 "] mmc3 irq latch = %u\n", e->s.cy, val);
       }
       break;
     case 14: case 15: // IRQ disable / IRQ enable
       if (addr & 1) {
         m->mmc3.irq_enable = true;
-        DEBUG("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
+        sched_next_mapper4_irq(e, e->s.cy);
+        printf("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
       } else {
         m->mmc3.irq_enable = false;
+        sched_clear(e, SCHED_MAPPER_IRQ);
         e->s.c.irq &= ~IRQ_MAPPER;
-        DEBUG("     [%" PRIu64 "] mmc3 irq disable\n", e->s.cy);
+        printf("     [%" PRIu64 "] mmc3 irq disable\n", e->s.cy);
       }
       break;
   }
@@ -2217,33 +2246,33 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
   if (p->a12_low) {
     p->a12_low_count += cy - p->last_vram_access_cy;
   }
-  DEBUG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
-        ") (frame = %u) (ly=%u [odd=%u]) (ppuctrl=%02x)\n",
-        cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, p->fbidx >> 8,
-        p->frame & 1, p->ppuctrl);
+  printf("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
+         ") (frame = %u) (ly=%u [odd=%u]) (ppuctrl=%02x)\n",
+         cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, p->fbidx >> 8,
+         p->frame & 1, p->ppuctrl);
 
   if (!low) {
     if (p->a12_low_count >= 10) {
       bool trigger_irq = false;
       if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) (scany=%u)\n",
-              cy, p->frame, p->fbidx >> 8);
+        printf("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) [%u:%u]\n",
+               cy, p->frame, ppu_dot(e), ppu_line(e));
         p->a12_irq_counter = m->mmc3.irq_latch;
         m->mmc3.irq_reload = false;
         if (e->ci.board != BOARD_TXROM_MMC3A && p->a12_irq_counter == 0) {
           trigger_irq = true;
         }
       } else {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) (scany=%u)\n", cy,
-              p->frame, p->fbidx >> 8);
+        printf("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u]\n", cy,
+               p->frame, ppu_dot(e), ppu_line(e));
         if (--p->a12_irq_counter == 0) {
           trigger_irq = true;
         }
       }
 
       if (trigger_irq && m->mmc3.irq_enable) {
-        DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) (scany=%u)\n", cy,
-              p->frame, p->fbidx >> 8);
+        printf("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u]\n", cy,
+               p->frame, ppu_dot(e), ppu_line(e));
         e->s.c.irq |= IRQ_MAPPER;
         sched_occurred(e, SCHED_MAPPER_IRQ, cy);
       }
