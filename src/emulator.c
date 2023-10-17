@@ -179,10 +179,8 @@ static void sched_at(E* e, Sched sched, u64 cy, const char* reason) {
   ++cy;
   u64 prev = e->s.sc.when[sched];
   e->s.sc.when[sched] = cy;
-#if 0
-  printf("    [%" PRIu64 "] sched %s at %" PRIu64 " (%s)\n", e->s.cy,
-         s_sched_names[sched], cy, reason);
-#endif
+  DEBUG("    [%" PRIu64 "] sched %s at %" PRIu64 " (%s)\n", e->s.cy,
+        s_sched_names[sched], cy, reason);
   sched_update_next(e);
 }
 
@@ -203,6 +201,7 @@ static void sched_occurred(E* e, Sched sched, Ticks cy) {
     fflush(stdout);
     abort();
   }
+  sched_clear(e, sched);
 }
 
 static void sched_run(E* e) {
@@ -485,10 +484,18 @@ static inline void sprfetch(E* e) {
   spr->s = 0;
 }
 
-static void sched_at_ppu_state(E *e, Sched sched, u32 state, Ticks cy) {
+static void sched_at_ppu_state(E* e, Sched sched, u32 state, Ticks cy,
+                               const char* reason) {
   P* p = &e->s.p;
   int next_state = state - p->state;
   bool will_skip_cycle = false;
+  if (next_state == 0 && e->s.sc.when[sched] != ~0ull) {
+    DEBUG("    [%" PRIu64
+          "] sched_at_ppu_state %s next_state == 0 and when[sched]=%" PRIu64
+          " (state=%u)\n",
+          cy, s_sched_names[sched], e->s.sc.when[sched], p->state);
+    return;
+  }
   if (next_state <= 0) {
     will_skip_cycle =
         !(p->frame & 1) &&
@@ -496,19 +503,19 @@ static void sched_at_ppu_state(E *e, Sched sched, u32 state, Ticks cy) {
             (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
     next_state += 89342 - will_skip_cycle;
   }
-  DEBUG("    sched_at_ppu_state %s for %" PRIu64
+  DEBUG("    [%" PRIu64 "] sched_at_ppu_state %s for %" PRIu64
         " (state=%u skip=%u) diff=%u\n",
-        s_sched_names[sched], cy + next_state, p->state, will_skip_cycle,
+        cy, s_sched_names[sched], cy + next_state, p->state, will_skip_cycle,
         next_state);
-  sched_at(e, sched, cy + next_state, "sched_at_ppu_state");
+  sched_at(e, sched, cy + next_state, reason);
 }
 
-static void sched_next_nmi(E *e, Ticks cy) {
-  sched_at_ppu_state(e, SCHED_NMI, 82182, cy);
+static void sched_next_nmi(E* e, Ticks cy, const char* reason) {
+  sched_at_ppu_state(e, SCHED_NMI, 82182, cy, reason);
 }
 
-static void sched_next_frame(E *e, Ticks cy) {
-  sched_at_ppu_state(e, SCHED_EVENT, 82183, cy);
+static void sched_next_frame(E* e, Ticks cy, const char* reason) {
+  sched_at_ppu_state(e, SCHED_EVENT, 82183, cy, reason);
 }
 
 static void ppu1(E *e, Ticks cy) {
@@ -531,7 +538,7 @@ static void ppu2(E *e, Ticks cy) {
          e->s.p.frame, e->s.p.ppustatus, e->s.cy - last_frame);
   last_frame = e->s.cy;
 #endif
-  sched_next_frame(e, cy);
+  sched_next_frame(e, cy, "new frame");
   DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", cy, e->s.p.frame,
         e->s.p.ppustatus);
 }
@@ -550,7 +557,7 @@ static void ppu3(E *e, Ticks cy) {
     last_nmi = cy;
 #endif
     sched_occurred(e, SCHED_NMI, cy);
-    sched_next_nmi(e, cy);
+    sched_next_nmi(e, cy, "nmi occurred");
     DEBUG("     [%" PRIu64 "] NMI\n", cy);
   }
 }
@@ -1496,7 +1503,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
             DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy);
         }
         if (val & 0x80) {
-          sched_next_nmi(e, e->s.cy);
+          sched_next_nmi(e, e->s.cy, "$2000 write");
         } else {
           sched_clear(e, SCHED_NMI);
           if (e->s.cy - p->nmi_cy <= 3) {
@@ -1528,9 +1535,9 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
       p->ppumask = val;
       if (p->ppuctrl & 0x80) {
-        sched_next_nmi(e, e->s.cy);
+        sched_next_nmi(e, e->s.cy, "$2001 write");
       }
-      sched_next_frame(e, e->s.cy);
+      sched_next_frame(e, e->s.cy, "$2001 write");
       p->bgmask = (p->ppumask & 8) ? 0xf : 0;
       p->next_enabled = !!(val & 0x18);
       p->emphasis = (val << 1) & 0x1c0;
@@ -5655,7 +5662,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.state = 4;
   sched_init(e);
   sched_at(e, SCHED_FRAME_IRQ, 89481, "initial frame irq");
-  sched_next_frame(e, e->s.cy);
+  sched_next_frame(e, e->s.cy, "initial");
 
   switch (init->ram_init) {
     case RAM_INIT_ZERO: break;
