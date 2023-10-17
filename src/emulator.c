@@ -173,16 +173,15 @@ static void sched_update_next(E* e) {
   e->s.sc.next = next;
 }
 
-static void sched_at(E* e, Sched sched, u64 cy) {
+static void sched_at(E* e, Sched sched, u64 cy, const char* reason) {
   assert(cy != ~0ull);
   assert(cy >= e->s.cy);
   ++cy;
   u64 prev = e->s.sc.when[sched];
   e->s.sc.when[sched] = cy;
 #if 0
-  if (sched == SCHED_NMI) {
-    printf("    [%" PRIu64 "] sched nmi at %" PRIu64 "\n", e->s.cy, cy);
-  }
+  printf("    [%" PRIu64 "] sched %s at %" PRIu64 " (%s)\n", e->s.cy,
+         s_sched_names[sched], cy, reason);
 #endif
   sched_update_next(e);
 }
@@ -501,7 +500,7 @@ static void sched_at_ppu_state(E *e, Sched sched, u32 state, Ticks cy) {
         " (state=%u skip=%u) diff=%u\n",
         s_sched_names[sched], cy + next_state, p->state, will_skip_cycle,
         next_state);
-  sched_at(e, sched, cy + next_state);
+  sched_at(e, sched, cy + next_state, "sched_at_ppu_state");
 }
 
 static void sched_next_nmi(E *e, Ticks cy) {
@@ -980,6 +979,17 @@ static void set_period_hi(A* a, int chan, u8 val) {
   start_chan(a, chan, val);
 }
 
+static void sched_next_dmc_fetch(E* e, Ticks cy, const char* reason) {
+  A* a = &e->s.a;
+  sched_at(
+      e, SCHED_DMC_FETCH,
+      cy +
+          ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) + a->timer.au16[4]) *
+              6 +
+          !(a->state & 1) * 3,
+      reason);
+}
+
 static void apu_tick(E *e, u64 cy) {
   #define TIMER_DIFF V128_MAKE_U16(1, 1, 2, 2, 1, 0, 0, 0)
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
@@ -1056,10 +1066,7 @@ static void apu_tick(E *e, u64 cy) {
 
   if (a->dmcfetch) {
     sched_occurred(e, SCHED_DMC_FETCH, cy);
-    sched_at(e, SCHED_DMC_FETCH,
-             cy + ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
-                   a->timer.au16[4] + 1) *
-                      6);
+    sched_next_dmc_fetch(e, cy + 6, "dmc fetch occurred");
     u16 step = e->s.c.step - 1;
     if (step < STEP_DMC) {
       e->s.c.dmc_step = step; // TODO: Should finish writes first?
@@ -1260,9 +1267,11 @@ static void apu_sync(E* e) {
           DEBUG("     [%" PRIu64 "] frame irq\n", cy);
           e->s.c.irq |= IRQ_FRAME;
           sched_occurred(e, SCHED_FRAME_IRQ, cy);
-          sched_at(e, SCHED_FRAME_IRQ,
-                   cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6
-                                       : 3));
+          sched_at(
+              e, SCHED_FRAME_IRQ,
+              cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6
+                                  : 3),
+              "frame irq");
         }
         break;
       case 37284: apu_quarter(a); apu_half(a); goto irq;
@@ -1615,11 +1624,8 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       // DMC
       case 0x10:
         a->period.au16[4] = dmcrate[val & 15];
-        u32 next = ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
-                    a->timer.au16[4]) *
-                   6;
         if (a->dmcen) {
-          sched_at(e, SCHED_DMC_FETCH, e->s.cy + next + !(a->state & 1) * 3);
+          sched_next_dmc_fetch(e, e->s.cy, "$4010 write");
         } else {
           sched_clear(e, SCHED_DMC_FETCH);
         }
@@ -1639,16 +1645,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
                     ") (bufstate=%u) (seq=%u)\n",
                     e->s.cy, a->dmcbufstate, a->seq.au16[4]);
               a->dmcfetch = true;
-              sched_at(e, SCHED_DMC_FETCH, e->s.cy + !(a->state & 1) * 3);
+              sched_at(e, SCHED_DMC_FETCH, e->s.cy + !(a->state & 1) * 3,
+                       "$4015 write !dmcbufstate");
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
                     e->s.cy, a->seq.au16[4]);
-              sched_at(e, SCHED_DMC_FETCH,
-                       e->s.cy +
-                           ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
-                            a->timer.au16[4]) *
-                               6 +
-                           !(a->state & 1) * 3);
+              sched_next_dmc_fetch(e, e->s.cy, "$4015 write dmcbufstate");
             }
             start_dmc(a);
           }
@@ -1674,7 +1676,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         } else {
           sched_at(e, SCHED_FRAME_IRQ,
                    e->s.cy + (val & 0x80 ? 18640 : 14914) * 6 +
-                       (a->state ? 2 : 3) * 3);
+                       (a->state ? 2 : 3) * 3, "$4017 write");
         }
         goto apu;
       }
@@ -4722,6 +4724,7 @@ static void cpu116(E* e, u8 busval) {
 static void cpu117(E* e, u8 busval) {
 }
 static void cpu118(E* e, u8 busval) {
+  apu_sync(e);
   C* c = &e->s.c;
   A* a = &e->s.a;
   e->s.a.dmcbuf = cpu_read(e, e->s.a.dmcaddr);
@@ -4733,12 +4736,15 @@ static void cpu118(E* e, u8 busval) {
     start_dmc(&e->s.a);
     if (e->s.a.reg[0x10] & 0x40) {
       e->s.a.dmcen = true;
-      sched_at(e, SCHED_DMC_FETCH,
-               e->s.cy +
-                   ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
-                    a->timer.au16[4]) *
-                       6 +
-                   !(a->state & 1) * 3);
+      u32 next =
+          ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) + a->timer.au16[4]) *
+              6 +
+          !(a->state & 1) * 3;
+      DEBUG("!!! [%" PRIu64
+            "] dmc read, period=%u seq=%u timer=%u state=%u next=%u\n",
+            e->s.cy, a->period.au16[4], a->seq.au16[4], a->timer.au16[4],
+            a->state, next);
+      sched_next_dmc_fetch(e, e->s.cy, "dmc read");
     } else {
       DEBUG("DMC channel disabled (cy: %" PRIu64 ")\n", e->s.cy);
       e->s.a.dmcen = false;
@@ -5648,7 +5654,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.swmute_mask = v128_bcast_u16(~0);
   s->a.state = 4;
   sched_init(e);
-  sched_at(e, SCHED_FRAME_IRQ, 89481);
+  sched_at(e, SCHED_FRAME_IRQ, 89481, "initial frame irq");
   sched_next_frame(e, e->s.cy);
 
   switch (init->ram_init) {
@@ -5728,7 +5734,7 @@ u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
 static void emulator_substep_loop(E *e, Ticks check_ticks) {
-  sched_at(e, SCHED_RUN_UNTIL, check_ticks);
+  sched_at(e, SCHED_RUN_UNTIL, check_ticks, "substep loop");
   while (e->s.event == 0 && e->s.cy < check_ticks) {
     sched_run(e);
   }
@@ -5777,7 +5783,7 @@ void emulator_toggle_reset(E* e) {
 
 void emulator_schedule_reset_change(E* e, Ticks at) {
   if (at != ~0ull) {
-    sched_at(e, SCHED_RESET_CHANGE, at);
+    sched_at(e, SCHED_RESET_CHANGE, at, "reset change");
   } else {
     sched_clear(e, SCHED_RESET_CHANGE);
   }
