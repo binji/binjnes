@@ -27,6 +27,7 @@ extern "C" {
 #define CHRRAM1K_MASK ((MAX_CHRRAM_SIZE >> 10) - 1)
 
 struct Emulator;
+typedef void (*PPUStepFunc)(struct Emulator* e, Ticks cy);
 typedef void (*StepFunc)(struct Emulator* e);
 typedef void (*JoypadCallback)(struct SystemInput *input, void *user_data,
                                bool strobe);
@@ -246,7 +247,8 @@ typedef struct {
   bool enabled, next_enabled, w, a12_low, toggled_rendering_near_skipped_cycle;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr, bgmask;
   Spr spr;
-  u64 read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy, a12_low_count;
+  u64 cy, read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy,
+      a12_low_count;
   Mirror mirror;
 } P;
 
@@ -310,7 +312,7 @@ typedef struct Emulator {
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
-  StepFunc* ppu_steps;
+  PPUStepFunc* ppu_steps;
 } Emulator;
 
 

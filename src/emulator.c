@@ -137,7 +137,7 @@ const RGBA s_nespal[] = {
 static void disasm(E *e, u16 addr);
 static void print_info(E *e);
 static void cpu_step(E *e);
-static void ppu_step(E *e);
+static void ppu_sync(E *e, const char*);
 static void apu_sync(E *e);
 static void spr_step(E *e);
 
@@ -193,13 +193,15 @@ static void sched_clear(E* e, Sched sched) {
   sched_update_next(e);
 }
 
-static void sched_occurred(E* e, Sched sched) {
-  if (e->s.sc.when[sched] != e->s.cy) {
+static void sched_occurred(E* e, Sched sched, Ticks cy) {
+  ++cy;
+  if (e->s.sc.when[sched] != cy) {
     fprintf(stderr,
             "!!! Prediction too late '%s' (predicted: %" PRIu64
             " actual: %" PRIu64 " diff: %" PRId64 ").\n",
-            s_sched_names[sched], e->s.sc.when[sched], e->s.cy,
-            e->s.cy - e->s.sc.when[sched]);
+            s_sched_names[sched], e->s.sc.when[sched], cy,
+            cy - e->s.sc.when[sched]);
+    fflush(stdout);
     abort();
   }
 }
@@ -208,15 +210,18 @@ static void sched_run(E* e) {
   S* s = &e->s;
   // Try to align.
   switch (s->cy % 3) {
-  case 0: cpu_step(e); ppu_step(e); if (++s->cy >= s->sc.next) break;
-  case 1: ppu_step(e); if (++s->cy >= s->sc.next) break;
-  case 2: ppu_step(e); ++s->cy;
+  case 0: cpu_step(e); if (++s->cy >= s->sc.next) break;
+  case 1: if (++s->cy >= s->sc.next) break;
+  case 2: ++s->cy;
   }
   // Run aligned.
   while (s->cy < s->sc.next) {
-    cpu_step(e); ppu_step(e); if (++s->cy >= s->sc.next) break;
-    ppu_step(e); if (++s->cy >= s->sc.next) break;
-    ppu_step(e); ++s->cy;
+    cpu_step(e); if (++s->cy >= s->sc.next) break;
+    if (++s->cy >= s->sc.next) break;
+    ++s->cy;
+  }
+  if (s->sc.when[SCHED_NMI] == s->cy || s->sc.when[SCHED_EVENT] == s->cy) {
+    ppu_sync(e, "sched_run");
   }
   if (s->sc.when[SCHED_DMC_FETCH] == s->cy ||
       s->sc.when[SCHED_FRAME_IRQ] == s->cy) {
@@ -230,6 +235,7 @@ static void sched_run(E* e) {
       printf("!!! Prediction too early '%s' (predicted: %" PRIu64
              " but didn't occur).\n",
              s_sched_names[i], s->sc.when[i]);
+      fflush(stdout);
       abort();
     }
   }
@@ -480,53 +486,39 @@ static inline void sprfetch(E* e) {
   spr->s = 0;
 }
 
-static void sched_next_nmi(E *e) {
+static void sched_at_ppu_state(E *e, Sched sched, u32 state, Ticks cy) {
   P* p = &e->s.p;
-  int next_nmi = 82182 - p->state;
+  int next_state = state - p->state;
   bool will_skip_cycle = false;
-  if (next_nmi <= 0) {
+  if (next_state <= 0) {
     will_skip_cycle =
         !(p->frame & 1) &&
         !(e->s.p.ppumask & 0x18) ==
             (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
-    next_nmi += 89342 - will_skip_cycle;
+    next_state += 89342 - will_skip_cycle;
   }
-#if 0
-  printf("    sched_next_nmi for %" PRIu64 " (state=%u skip=%u) diff=%u\n",
-         e->s.cy + next_nmi, p->state, will_skip_cycle, next_nmi);
-#endif
-  sched_at(e, SCHED_NMI, e->s.cy + next_nmi - 1);
+  DEBUG("    sched_at_ppu_state for %" PRIu64 " (state=%u skip=%u) diff=%u\n",
+        cy + next_state, p->state, will_skip_cycle, next_state);
+  sched_at(e, sched, cy + next_state);
 }
 
-static void sched_next_frame(E *e) {
-  P* p = &e->s.p;
-  int next_frame = 82183 - p->state;
-  bool will_skip_cycle = false;
-  if (next_frame <= 0) {
-    will_skip_cycle =
-        !(p->frame & 1) &&
-        !(e->s.p.ppumask & 0x18) ==
-            (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
-    next_frame += 89342 - will_skip_cycle;
-  }
-#if 0
-  printf("    sched_next_frame for %" PRIu64 " (state=%u skip=%u) diff=%u\n",
-         e->s.cy + next_frame, p->state, will_skip_cycle, next_frame);
-#endif
-#if 1
-  sched_at(e, SCHED_EVENT, e->s.cy + next_frame - 1);
-#endif
+static void sched_next_nmi(E *e, Ticks cy) {
+  sched_at_ppu_state(e, SCHED_NMI, 82182, cy);
 }
 
-static void ppu1(E *e) {
-  DEBUG("(%" PRIu64 "): ppustatus cleared\n", e->s.cy);
+static void sched_next_frame(E *e, Ticks cy) {
+  sched_at_ppu_state(e, SCHED_EVENT, 82183, cy);
+}
+
+static void ppu1(E *e, Ticks cy) {
+  DEBUG("(%" PRIu64 "): ppustatus cleared\n", cy);
   e->s.p.ppustatus = 0;
-  if (e->s.cy == e->s.p.write_ctrl_cy) {
+  if (cy == e->s.p.write_ctrl_cy) {
     e->s.c.req_nmi = false;
   }
 }
-static void ppu2(E *e) {
-  if (e->s.cy != e->s.p.read_status_cy) {
+static void ppu2(E *e, Ticks cy) {
+  if (cy != e->s.p.read_status_cy) {
     e->s.p.ppustatus |= 0x80;
   }
   if (!e->s.c.read_input) {
@@ -534,97 +526,91 @@ static void ppu2(E *e) {
   }
   e->s.c.read_input = false;
   e->s.event |= EMULATOR_EVENT_NEW_FRAME;
-#if 1
-  sched_occurred(e, SCHED_EVENT);
-#endif
+  sched_occurred(e, SCHED_EVENT, cy);
 #if 0
   static Ticks last_frame = 0;
   printf("(%" PRIu64 "): [#%u] ppustatus = %02x (%" PRIu64 ")\n", e->s.cy,
          e->s.p.frame, e->s.p.ppustatus, e->s.cy - last_frame);
   last_frame = e->s.cy;
 #endif
-  sched_next_frame(e);
+  sched_next_frame(e, cy);
+  DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", cy, e->s.p.frame,
+        e->s.p.ppustatus);
 }
-static void ppu3(E *e) {
+static void ppu3(E *e, Ticks cy) {
   if (e->s.p.ppuctrl & 0x80) {
     e->s.c.req_nmi = true;
-    e->s.p.nmi_cy = e->s.cy;
+    e->s.p.nmi_cy = cy;
 #if 0
     static Ticks last_nmi = 0;
     printf(
         "[%" PRIu64
         "] sched occurred (state=%u, ppumask=%02x, trns=%u) diff=%" PRIu64
         "\n",
-        e->s.cy, e->s.p.state, e->s.p.ppumask,
-        e->s.p.toggled_rendering_near_skipped_cycle, e->s.cy - last_nmi);
-    last_nmi = e->s.cy;
+        cy, e->s.p.state, e->s.p.ppumask,
+        e->s.p.toggled_rendering_near_skipped_cycle, cy - last_nmi);
+    last_nmi = cy;
 #endif
-#if 1
-    sched_occurred(e, SCHED_NMI);
-#endif
-    sched_next_nmi(e);
-    DEBUG("     [%" PRIu64 "] NMI\n", e->s.cy);
+    sched_occurred(e, SCHED_NMI, cy);
+    sched_next_nmi(e, cy);
+    DEBUG("     [%" PRIu64 "] NMI\n", cy);
   }
 }
-static void ppu4(E *e) { inch(&e->s.p); }
-static void ppu5(E *e) { inch(&e->s.p); shift_bg(e); }
-static void ppu6(E *e) { inch(&e->s.p); shift_en(e); spr_step(e); }
-static void ppu7(E *e) { inch(&e->s.p); incv(&e->s.p); }
-static void ppu8(E *e) { inch(&e->s.p); incv(&e->s.p); shift_en(e); spr_step(e); }
-static void ppu9(E *e) { e->s.p.ptbh = read_ptb(e, 8); }
-static void ppu10(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_bg(e); }
-static void ppu11(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); spr_step(e); }
-static void ppu12(E *e) { e->s.p.ptbl = read_ptb(e, 0); }
-static void ppu13(E *e) { e->s.p.ptbl = read_ptb(e, 0); shift_bg(e); }
-static void ppu14(E *e) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); spr_step(e); }
-#if 1
-static void ppu15(E *e) { e->s.p.state = -1; }
-#else
-static void ppu15(E *e) { e->s.p.state = 0; }
-#endif
-static void ppu16(E *e) { read_atb(e); }
-static void ppu17(E *e) { read_atb(e); shift_bg(e); }
-static void ppu18(E *e) { read_atb(e); shift_en(e); spr_step(e); }
-static void ppu19(E *e) { read_ntb(e); }
-static void ppu20(E *e) { read_ntb(e); shift_bg(e); reload(e, false); }
-static void ppu21(E *e) { read_ntb(e); shift_en(e); reload(e, false); spr_step(e); }
-static void ppu22(E *e) { read_ntb(e); spr_step(e); }
-static void ppu23(E *e) { shift_bg(e); }
-static void ppu24(E *e) { shift_dis(e); }
-static void ppu25(E *e) { shift_dis(e); sprfetch(e); }
-static void ppu26(E *e) { shift_en(e); reload(e, false); sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
-static void ppu27(E *e) { shift_en(e); spr_step(e); }
-static void ppu28(E *e) { spr_step(e); }
-static void ppu29(E *e) { spr_step(e); ppu_t_to_v(&e->s.p, 0x7be0); }
-static void ppu30(E *e) { sprclear(e); }
-static void ppu31(E *e) {
+static void ppu4(E *e, Ticks cy) { inch(&e->s.p); }
+static void ppu5(E *e, Ticks cy) { inch(&e->s.p); shift_bg(e); }
+static void ppu6(E *e, Ticks cy) { inch(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu7(E *e, Ticks cy) { inch(&e->s.p); incv(&e->s.p); }
+static void ppu8(E *e, Ticks cy) { inch(&e->s.p); incv(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu9(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); }
+static void ppu10(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); shift_bg(e); }
+static void ppu11(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); spr_step(e); }
+static void ppu12(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); }
+static void ppu13(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); shift_bg(e); }
+static void ppu14(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); spr_step(e); }
+static void ppu15(E *e, Ticks cy) { e->s.p.state = -1; }
+static void ppu16(E *e, Ticks cy) { read_atb(e); }
+static void ppu17(E *e, Ticks cy) { read_atb(e); shift_bg(e); }
+static void ppu18(E *e, Ticks cy) { read_atb(e); shift_en(e); spr_step(e); }
+static void ppu19(E *e, Ticks cy) { read_ntb(e); }
+static void ppu20(E *e, Ticks cy) { read_ntb(e); shift_bg(e); reload(e, false); }
+static void ppu21(E *e, Ticks cy) { read_ntb(e); shift_en(e); reload(e, false); spr_step(e); }
+static void ppu22(E *e, Ticks cy) { read_ntb(e); spr_step(e); }
+static void ppu23(E *e, Ticks cy) { shift_bg(e); }
+static void ppu24(E *e, Ticks cy) { shift_dis(e); }
+static void ppu25(E *e, Ticks cy) { shift_dis(e); sprfetch(e); }
+static void ppu26(E *e, Ticks cy) { shift_en(e); reload(e, false); sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu27(E *e, Ticks cy) { shift_en(e); spr_step(e); }
+static void ppu28(E *e, Ticks cy) { spr_step(e); }
+static void ppu29(E *e, Ticks cy) { spr_step(e); ppu_t_to_v(&e->s.p, 0x7be0); }
+static void ppu30(E *e, Ticks cy) { sprclear(e); }
+static void ppu31(E *e, Ticks cy) {
   sprclear(e);
-  DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", e->s.cy, e->s.p.frame,
+  DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", cy, e->s.p.frame,
         !(e->s.p.frame & 1));
   e->s.p.fbidx = 0;
   e->s.p.frame++;
   if ((e->s.p.frame & 1) &&
       !(e->s.p.ppumask & 0x18) == e->s.p.toggled_rendering_near_skipped_cycle) {
-    DEBUG("(%" PRIu64 "): skipping cycle\n", e->s.cy);
-    StepFunc f = e->ppu_steps[++e->s.p.state * 2 + e->s.p.enabled];
+    DEBUG("(%" PRIu64 "): skipping cycle\n", cy);
+    PPUStepFunc f = e->ppu_steps[++e->s.p.state * 2 + e->s.p.enabled];
     e->s.p.enabled = e->s.p.next_enabled;
-    if (f) f(e);
+    if (f) f(e, cy);
   }
   e->s.p.toggled_rendering_near_skipped_cycle = false;
 }
-static void ppu32(E *e) { sprfetch(e); }
-static void ppu33(E *e) { sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
-static void ppu34(E *e) { spreval(e); inch(&e->s.p); shift_en(e); spr_step(e); }
-static void ppu35(E *e) { spreval(e); shift_dis(e); }
+static void ppu32(E *e, Ticks cy) { sprfetch(e); }
+static void ppu33(E *e, Ticks cy) { sprfetch(e); spr_step(e); ppu_t_to_v(&e->s.p, 0x041f); }
+static void ppu34(E *e, Ticks cy) { spreval(e); inch(&e->s.p); shift_en(e); spr_step(e); }
+static void ppu35(E *e, Ticks cy) { spreval(e); shift_dis(e); }
 
-static void ppu36(E *e) { read_ntb(e); }
-static void ppu37(E *e) { shift_en(e); }
-static void ppu38(E *e) { read_atb(e); shift_en(e); }
-static void ppu39(E *e) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); }
-static void ppu40(E *e) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); }
-static void ppu41(E *e) { inch(&e->s.p); shift_en(e); }
-static void ppu42(E *e) { read_ntb(e); shift_en(e); reload(e, false); }
-static void ppu43(E *e) { read_ntb(e); shift_bg(e); reload(e, true); }
+static void ppu36(E *e, Ticks cy) { read_ntb(e); }
+static void ppu37(E *e, Ticks cy) { shift_en(e); }
+static void ppu38(E *e, Ticks cy) { read_atb(e); shift_en(e); }
+static void ppu39(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0); shift_en(e); }
+static void ppu40(E *e, Ticks cy) { e->s.p.ptbh = read_ptb(e, 8); shift_en(e); }
+static void ppu41(E *e, Ticks cy) { inch(&e->s.p); shift_en(e); }
+static void ppu42(E *e, Ticks cy) { read_ntb(e); shift_en(e); reload(e, false); }
+static void ppu43(E *e, Ticks cy) { read_ntb(e); shift_bg(e); reload(e, true); }
 
 static void init_ppu_steps(E* e) {
   const int num_dots = 341;
@@ -731,7 +717,7 @@ static void init_ppu_steps(E* e) {
        28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 19, 23, 17,
        23, 13, 23, 10, 5,  20, 23, 17, 23, 13, 23, 10, 5,  43, 0,  19, 0},
   };
-  static const StepFunc s_funcs[] = {
+  static const PPUStepFunc s_funcs[] = {
       // Enabled
       NULL,   &ppu1,  &ppu2,  &ppu3,  &ppu4,  &ppu5,  &ppu6,  &ppu7,  &ppu8,
       &ppu9,  &ppu10, &ppu11, &ppu12, &ppu13, &ppu14, &ppu15, &ppu16, &ppu17,
@@ -745,7 +731,7 @@ static void init_ppu_steps(E* e) {
       &ppu24, NULL,   NULL,   &ppu30, &ppu31, NULL,   &ppu32, &ppu35, NULL,
       NULL,   &ppu24, &ppu24, &ppu24, &ppu24, &ppu24, &ppu24, NULL,
   };
-  e->ppu_steps = xmalloc(2 * num_lines * num_dots * sizeof(StepFunc));
+  e->ppu_steps = xmalloc(2 * num_lines * num_dots * sizeof(PPUStepFunc));
   for (int enabled = 0; enabled < 2; ++enabled) {
     int offset = enabled ? 0 : 44;
     for (int line = 0; line < num_lines; ++line) {
@@ -758,18 +744,24 @@ static void init_ppu_steps(E* e) {
   }
 }
 
-static void ppu_step(E* e) {
-#if 1
-  StepFunc f = e->ppu_steps[e->s.p.state * 2 + e->s.p.enabled];
+static void ppu_step(E* e, Ticks cy) {
+  PPUStepFunc f = e->ppu_steps[e->s.p.state * 2 + e->s.p.enabled];
   e->s.p.enabled = e->s.p.next_enabled;
-  if (f) f(e);
+  if (f) f(e, cy);
   e->s.p.state++;
-#else
-  printf("ppu_step %u\n", e->s.p.state);
-  StepFunc f = e->ppu_steps[e->s.p.state++ * 2 + e->s.p.enabled];
-  e->s.p.enabled = e->s.p.next_enabled;
-  if (f) f(e);
+}
+
+static void ppu_sync(E* e, const char* reason) {
+  P* p = &e->s.p;
+  u64 cy = p->cy;
+#if 0
+  printf("ppu_sync(\"%s\") %" PRIu64 " => %" PRIu64 " state=%u\n", reason,
+         p->cy, e->s.cy, p->state);
 #endif
+  while (cy < e->s.cy) {
+    ppu_step(e, cy++);
+  }
+  p->cy = cy;
 }
 
 static inline bool y_in_range(P *p, u8 y) {
@@ -1063,7 +1055,7 @@ static void apu_tick(E *e, u64 cy) {
   }
 
   if (a->dmcfetch) {
-    sched_occurred(e, SCHED_DMC_FETCH);
+    sched_occurred(e, SCHED_DMC_FETCH, cy);
     sched_at(e, SCHED_DMC_FETCH,
              cy + ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) +
                    a->timer.au16[4] + 1) *
@@ -1267,7 +1259,7 @@ static void apu_sync(E* e) {
         if (!(a->reg[0x17] & 0xc0)) {
           DEBUG("     [%" PRIu64 "] frame irq\n", cy);
           e->s.c.irq |= IRQ_FRAME;
-          sched_occurred(e, SCHED_FRAME_IRQ);
+          sched_occurred(e, SCHED_FRAME_IRQ, cy);
           sched_at(e, SCHED_FRAME_IRQ,
                    cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) * 6
                                        : 3));
@@ -1414,6 +1406,7 @@ static u8 cpu_read(E *e, u16 addr) {
 
   case 2: case 3: { // PPU
     P *p = &e->s.p;
+    ppu_sync(e, "$2xxx read");
     switch (addr & 7) {
       case 0: case 1: case 3: case 5: case 6:
         return c->open_bus = p->ppulast;
@@ -1480,6 +1473,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
     break;
 
   case 2: case 3: { // PPU
+    ppu_sync(e, "$2xxx write");
     p->ppulast = val;
     switch (addr & 0x7) {
     case 0:
@@ -1493,7 +1487,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
             DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy);
         }
         if (val & 0x80) {
-          sched_next_nmi(e);
+          sched_next_nmi(e, e->s.cy);
         } else {
           sched_clear(e, SCHED_NMI);
           if (e->s.cy - p->nmi_cy <= 3) {
@@ -1520,9 +1514,9 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
       p->ppumask = val;
       if (p->ppuctrl & 0x80) {
-        sched_next_nmi(e);
+        sched_next_nmi(e, e->s.cy);
       }
-      sched_next_frame(e);
+      sched_next_frame(e, e->s.cy);
       p->bgmask = (p->ppumask & 8) ? 0xf : 0;
       p->next_enabled = !!(val & 0x18);
       p->emphasis = (val << 1) & 0x1c0;
@@ -5650,7 +5644,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.state = 4;
   sched_init(e);
   sched_at(e, SCHED_FRAME_IRQ, 89481);
-  sched_next_frame(e);
+  sched_next_frame(e, e->s.cy);
 
   switch (init->ram_init) {
     case RAM_INIT_ZERO: break;
@@ -5729,9 +5723,6 @@ u32 audio_buffer_get_frames(AudioBuffer *audio_buffer) {
 EEvent emulator_step(E *e) { return emulator_run_until(e, e->s.cy + 1); }
 
 static void emulator_substep_loop(E *e, Ticks check_ticks) {
-#if 0
-  sched_clear(e, SCHED_EVENT);
-#endif
   sched_at(e, SCHED_RUN_UNTIL, check_ticks);
   while (e->s.event == 0 && e->s.cy < check_ticks) {
     sched_run(e);
