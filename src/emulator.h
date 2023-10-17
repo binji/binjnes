@@ -247,8 +247,7 @@ typedef struct {
   bool enabled, next_enabled, w, a12_low, toggled_rendering_near_skipped_cycle;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr, bgmask;
   Spr spr;
-  u64 cy, read_status_cy, nmi_cy, write_ctrl_cy, last_vram_access_cy,
-      a12_low_count;
+  u64 cy, read_status_cy, nmi_cy, last_vram_access_cy, a12_low_count;
   Mirror mirror;
 } P;
 

@@ -181,7 +181,7 @@ static void sched_at(E* e, Sched sched, u64 cy) {
   e->s.sc.when[sched] = cy;
 #if 0
   if (sched == SCHED_NMI) {
-    printf("    [%" PRIu64 "] sched at %" PRIu64 "\n", e->s.cy, cy);
+    printf("    [%" PRIu64 "] sched nmi at %" PRIu64 "\n", e->s.cy, cy);
   }
 #endif
   sched_update_next(e);
@@ -497,8 +497,10 @@ static void sched_at_ppu_state(E *e, Sched sched, u32 state, Ticks cy) {
             (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
     next_state += 89342 - will_skip_cycle;
   }
-  DEBUG("    sched_at_ppu_state for %" PRIu64 " (state=%u skip=%u) diff=%u\n",
-        cy + next_state, p->state, will_skip_cycle, next_state);
+  DEBUG("    sched_at_ppu_state %s for %" PRIu64
+        " (state=%u skip=%u) diff=%u\n",
+        s_sched_names[sched], cy + next_state, p->state, will_skip_cycle,
+        next_state);
   sched_at(e, sched, cy + next_state);
 }
 
@@ -513,9 +515,6 @@ static void sched_next_frame(E *e, Ticks cy) {
 static void ppu1(E *e, Ticks cy) {
   DEBUG("(%" PRIu64 "): ppustatus cleared\n", cy);
   e->s.p.ppustatus = 0;
-  if (cy == e->s.p.write_ctrl_cy) {
-    e->s.c.req_nmi = false;
-  }
 }
 static void ppu2(E *e, Ticks cy) {
   if (cy != e->s.p.read_status_cy) {
@@ -755,8 +754,9 @@ static void ppu_sync(E* e, const char* reason) {
   P* p = &e->s.p;
   u64 cy = p->cy;
 #if 0
-  printf("ppu_sync(\"%s\") %" PRIu64 " => %" PRIu64 " state=%u\n", reason,
-         p->cy, e->s.cy, p->state);
+  printf("ppu_sync(\"%s\") %" PRIu64 " => %" PRIu64 "(delta=%" PRIu64
+         ") state=%u\n",
+         reason, p->cy, e->s.cy, e->s.cy - p->cy, p->state);
 #endif
   while (cy < e->s.cy) {
     ppu_step(e, cy++);
@@ -1491,11 +1491,16 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         } else {
           sched_clear(e, SCHED_NMI);
           if (e->s.cy - p->nmi_cy <= 3) {
+            DEBUG("     [%" PRIu64 "] canceling NMI from write\n", e->s.cy);
             c->req_nmi = false;
           }
         }
       }
-      p->write_ctrl_cy = e->s.cy;
+      if (p->state == 89003) {
+        printf("     [%" PRIu64 "] canceling NMI from write w/ clear\n",
+               e->s.cy);
+        c->req_nmi = false;
+      }
       p->ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
