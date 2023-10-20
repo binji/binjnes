@@ -309,6 +309,7 @@ typedef struct Emulator {
   void (*mapper_apu_tick)(struct Emulator*, u8 update);
   void (*mapper_on_ppu_addr_updated)(struct Emulator*, u16, Ticks);
   void (*mapper_on_chr_read)(struct Emulator*, u16, Ticks);
+  void (*mapper_reschedule_irq)(struct Emulator*, Ticks);
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
