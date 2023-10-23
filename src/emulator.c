@@ -1011,8 +1011,7 @@ static void sched_next_dmc_fetch(E* e, Ticks cy, const char* reason) {
       reason);
 }
 
-static void apu_tick(E *e, u64 cy) {
-  #define TIMER_DIFF V128_MAKE_U16(1, 1, 2, 2, 1, 0, 0, 0)
+static void apu_tick(E *e, u64 cy, bool odd) {
   static const u8 pduty[][8] = {{0, 1, 0, 0, 0, 0, 0, 0},
                                 {0, 1, 1, 0, 0, 0, 0, 0},
                                 {0, 0, 0, 0, 1, 1, 1, 1},
@@ -1023,12 +1022,10 @@ static void apu_tick(E *e, u64 cy) {
 
   A* a = &e->s.a;
   AudioBuffer* ab = &e->audio_buffer;
-
-  // Subtract 1 from each timer (2 from triangle), as long as it is non-zero.
-  // Reload the timers that are zero.
-  u16x8 timer0 = v128_lt_u16(a->timer, TIMER_DIFF);
-  a->timer = v128_blendv(v128_sub_u16(a->timer, TIMER_DIFF), a->period, timer0);
-  #undef TIMER_DIFF
+  u16x8 timer_diff = odd ? V128_MAKE_U16(1, 1, 1, 1, 1, 0, 0, 0)
+                         : V128_MAKE_U16(0, 0, 1, 1, 0, 0, 0, 0);
+  u16x8 timer0 = v128_lt_u16(a->timer, timer_diff);
+  a->timer = v128_blendv(v128_sub_u16(a->timer, timer_diff), a->period, timer0);
   timer0 = v128_and(timer0, a->play_mask);
 
   f32x4 sample = a->sample;
@@ -1085,7 +1082,7 @@ static void apu_tick(E *e, u64 cy) {
     a->sample = sample;
   }
 
-  if (a->dmcfetch) {
+  if (odd && a->dmcfetch) {
     sched_occurred(e, SCHED_DMC_FETCH, cy);
     sched_next_dmc_fetch(e, cy + 6, "dmc fetch occurred");
     u16 step = e->s.c.step - 1;
@@ -1139,7 +1136,7 @@ static void apu_tick(E *e, u64 cy) {
   ab->bufferi = (ab->bufferi + 1) & (absize - 1);
 
   ab->freq_counter += ab->frequency;
-  if (VALUE_WRAPPED(ab->freq_counter, APU_TICKS_PER_SECOND)) {
+  if (VALUE_WRAPPED(ab->freq_counter, CPU_TICKS_PER_SECOND)) {
     // 128-tap low-pass filter @ 894.8kHz: pass=12kHz, stop=20kHz
 #define LPF_DATA                                                              \
   0.00913f, -0.00143f, -0.00141f, -0.00144f, -0.00151f, -0.00162f, -0.00177f, \
@@ -1221,6 +1218,7 @@ static void apu_quarter(A *a) {
   u32x4 volchanged = v128_ne_f32(a->vol, oldvol);
   for (int i = 0; i < 4; ++i) {
     if (volchanged.au32[i]) {
+      assert(i != 2);
       apu_update_chan(a, i);
     }
   }
@@ -1244,7 +1242,6 @@ static void apu_quarter(A *a) {
   // If the control flag is clear, the linear counter reload flag is cleared.
   if (!(a->reg[8] & 0x80)) {
     a->trireload = 0;
-    a->start.au32[2] = 0;
   }
 }
 
@@ -1273,7 +1270,7 @@ static void apu_sync(E* e) {
   A* a = &e->s.a;
   u64 cy = a->cy;
   while (cy + 1 <= e->s.cy) {
-    if (a->state & 1) { apu_tick(e, cy); }
+    apu_tick(e, cy, a->state & 1);
     switch (a->state++) {
       case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(a); } break;
       case 7460: apu_quarter(a); break;
