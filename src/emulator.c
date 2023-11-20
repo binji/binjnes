@@ -1532,13 +1532,13 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
       if (e->mapper_reschedule_irq)
-        e->mapper_reschedule_irq(e, e->s.cy);
+        e->mapper_reschedule_irq(e, e->s.p.state, e->s.cy);
       DEBUG("(%" PRIu64 ") [%3u:%3u]: ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy,
             ppu_dot(e), ppu_line(e), p->t, val);
       goto io;
     case 1:
       if ((val ^ p->ppumask) & 0x18) {
-#if 1
+#if 0
         printf("[%" PRIu64 "] $2001 = %02x -> %02x (state=%u)\n", e->s.cy,
                p->ppumask, val, e->s.p.state);
 #endif
@@ -1552,7 +1552,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
       sched_next_frame(e, e->s.cy, "$2001 write");
       if (e->mapper_reschedule_irq)
-        e->mapper_reschedule_irq(e, e->s.cy);
+        e->mapper_reschedule_irq(e, e->s.p.state, e->s.cy);
       p->bgmask = (p->ppumask & 8) ? 0xf : 0;
       p->next_enabled = !!(val & 0x18);
       p->emphasis = (val << 1) & 0x1c0;
@@ -2134,78 +2134,109 @@ static void mapper206_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void mapper4_reschedule_irq(E* e, Ticks cy) {
+static int slow(uint8_t irq_counter, int dot, int line, int frame) {
+  int dcy = 0;
+  while (irq_counter > 0) {
+    switch (dot++) {
+      case 0:
+        if (line == 0 && ++frame & 1) {
+          dot++;
+        }
+        break;
+      case 261:
+        if (line == 261 || line < 240) {
+          if (--irq_counter == 0) {
+            --dcy;
+          }
+        }
+        break;
+      case 340:
+        if (++line == 262) {
+          line = 0;
+        }
+        dot = 0;
+        break;
+    }
+    ++dcy;
+  }
+  return dcy;
+}
+
+static int faster(uint8_t irq_counter, int dot, int line, int frame) {
+  int dcy = 0;
+  if (irq_counter == 0) return 0;
+  // Move to dot 261
+  if (line <= 239) {
+    if (dot <= 261) {
+      if (line == 0 && dot == 0 && (++frame & 1)) {
+        dcy--;
+      }
+      dcy += 261 - dot;
+    } else if (line == 239) {
+      dcy += 261 - dot + 341 * (261 - line);
+      line = 261;
+    } else {
+      dcy += 261 - dot + 341;
+      ++line;
+    }
+  } else if (line < 261) {
+    dcy += 261 - dot + 341 * (261 - line);
+    line = 261;
+  } else if (dot <= 261) {
+    dcy += 261 - dot;
+  } else {
+    if (++frame & 1) dcy--;
+    dcy += 261 - dot + 341;
+    if (++line == 262) line = 0;
+  }
+  while (--irq_counter > 0) {
+    if (line < 239) {
+      int left = MIN(irq_counter, 239 - line);
+      dcy += 341 * left;
+      line += left;
+      irq_counter -= left - 1;
+    } else if (line == 261) {
+      dcy += 341 - (++frame & 1);
+      line = 0;
+    } else {
+      dcy += 341 * (261 - line);
+      line = 261;
+    }
+  }
+  return dcy;
+}
+
+static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   M* m = &e->s.m;
   P* p = &e->s.p;
-  ppu_sync(e, "mapper4_reschedule_irq");
+  int dot = pstate % 341;
+  int line = pstate / 341;
   if (!m->mmc3.irq_enable || (p->ppumask & 0x18) == 0) {
-    printf("[%" PRIu64
-           "] clearing mapper irq state=%u [%u:%u] frame=%u irq_enable=%u "
-           "ppumask=%02x\n",
-           cy, p->state, ppu_dot(e), ppu_line(e), p->frame, m->mmc3.irq_enable,
-           p->ppumask);
+    DEBUG("[%" PRIu64
+          "] clearing mapper irq state=%u [%u:%u] frame=%u irq_enable=%u "
+          "ppumask=%02x\n",
+          cy, p->state, dot, line, p->frame, m->mmc3.irq_enable, p->ppumask);
     sched_clear(e, SCHED_MAPPER_IRQ);
     return;
   }
-#if 1
+#if 0
   printf("[%" PRIu64
-        "] scheduling irq state=%u [%u:%u] frame=%u latch=%u counter=%u\n",
-        cy, p->state, ppu_dot(e), ppu_line(e), p->frame, m->mmc3.irq_latch,
-        p->a12_irq_counter);
+         "] scheduling irq state=%u [%u:%u] frame=%u latch=%u counter=%u\n",
+         cy, p->state, dot, line, p->frame, m->mmc3.irq_latch,
+         p->a12_irq_counter);
 #endif
   switch (p->ppuctrl & 0x18) {
     case 0x00:
-      printf("[%" PRIu64 "] clearing mapper irq since ppuctrl=00\n", cy);
+      DEBUG("[%" PRIu64 "] clearing mapper irq since ppuctrl=00\n", cy);
       sched_clear(e, SCHED_MAPPER_IRQ);
       break;
     case 0x08: {
       // TODO: optimize
-#if 1
       u32 counter = m->mmc3.irq_reload || p->a12_irq_counter == 0
                         ? m->mmc3.irq_latch + 1
                         : p->a12_irq_counter;
-#else
-      u32 counter = m->mmc3.irq_latch + 1;
-#endif
-      Ticks dcy = 0;
-      u32 dot = ppu_dot(e);
-      u32 line = ppu_line(e);
       u32 frame = p->frame & 1;
-      bool skipping = false;
-      (void)skipping;
-      while (counter > 0) {
-        switch (dot++) {
-          case 0:
-            if (line == 0 && ++frame & 1) {
-              dot++;
-              skipping = true;
-            }
-            break;
-          case 261:
-            if (line == 261 || line < 240) {
-#if 0
-              printf("      expected clock at [%u:%u] +%" PRIu64 " = %" PRIu64
-                     "\n",
-                     dot, line, dcy, cy + dcy);
-#endif
-              if (--counter == 0) {
-                --dcy;
-              }
-            }
-            break;
-          case 340:
-            if (++line == 262) {
-              line = 0;
-            }
-            dot = 0;
-            break;
-        }
-        ++dcy;
-      }
-#if 1
-      printf("      scheduling for dot=%u line=%u skip=%u +%" PRIu64 " = %" PRIu64 "\n",
-             dot, line, skipping, dcy, cy + dcy);
-#endif
+      Ticks dcy = faster(counter, dot, line, frame);
       sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
       break;
     }
@@ -2285,18 +2316,21 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       if (addr & 1) {
         m->mmc3.irq_reload = true;
         e->s.p.a12_irq_counter = 0;
-        mapper4_reschedule_irq(e, e->s.cy);
+        ppu_sync(e, "mapper4_reschedule_irq");
+        mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
       } else {
         m->mmc3.irq_latch = val;
-        mapper4_reschedule_irq(e, e->s.cy);
+        ppu_sync(e, "mapper4_reschedule_irq");
+        mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq latch = %u\n", e->s.cy, val);
       }
       break;
     case 14: case 15: // IRQ disable / IRQ enable
       if (addr & 1) {
         m->mmc3.irq_enable = true;
-        mapper4_reschedule_irq(e, e->s.cy);
+        ppu_sync(e, "mapper4_reschedule_irq");
+        mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
       } else {
         ppu_sync(e, "mapper irq disabled");
@@ -2346,6 +2380,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
               p->frame, ppu_dot(e), ppu_line(e));
         e->s.c.irq |= IRQ_MAPPER;
         sched_occurred(e, SCHED_MAPPER_IRQ, cy);
+        mapper4_reschedule_irq(e, e->s.p.state + 1, cy + 1);
       }
     }
     p->a12_low_count = 0;
