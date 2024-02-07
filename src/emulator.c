@@ -500,12 +500,15 @@ static void sched_at_ppu(E* e, Sched sched, u32 dot, u32 line, Ticks cy,
           cy, s_sched_names[sched], e->s.sc.when[sched], p->state);
     return;
   }
-  if (next_state <= 0) {
+  if (next_state <= 0 || p->state == 0) {
+    if (next_state <= 0) {
+      next_state += 89342;
+    }
     will_skip_cycle =
         !(p->frame & 1) &&
         !(e->s.p.ppumask & 0x18) ==
             (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
-    next_state += 89342 - will_skip_cycle;
+    next_state -= will_skip_cycle;
   }
   DEBUG("    [%" PRIu64 "] sched_at_ppu %s for %" PRIu64
         " (state=%u skip=%u) diff=%u\n",
