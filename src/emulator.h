@@ -31,6 +31,11 @@ typedef void (*StepFunc)(struct Emulator* e);
 typedef void (*JoypadCallback)(struct SystemInput *input, void *user_data,
                                bool strobe);
 
+typedef enum RamInit {
+  RAM_INIT_ZERO,
+  RAM_INIT_FCEUX,
+} RamInit;
+
 typedef struct JoypadCallbackInfo {
   JoypadCallback callback;
   void* user_data;
@@ -55,7 +60,8 @@ typedef struct EmulatorInit {
   FileData rom;
   int audio_frequency;
   int audio_frames;
-  u32 random_seed;
+  RamInit ram_init;
+  u32 random_seed;  // Currently unused.
 } EmulatorInit;
 
 typedef struct EmulatorConfig {

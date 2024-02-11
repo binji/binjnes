@@ -56,6 +56,7 @@ static bool s_profile;
 static u32 s_profile_limit = 30;
 static const char* s_rom_filename;
 static u32 s_random_seed = 0xcabba6e5;
+static RamInit s_ram_init = RAM_INIT_ZERO;
 static RGBAFrameBuffer s_frame_buffer;
 
 Result write_ppm(const char* filename) {
@@ -108,10 +109,11 @@ void usage(int argc, char** argv) {
       "     --output-image-format FORMAT  ouptut format\n"
       "     --output-audio FILE           output raw F32-LE audio to FILE\n"
       "  -a,--animate                     output an image every frame\n"
+      "  --init-ram RAM_INIT              which values to initialize ram\n"
       "  -s,--seed SEED                   random seed used for initializing RAM\n"
-      "  -P,--palette PAL                 use a builtin palette for DMG\n"
       "\n"
-      " FORMAT is 'ppm' (default), 'bmp', or 'png'\n";
+      " FORMAT is 'ppm' (default), 'bmp', or 'png'\n"
+      " RAM_INIT is 'zero' (default) or 'fceux'\n";
 
   PRINT_ERROR(usage, argv[0], DEFAULT_FRAMES);
 }
@@ -142,6 +144,7 @@ void parse_options(int argc, char**argv) {
     {'a', "animate", 0},
     {'s', "seed", 1},
     {'P', "palette", 1},
+    {0, "init-ram", 1},
   };
 
   struct OptionParser* parser = option_parser_new(
@@ -227,6 +230,16 @@ void parse_options(int argc, char**argv) {
                 PRINT_ERROR("ERROR: invalid image format\n\n");
                 goto error;
               }
+            } else if (strcmp(result.option->long_name, "init-ram") == 0) {
+              if (strcmp(result.value, "zero") == 0) {
+                s_ram_init = RAM_INIT_ZERO;
+              } else if (strcmp(result.value, "fceux") == 0) {
+                s_ram_init = RAM_INIT_FCEUX;
+              } else {
+                PRINT_ERROR("ERROR: unknown ram initialization type '%s'.\n\n",
+                            result.value);
+                goto error;
+              }
             } else {
               abort();
             }
@@ -274,6 +287,7 @@ int main(int argc, char** argv) {
   emulator_init.rom = rom;
   emulator_init.audio_frequency = AUDIO_FREQUENCY;
   emulator_init.audio_frames = AUDIO_FRAMES;
+  emulator_init.ram_init = s_ram_init;
   emulator_init.random_seed = s_random_seed;
   e = emulator_new(&emulator_init);
   CHECK(e != NULL);

@@ -5561,6 +5561,15 @@ static Result init_emulator(E *e, const EInit *init) {
   sched_init(e);
   sched_at(e, SCHED_FRAME_IRQ, 89481);
 
+  switch (init->ram_init) {
+    case RAM_INIT_ZERO: break;
+    case RAM_INIT_FCEUX:
+      for (u32 a = 0; a < 0x800; ++a) {
+        e->s.c.ram[a] = a & 4 ? 0xff : 0;
+      }
+      break;
+  }
+
   return OK;
   ON_ERROR_RETURN;
 }

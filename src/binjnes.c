@@ -65,6 +65,7 @@ static bool s_step_frame;
 static bool s_paused;
 static Ticks s_rewind_start;
 static u32 s_random_seed = 0xcabba6e5;
+static RamInit s_ram_init = RAM_INIT_ZERO;
 static u32 s_render_scale = 4;
 static bool s_update_viewport = true;
 static f32 s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h;
@@ -205,8 +206,10 @@ static void usage(int argc, char** argv) {
       "  -x,--scale SCALE        render scale\n"
       "     --p0 CONTROLLER      choose controller type for player 0\n"
       "     --p1 CONTROLLER      choose controller type for player 1\n"
+      "  --init-ram RAM_INIT     which values to initialize ram\n"
       "\n"
-      " CONTROLLER is 'joypad' (default), 'zapper' or 'snesmouse'\n",
+      " CONTROLLER is 'joypad' (default), 'zapper' or 'snesmouse'\n"
+      " RAM_INIT is 'zero' (default) or 'fceux'\n",
       argv[0]);
 }
 
@@ -220,6 +223,7 @@ static void parse_arguments(int argc, char** argv) {
     {'x', "scale", 1},
     {0, "p0", 1},
     {0, "p1", 1},
+    {0, "init-ram", 1},
   };
 
   struct OptionParser* parser = option_parser_new(
@@ -282,6 +286,16 @@ static void parse_arguments(int argc, char** argv) {
                 s_should_lock_mouse = true;
               } else {
                 PRINT_ERROR("ERROR: unknown controller type '%s'.\n\n",
+                            result.value);
+                goto error;
+              }
+            } else if (strcmp(result.option->long_name, "init-ram") == 0) {
+              if (strcmp(result.value, "zero") == 0) {
+                s_ram_init = RAM_INIT_ZERO;
+              } else if (strcmp(result.value, "fceux") == 0) {
+                s_ram_init = RAM_INIT_FCEUX;
+              } else {
+                PRINT_ERROR("ERROR: unknown ram initialization type '%s'.\n\n",
                             result.value);
                 goto error;
               }
@@ -484,6 +498,7 @@ static void init_emulator(void) {
       .rom = s_rom,
       .audio_frequency = AUDIO_FREQUENCY,
       .audio_frames = AUDIO_FRAMES,
+      .ram_init = s_ram_init,
       .random_seed = 0,
   });
   CHECK(e != NULL);
