@@ -599,7 +599,11 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
         playback->current_frame = (u32)i;
         playback->current_frame_latch = (u32)(total_latch_index - total_latches);
         playback->current_total_latch = (u32)total_latch_index;
-        playback->last_input = joypad_unpack_input(last_input);
+        playback->last_input.port[0].type = CONTROLLER_JOYPAD;
+        playback->last_input.port[0].joyp = unpack_joypad(last_input & 0xff);
+        playback->last_input.port[1].type = CONTROLLER_JOYPAD;
+        playback->last_input.port[1].joyp = unpack_joypad((last_input >> 8) & 0xff);
+        playback->last_input.reset = false;
         break;
       }
       total_latches += frame->latch;
@@ -627,26 +631,30 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
     }
     if (++playback->current_frame_latch >= frame->latch) {
       assert(playback->current_frame_latch <= frame->latch);
-      playback->last_input = joypad_unpack_input(frame->input);
+      playback->last_input.port[0].type = CONTROLLER_JOYPAD;
+      playback->last_input.port[0].joyp = unpack_joypad(frame->input & 0xff);
+      playback->last_input.port[1].type = CONTROLLER_JOYPAD;
+      playback->last_input.port[1].joyp = unpack_joypad((frame->input >> 8) & 0xff);
+      playback->last_input.reset = false;
       ++playback->current_frame;
       playback->current_frame_latch = 0;
       LOG("0:%c%c%c%c%c%c%c%c 1:%c%c%c%c%c%c%c%c\n",
-          playback->last_input.joyp[0].down ? 'D' : '_',
-          playback->last_input.joyp[0].up ? 'U' : '_',
-          playback->last_input.joyp[0].left ? 'L' : '_',
-          playback->last_input.joyp[0].right ? 'R' : '_',
-          playback->last_input.joyp[0].start ? 'T' : '_',
-          playback->last_input.joyp[0].select ? 'E' : '_',
-          playback->last_input.joyp[0].B ? 'B' : '_',
-          playback->last_input.joyp[0].A ? 'A' : '_',
-          playback->last_input.joyp[1].down ? 'D' : '_',
-          playback->last_input.joyp[1].up ? 'U' : '_',
-          playback->last_input.joyp[1].left ? 'L' : '_',
-          playback->last_input.joyp[1].right ? 'R' : '_',
-          playback->last_input.joyp[1].start ? 'T' : '_',
-          playback->last_input.joyp[1].select ? 'E' : '_',
-          playback->last_input.joyp[1].B ? 'B' : '_',
-          playback->last_input.joyp[1].A ? 'A' : '_');
+          playback->last_input.port[0].joyp.down ? 'D' : '_',
+          playback->last_input.port[0].joyp.up ? 'U' : '_',
+          playback->last_input.port[0].joyp.left ? 'L' : '_',
+          playback->last_input.port[0].joyp.right ? 'R' : '_',
+          playback->last_input.port[0].joyp.start ? 'T' : '_',
+          playback->last_input.port[0].joyp.select ? 'E' : '_',
+          playback->last_input.port[0].joyp.B ? 'B' : '_',
+          playback->last_input.port[0].joyp.A ? 'A' : '_',
+          playback->last_input.port[1].joyp.down ? 'D' : '_',
+          playback->last_input.port[1].joyp.up ? 'U' : '_',
+          playback->last_input.port[1].joyp.left ? 'L' : '_',
+          playback->last_input.port[1].joyp.right ? 'R' : '_',
+          playback->last_input.port[1].joyp.start ? 'T' : '_',
+          playback->last_input.port[1].joyp.select ? 'E' : '_',
+          playback->last_input.port[1].joyp.B ? 'B' : '_',
+          playback->last_input.port[1].joyp.A ? 'A' : '_');
     } else {
       LOG("\n");
     }
