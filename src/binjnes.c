@@ -528,7 +528,9 @@ static void init_emulator(void) {
   s_save_filename = replace_extension(s_rom_filename, SAVE_EXTENSION);
   s_save_state_filename =
       replace_extension(s_rom_filename, SAVE_STATE_EXTENSION);
-  emulator_read_prg_ram_from_file(e, s_save_filename);
+  if (!(s_read_joypad_filename || s_read_joypad_movie_filename)) {
+    emulator_read_prg_ram_from_file(e, s_save_filename);
+  }
   emulator_schedule_reset_change(e, joypad_get_next_reset_change(s_joypad));
 
   return;
@@ -749,7 +751,7 @@ static void cleanup(void) {
     joypad_write(s_joypad, &file_data);
     file_write(s_write_joypad_filename, &file_data);
     file_data_delete(&file_data);
-  } else {
+  } else if (!(s_read_joypad_filename || s_read_joypad_movie_filename)) {
     emulator_write_prg_ram_to_file(e, s_save_filename);
   }
 
