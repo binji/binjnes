@@ -272,13 +272,13 @@ static void set_chr4k_map(E *, u16, u16);
 static inline u8 chr_read(E *e, u8 *map[16], u16 addr, Ticks cy) {
   u8 result = map[(addr >> 10) & 0xf][addr & 0x3ff];
   if (e->mapper_on_chr_read)
-    e->mapper_on_chr_read(e, addr, cy);
+    e->mapper_on_chr_read(e, addr, cy, false);
   return result;
 }
 
 static inline u8 nt_read(E *e, u16 addr, Ticks cy) {
   if (e->mapper_on_ppu_addr_updated)
-    e->mapper_on_ppu_addr_updated(e, addr, cy);
+    e->mapper_on_ppu_addr_updated(e, addr, cy, false);
   return e->ppu_map[(addr >> 10) & 0xf][addr & 0x3ff];
 }
 
@@ -319,7 +319,7 @@ static inline int ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void ppu_write(E *e, u16 addr, u8 val) {
   if (e->mapper_on_ppu_addr_updated)
-    e->mapper_on_ppu_addr_updated(e, addr, e->s.cy);
+    e->mapper_on_ppu_addr_updated(e, addr, e->s.cy, true);
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
@@ -375,7 +375,7 @@ static inline u8 read_ptb(E *e, u8 addend, Ticks cy) {
     u8 exbyte = e->s.p.ram[(2 << 10) + (e->s.p.v & 0x3ff)];
     u8 bank = exbyte & 0x3f & (e->ci.chr4k_banks - 1);
     if (e->mapper_on_ppu_addr_updated)
-      e->mapper_on_ppu_addr_updated(e, addr, cy);
+      e->mapper_on_ppu_addr_updated(e, addr, cy, false);
     return e->ppu_bg_map[(addr >> 10) & 0x3][(bank << 12) + (addr & 0x3ff)];
   }
   return chr_read(e, e->ppu_bg_map, addr, cy);
@@ -1457,7 +1457,7 @@ static u8 cpu_read(E *e, u16 addr) {
         u8 result = p->ppulast = ppu_read(e, p->v);
         inc_ppu_addr(p);
         if (e->mapper_on_ppu_addr_updated)
-          e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy);
+          e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy, true);
         return c->open_bus = result;
       }
     }
@@ -1597,7 +1597,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         // v                   = t
         p->v = p->t = (p->t & 0xff00) | val;
         if (e->mapper_on_ppu_addr_updated)
-          e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy);
+          e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy, true);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:v=%04hx t=%04hx w=1\n",
               e->s.cy, ppu_dot(e), ppu_line(e), val, p->v, p->t);
       }
@@ -1607,7 +1607,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       ppu_write(e, p->v, val);
       inc_ppu_addr(p);
       if (e->mapper_on_ppu_addr_updated)
-        e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy);
+        e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy, true);
       DEBUG("  (%" PRIu64 ") [%3u:%3u]: ppu:write(%04hx)=%02hhx, v=%04hx\n",
             e->s.cy, ppu_dot(e), ppu_line(e), oldv, val, p->v);
       goto io;
@@ -2215,7 +2215,7 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   int dot = pstate % 341;
   int line = pstate / 341;
   if (!m->mmc3.irq_enable || (p->ppumask & 0x18) == 0) {
-    DEBUG("[%" PRIu64
+    LOG("[%" PRIu64
           "] clearing mapper irq state=%u [%u:%u] frame=%u irq_enable=%u "
           "ppumask=%02x\n",
           cy, p->state, dot, line, p->frame, m->mmc3.irq_enable, p->ppumask);
@@ -2230,7 +2230,7 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
 #endif
   switch (p->ppuctrl & 0x18) {
     case 0x00:
-      DEBUG("[%" PRIu64 "] clearing mapper irq since ppuctrl=00\n", cy);
+      LOG("[%" PRIu64 "] clearing mapper irq since ppuctrl=00\n", cy);
       sched_clear(e, SCHED_MAPPER_IRQ);
       break;
     case 0x08: {
@@ -2240,6 +2240,7 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
                         : p->a12_irq_counter;
       u32 frame = p->frame & 1;
       Ticks dcy = faster(counter, dot, line, frame);
+      LOG("[%" PRIu64 "] scheduling mapper irq at %" PRIu64 "\n", cy, cy + dcy);
       sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
       break;
     }
@@ -2346,7 +2347,8 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
+static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
+                                        bool from_cpu) {
   M* m = &e->s.m;
   P* p = &e->s.p;
 
@@ -2354,16 +2356,16 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
   if (p->a12_low) {
     p->a12_low_count += cy - p->last_vram_access_cy;
   }
-  DEBUG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
-        ") (frame = %u) (ly=%u [odd=%u]) (ppuctrl=%02x)\n",
+  LOG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
+        ") (frame = %u) (ly=%u [odd=%u]) (ppuctrl=%02x) (from_cpu=%u)\n",
         cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, p->fbidx >> 8,
-        p->frame & 1, p->ppuctrl);
+        p->frame & 1, p->ppuctrl, from_cpu);
 
   if (!low) {
     if (p->a12_low_count >= 10) {
       bool trigger_irq = false;
       if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) [%u:%u]\n", cy,
+        LOG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) [%u:%u]\n", cy,
               p->frame, ppu_dot(e), ppu_line(e));
         p->a12_irq_counter = m->mmc3.irq_latch;
         m->mmc3.irq_reload = false;
@@ -2371,18 +2373,25 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
           trigger_irq = true;
         }
       } else {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u]\n", cy,
+        LOG("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u]\n", cy,
               p->frame, ppu_dot(e), ppu_line(e));
         if (--p->a12_irq_counter == 0) {
           trigger_irq = true;
         }
       }
 
-      if (trigger_irq && m->mmc3.irq_enable) {
-        DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u]\n", cy,
-              p->frame, ppu_dot(e), ppu_line(e));
-        e->s.c.irq |= IRQ_MAPPER;
-        sched_occurred(e, SCHED_MAPPER_IRQ, cy);
+      if (trigger_irq) {
+        if (m->mmc3.irq_enable) {
+          LOG("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u]\n", cy,
+                p->frame, ppu_dot(e), ppu_line(e));
+          e->s.c.irq |= IRQ_MAPPER;
+          if (from_cpu && e->s.sc.when[SCHED_MAPPER_IRQ] == ~(u64)0) {
+            e->s.sc.when[SCHED_MAPPER_IRQ] = cy + 1;
+          }
+          sched_occurred(e, SCHED_MAPPER_IRQ, cy);
+          mapper4_reschedule_irq(e, e->s.p.state + 1, cy + 1);
+        }
+      } else if (from_cpu) {
         mapper4_reschedule_irq(e, e->s.p.state + 1, cy + 1);
       }
     }
@@ -2735,7 +2744,8 @@ static void mapper5_cpu_step(E* e) {
   }
 }
 
-static void mapper5_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
+static void mapper5_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
+                                        bool from_cpu) {
   M* m = &e->s.m;
   if ((addr & 0x3000) == 0x2000 && addr == m->mmc5.lastaddr) {
     LOG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", ppu_dot(e),
@@ -2766,7 +2776,6 @@ static void mapper5_on_ppu_addr_updated(E* e, u16 addr, Ticks cy) {
   m->mmc5.lastaddr = addr;
   e->s.p.last_vram_access_cy = cy;
 }
-
 
 static void mapper7_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
@@ -2817,7 +2826,7 @@ static void mapper9_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static void mmc2_on_chr_read(E* e, u16 addr, Ticks cy) {
+static void mmc2_on_chr_read(E* e, u16 addr, Ticks cy, bool from_cpu) {
   M* m = &e->s.m;
   switch (addr & 0x1ff8) {
     default: break;
