@@ -2137,35 +2137,8 @@ static void mapper206_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static int slow(uint8_t irq_counter, int dot, int line, int frame) {
-  int dcy = 0;
-  while (irq_counter > 0) {
-    switch (dot++) {
-      case 0:
-        if (line == 0 && ++frame & 1) {
-          dot++;
-        }
-        break;
-      case 261:
-        if (line == 261 || line < 240) {
-          if (--irq_counter == 0) {
-            --dcy;
-          }
-        }
-        break;
-      case 340:
-        if (++line == 262) {
-          line = 0;
-        }
-        dot = 0;
-        break;
-    }
-    ++dcy;
-  }
-  return dcy;
-}
-
-static int faster(uint8_t irq_counter, int dot, int line, int frame) {
+static int mapper4_ppuctrl_08_delta_cy(uint8_t irq_counter, int dot, int line,
+                                       int frame) {
   int dcy = 0;
   if (irq_counter == 0) return 0;
   // Move to dot 261
@@ -2239,7 +2212,7 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
                         ? m->mmc3.irq_latch + 1
                         : p->a12_irq_counter;
       u32 frame = p->frame & 1;
-      Ticks dcy = faster(counter, dot, line, frame);
+      int dcy = mapper4_ppuctrl_08_delta_cy(counter, dot, line, frame);
       LOG("[%" PRIu64 "] scheduling mapper irq at %" PRIu64 "\n", cy, cy + dcy);
       sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
       break;
