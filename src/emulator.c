@@ -1849,11 +1849,13 @@ static void update_nt_map_banking(E* e) {
 }
 
 static void set_mirror(E *e, Mirror mirror) {
+  ppu_sync(e, "set_mirror");
   e->s.p.mirror = mirror;
   e->mapper_update_nt_map(e);
 }
 
 static void update_chr1k_map(E* e) {
+  ppu_sync(e, "update_chr1k_map");
   for (int i = 0; i < 8; ++i) {
     update_ppu_bank(e, i, e->s.m.ppu1k_bank[i], e->s.m.ppu1k_loc[i]);
   }
