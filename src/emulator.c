@@ -3545,6 +3545,38 @@ void mapper69_write(E *e, u16 addr, u8 val) {
       }
       break;
     }
+
+    case 6: // Audio Register Select
+      m->fme7.reg_select = val;
+      break;
+
+    case 7: // Audio Register Write
+      switch (m->fme7.reg_select) {
+        case 0: case 2: case 4: { // Channel A/B/C low period
+          int ch = m->fme7.reg_select >> 1;
+          m->fme7.period.au16[ch] = (m->fme7.period.au16[ch] & 0xf00) | val;
+          break;
+        }
+        case 1: case 3: case 5: { // Channel A/B/C high period
+          int ch = m->fme7.reg_select >> 1;
+          m->fme7.period.au16[ch] =
+              (m->fme7.period.au16[ch] & 0xff) | ((val & 0xf) << 8);
+          break;
+        }
+        case 6: // Noise period
+          break;
+        case 7:
+          // TODO: noise
+          m->fme7.play_mask.au16[0] = val & 1 ? 0 : ~0;
+          m->fme7.play_mask.au16[1] = val & 2 ? 0 : ~0;
+          m->fme7.play_mask.au16[2] = val & 4 ? 0 : ~0;
+          break;
+        case 8: case 9: case 10: {
+          int ch = m->fme7.reg_select - 8;
+          m->fme7.vol.af32[ch] = val & 0xf;
+        }
+      }
+      break;
   }
 }
 
@@ -3566,6 +3598,38 @@ static void mapper69_prg_ram_write(E *e, u16 addr, u8 val) {
 static void mapper69_cpu_step(E* e) {
   if (e->s.m.fme7.irq_counter-- == 0 && e->s.m.fme7.irq_enable) {
     e->s.c.irq |= IRQ_MAPPER;
+  }
+}
+
+static void mapper69_apu_tick(E* e, u8 update) {
+  M *m = &e->s.m;
+  #define TIMER_DIFF V128_MAKE_U16(1, 1, 1, 0, 0, 0, 0, 0)
+  u16x8 timer0 = v128_lt_u16(m->fme7.timer, TIMER_DIFF);
+  m->fme7.timer = v128_blendv(v128_sub_u16(m->fme7.timer, TIMER_DIFF),
+                              m->fme7.period, timer0);
+#undef TIMER_DIFF
+  timer0 = v128_and(timer0, m->fme7.play_mask);
+  if (timer0.au16[0] | timer0.au16[1] | timer0.au16[2]) {
+    // Advance the sequence for reloaded timers.
+    m->fme7.seq =
+        v128_and(v128_add_u16(m->fme7.seq, v128_and(v128_bcast_u16(1), timer0)),
+                 V128_MAKE_U16(31, 31, 31, 0, 0, 0, 0, 0));
+    for (int ch = 0; ch < 3; ++ch) {
+      if (timer0.au16[ch]) {
+        m->fme7.sample.af32[ch] = (f32)(m->fme7.seq.au16[ch] > 15);
+      }
+    }
+    m->fme7.update_audio = true;
+  }
+
+  if (update || m->fme7.update_audio) {
+    u32x4 play_mask4 = v128_sext_s16_s32(m->fme7.play_mask);
+    f32x4 sampvol =
+        v128_mul_f32(v128_and(m->fme7.sample, play_mask4), m->fme7.vol);
+    e->s.a.mixed =
+        e->s.a.base_mixed +
+        (sampvol.af32[0] + sampvol.af32[1] + sampvol.af32[2]) * 0.01f;
+    m->fme7.update_audio = false;
   }
 }
 
@@ -5700,6 +5764,7 @@ static Result init_mapper(E *e) {
     e->mapper_prg_ram_write = mapper69_prg_ram_write;
     e->mapper_prg_ram_read = mapper69_prg_ram_read;
     e->mapper_cpu_step = mapper69_cpu_step;
+    e->mapper_apu_tick = mapper69_apu_tick;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);

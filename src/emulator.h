@@ -186,6 +186,12 @@ typedef struct {
       u8 command;
       u16 irq_counter;
       bool irq_enable, irq_counter_enable;
+      // Sunsoft 5b audio
+      u16x8 timer, period, seq, play_mask;
+      f32x4 sample, vol;
+      u8 reg_select;
+      bool update_audio;
+      // TODO: envelope (not used in commerical carts)
     } fme7;
 
     struct {
