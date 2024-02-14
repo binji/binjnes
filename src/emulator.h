@@ -312,7 +312,7 @@ typedef struct Emulator {
   u8 (*mapper_prg_ram_read)(struct Emulator*, u16);
   void (*mapper_cpu_step)(struct Emulator*);
   void (*mapper_update_nt_map)(struct Emulator*);
-  void (*mapper_apu_tick)(struct Emulator*, u8 update);
+  void (*mapper_apu_tick)(struct Emulator*, u8 update, bool odd);
   void (*mapper_on_ppu_addr_updated)(struct Emulator*, u16, Ticks, bool from_cpu);
   void (*mapper_on_chr_read)(struct Emulator*, u16, Ticks, bool from_cpu);
   void (*mapper_reschedule_irq)(struct Emulator*, u32, Ticks);

@@ -1130,7 +1130,7 @@ static void apu_tick(E *e, u64 cy, bool odd) {
   }
 
   if (e->mapper_apu_tick) {
-    e->mapper_apu_tick(e, update);
+    e->mapper_apu_tick(e, update, odd);
   }
 
   // Store twice so we don't have to wrap when filtering.
@@ -3028,7 +3028,7 @@ static void mapper19_cpu_step(E* e) {
   }
 }
 
-static void mapper19_apu_tick(E* e, u8 update) {
+static void mapper19_apu_tick(E* e, u8 update, bool odd) {
   M* m = &e->s.m;
   if (update || m->namco163.update_audio) {
     f32 mixed = 0;
@@ -3345,13 +3345,13 @@ static void mapper_vrc_cpu_step(E *e) {
   }
 }
 
-static void mapper_vrc6_apu_tick(E* e, u8 update) {
+static void mapper_vrc6_apu_tick(E* e, u8 update, bool odd) {
   M *m = &e->s.m;
-  #define TIMER_DIFF V128_MAKE_U16(2, 2, 1, 0, 0, 0, 0, 0)
-  u16x8 timer0 = v128_lt_u16(m->vrc.a6.timer, TIMER_DIFF);
-  m->vrc.a6.timer = v128_blendv(v128_sub_u16(m->vrc.a6.timer, TIMER_DIFF),
+  u16x8 timer_diff = odd ? V128_MAKE_U16(1, 1, 1, 0, 0, 0, 0, 0)
+                         : V128_MAKE_U16(1, 1, 0, 0, 0, 0, 0, 0);
+  u16x8 timer0 = v128_lt_u16(m->vrc.a6.timer, timer_diff);
+  m->vrc.a6.timer = v128_blendv(v128_sub_u16(m->vrc.a6.timer, timer_diff),
                                 m->vrc.a6.period, timer0);
-#undef TIMER_DIFF
   timer0 = v128_and(timer0, m->vrc.a6.play_mask);
   if (timer0.au16[0] | timer0.au16[1] | timer0.au16[2]) {
     // Advance the sequence for reloaded timers.
@@ -3603,13 +3603,12 @@ static void mapper69_cpu_step(E* e) {
   }
 }
 
-static void mapper69_apu_tick(E* e, u8 update) {
+static void mapper69_apu_tick(E* e, u8 update, bool odd) {
   M *m = &e->s.m;
-  #define TIMER_DIFF V128_MAKE_U16(1, 1, 1, 0, 0, 0, 0, 0)
-  u16x8 timer0 = v128_lt_u16(m->fme7.timer, TIMER_DIFF);
-  m->fme7.timer = v128_blendv(v128_sub_u16(m->fme7.timer, TIMER_DIFF),
+  u16x8 timer_diff = V128_MAKE_U16(1, 1, 1, 0, 0, 0, 0, 0);
+  u16x8 timer0 = v128_lt_u16(m->fme7.timer, timer_diff);
+  m->fme7.timer = v128_blendv(v128_sub_u16(m->fme7.timer, timer_diff),
                               m->fme7.period, timer0);
-#undef TIMER_DIFF
   timer0 = v128_and(timer0, m->fme7.play_mask);
   if (timer0.au16[0] | timer0.au16[1] | timer0.au16[2]) {
     // Advance the sequence for reloaded timers.
