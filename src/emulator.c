@@ -3596,7 +3596,9 @@ static void mapper69_prg_ram_write(E *e, u16 addr, u8 val) {
 }
 
 static void mapper69_cpu_step(E* e) {
-  if (e->s.m.fme7.irq_counter-- == 0 && e->s.m.fme7.irq_enable) {
+  if (e->s.m.fme7.irq_counter_enable &&
+      e->s.m.fme7.irq_counter-- == 0 &&
+      e->s.m.fme7.irq_enable) {
     e->s.c.irq |= IRQ_MAPPER;
   }
 }
