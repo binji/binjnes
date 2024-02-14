@@ -2139,32 +2139,32 @@ static void mapper206_write(E *e, u16 addr, u8 val) {
   }
 }
 
-static int mapper4_ppuctrl_08_delta_cy(uint8_t irq_counter, int dot, int line,
-                                       int frame) {
+static int mapper4_irq_delta_cy(int irq_dot, uint8_t irq_counter, int start_dot,
+                                int line, bool odd_frame) {
   int dcy = 0;
   if (irq_counter == 0) return 0;
-  // Move to dot 261
+  // Move to irq_dot
   if (line <= 239) {
-    if (dot <= 261) {
-      if (line == 0 && dot == 0 && (++frame & 1)) {
+    if (start_dot <= irq_dot) {
+      if (line == 0 && start_dot == 0 && (odd_frame ^= 1)) {
         dcy--;
       }
-      dcy += 261 - dot;
+      dcy += irq_dot - start_dot;
     } else if (line == 239) {
-      dcy += 261 - dot + 341 * (261 - line);
+      dcy += irq_dot - start_dot + 341 * (261 - line);
       line = 261;
     } else {
-      dcy += 261 - dot + 341;
+      dcy += irq_dot - start_dot + 341;
       ++line;
     }
   } else if (line < 261) {
-    dcy += 261 - dot + 341 * (261 - line);
+    dcy += irq_dot - start_dot + 341 * (261 - line);
     line = 261;
-  } else if (dot <= 261) {
-    dcy += 261 - dot;
+  } else if (start_dot <= irq_dot) {
+    dcy += irq_dot - start_dot;
   } else {
-    if (++frame & 1) dcy--;
-    dcy += 261 - dot + 341;
+    if (odd_frame ^= 1) dcy--;
+    dcy += irq_dot - start_dot + 341;
     if (++line == 262) line = 0;
   }
   while (--irq_counter > 0) {
@@ -2174,7 +2174,7 @@ static int mapper4_ppuctrl_08_delta_cy(uint8_t irq_counter, int dot, int line,
       line += left;
       irq_counter -= left - 1;
     } else if (line == 261) {
-      dcy += 341 - (++frame & 1);
+      dcy += 341 - (odd_frame ^= 1);
       line = 0;
     } else {
       dcy += 341 * (261 - line);
@@ -2197,29 +2197,40 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
     sched_clear(e, SCHED_MAPPER_IRQ);
     return;
   }
+  u8 mode = p->ppuctrl & 0x38;
 #if 0
   printf("[%" PRIu64
-         "] scheduling irq state=%u [%u:%u] frame=%u latch=%u counter=%u\n",
+         "] scheduling irq state=%u [%u:%u] frame=%u latch=%u counter=%u mode=%02x\n",
          cy, p->state, dot, line, p->frame, m->mmc3.irq_latch,
-         p->a12_irq_counter);
+         p->a12_irq_counter, mode);
 #endif
-  switch (p->ppuctrl & 0x18) {
+  switch (mode) {
     case 0x00:
       LOG("[%" PRIu64 "] clearing mapper irq since ppuctrl=00\n", cy);
       sched_clear(e, SCHED_MAPPER_IRQ);
       break;
-    case 0x08: {
-      // TODO: optimize
-      u32 counter = m->mmc3.irq_reload || p->a12_irq_counter == 0
-                        ? m->mmc3.irq_latch + 1
-                        : p->a12_irq_counter;
-      u32 frame = p->frame & 1;
-      int dcy = mapper4_ppuctrl_08_delta_cy(counter, dot, line, frame);
+    case 0x08:
+    case 0x10: {
+      bool reload = m->mmc3.irq_reload || p->a12_irq_counter == 0;
+      u32 counter = 0, irq_dot = 0;
+      if (mode == 0x08) {
+        counter = reload ? m->mmc3.irq_latch + 1 : p->a12_irq_counter;
+        irq_dot = 261;
+      } else {
+        // Most mmc3 clocks for mode 0x10 occur on dot 325 of the previous
+        // scanline, but the first one occurs on dot 5 of scanline 261.
+        counter = reload ? m->mmc3.irq_latch : p->a12_irq_counter - 1;
+        irq_dot = 325;
+        if (counter == 0) {
+          counter++;
+          irq_dot = 5;
+        }
+      }
+      int dcy = mapper4_irq_delta_cy(irq_dot, counter, dot, line, p->frame & 1);
       LOG("[%" PRIu64 "] scheduling mapper irq at %" PRIu64 "\n", cy, cy + dcy);
       sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
       break;
     }
-    case 0x10:
     default:
       fprintf(stderr, "unsupported mapper4 irq configuration %02x\n",
               p->ppuctrl);
@@ -2331,7 +2342,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
   if (p->a12_low) {
     p->a12_low_count += cy - p->last_vram_access_cy;
   }
-  LOG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
+  DEBUG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
         ") (frame = %u) (ly=%u [odd=%u]) (ppuctrl=%02x) (from_cpu=%u)\n",
         cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, p->fbidx >> 8,
         p->frame & 1, p->ppuctrl, from_cpu);
