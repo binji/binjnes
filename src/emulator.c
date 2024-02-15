@@ -1110,20 +1110,22 @@ static void apu_tick(E *e, u64 cy, bool odd) {
     f32x4 sampvol = v128_mul_f32(v128_and(sample, play_mask4), a->vol);
 
     if (a->update & 0b11) {
-      // See http://wiki.nesdev.com/w/index.php/APU_Mixer#Lookup_Table
-      // Started from a 31-entry table and calculated a quadratic regression.
-      static const f32 PB = 0.01133789176986089272f,
-                       PC = -0.00009336679655005083f;
+      static const f32 PA = 0.00179243811624196780,
+                       PB = 0.01113128890176917629f,
+                       PC = -0.00008652593542076564f;
       f32 p = sampvol.af32[0] + sampvol.af32[1];
-      a->pulse_mixed = p * (PB + p * PC);
+      a->pulse_mixed = PA + p * (PB + p * PC);
     }
     if (a->update & 0b11100) {
-      // Started from a 203-entry table and calculated a cubic regression.
-      static const f32 TB = 0.00653531668798749448f,
-                       TC = -0.00002097005655295220f,
-                       TD = 0.00000003402641447451f;
-      f32 t = 3 * sampvol.af32[2] + 2 * sampvol.af32[3] + a->dmcout;
-      a->tridmc_mixed = t * (TB + t * (TC + t * TD));
+      static const f32 TA = 0.00301475811951945616,
+                       TB = 0.00672613157755397317f,
+                       TC = -0.00002214573369713896f,
+                       TD = 0.00000003625915434472f,
+                       tri_factor = 2.7516713261213077,
+                       noise_factor = 1.8493587125234867;
+      f32 t = tri_factor * sampvol.af32[2] + noise_factor * sampvol.af32[3] +
+              a->dmcout;
+      a->tridmc_mixed = TA + t * (TB + t * (TC + t * TD));
     }
     a->base_mixed = a->mixed = a->pulse_mixed + a->tridmc_mixed;
     a->update = 0;
