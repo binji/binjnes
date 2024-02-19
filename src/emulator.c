@@ -488,7 +488,7 @@ static inline void sprfetch(E* e, Ticks cy) {
 }
 
 static void sched_at_ppu(E* e, Sched sched, u32 dot, u32 line, Ticks cy,
-                         const char* reason) {
+                         bool from_cpu, const char* reason) {
   P* p = &e->s.p;
   u32 state = line * 341 + dot;
   int next_state = state - p->state;
@@ -501,7 +501,7 @@ static void sched_at_ppu(E* e, Sched sched, u32 dot, u32 line, Ticks cy,
     return;
   }
   if (next_state <= 0 || p->state == 0) {
-    if (next_state <= 0) {
+    if (next_state < 0 || (next_state == 0 && !from_cpu)) {
       next_state += 89342;
     }
     will_skip_cycle =
@@ -511,18 +511,19 @@ static void sched_at_ppu(E* e, Sched sched, u32 dot, u32 line, Ticks cy,
     next_state -= will_skip_cycle;
   }
   DEBUG("    [%" PRIu64 "] sched_at_ppu %s for %" PRIu64
-        " (state=%u skip=%u) diff=%u\n",
+        " (state=%u skip=%u) diff=%u (%s)\n",
         cy, s_sched_names[sched], cy + next_state, p->state, will_skip_cycle,
-        next_state);
+        next_state, reason);
   sched_at(e, sched, cy + next_state, reason);
 }
 
-static void sched_next_nmi(E* e, Ticks cy, const char* reason) {
-  sched_at_ppu(e, SCHED_NMI, 1, 241, cy, reason);
+static void sched_next_nmi(E* e, Ticks cy, bool from_cpu, const char* reason) {
+  sched_at_ppu(e, SCHED_NMI, 1, 241, cy, from_cpu, reason);
 }
 
-static void sched_next_frame(E* e, Ticks cy, const char* reason) {
-  sched_at_ppu(e, SCHED_EVENT, 2, 241, cy, reason);
+static void sched_next_frame(E* e, Ticks cy, bool from_cpu,
+                             const char* reason) {
+  sched_at_ppu(e, SCHED_EVENT, 2, 241, cy, from_cpu, reason);
 }
 
 static void ppu1(E *e, Ticks cy) {
@@ -545,7 +546,7 @@ static void ppu2(E *e, Ticks cy) {
          e->s.p.frame, e->s.p.ppustatus, e->s.cy - last_frame);
   last_frame = e->s.cy;
 #endif
-  sched_next_frame(e, cy, "new frame");
+  sched_next_frame(e, cy, false, "new frame");
   DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", cy, e->s.p.frame,
         e->s.p.ppustatus);
 }
@@ -564,7 +565,7 @@ static void ppu3(E *e, Ticks cy) {
     last_nmi = cy;
 #endif
     sched_occurred(e, SCHED_NMI, cy);
-    sched_next_nmi(e, cy, "nmi occurred");
+    sched_next_nmi(e, cy, false, "nmi occurred");
     DEBUG("     [%" PRIu64 "] NMI\n", cy);
   }
 }
@@ -1519,7 +1520,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
             DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy);
         }
         if (val & 0x80) {
-          sched_next_nmi(e, e->s.cy, "$2000 write");
+          sched_next_nmi(e, e->s.cy, true, "$2000 write");
         } else {
           sched_clear(e, SCHED_NMI);
           if (e->s.cy - p->nmi_cy <= 3) {
@@ -1553,9 +1554,9 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
       p->ppumask = val;
       if (p->ppuctrl & 0x80) {
-        sched_next_nmi(e, e->s.cy, "$2001 write");
+        sched_next_nmi(e, e->s.cy, true, "$2001 write");
       }
-      sched_next_frame(e, e->s.cy, "$2001 write");
+      sched_next_frame(e, e->s.cy, true, "$2001 write");
       if (e->mapper_reschedule_irq)
         e->mapper_reschedule_irq(e, e->s.p.state, e->s.cy);
       p->bgmask = (p->ppumask & 8) ? 0xf : 0;
@@ -5871,7 +5872,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.state = 4;
   sched_init(e);
   sched_at(e, SCHED_FRAME_IRQ, 89481, "initial frame irq");
-  sched_next_frame(e, e->s.cy, "initial");
+  sched_next_frame(e, e->s.cy, true, "initial");
 
   switch (init->ram_init) {
     case RAM_INIT_ZERO: break;
