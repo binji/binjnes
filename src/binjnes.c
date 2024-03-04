@@ -631,7 +631,7 @@ static void run_until_ticks(Ticks until_ticks) {
     // set_status_text("invalid opcode!");
     s_paused = true;
   }
-  if (s_step_frame) {
+  if (s_step_frame && new_frame) {
     // host_reset_audio(host);
     s_paused = true;
     s_step_frame = false;
