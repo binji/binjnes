@@ -267,18 +267,16 @@ static inline u32 interleave2(u16 h, u16 l) {
   return result;
 }
 
-static void set_chr4k_map(E *, u16, u16);
-
-static inline u8 chr_read(E *e, u8 *map[16], u16 addr, Ticks cy) {
+static inline u8 chr_read(E *e, u8 *map[16], u16 addr, Ticks cy, bool from_cpu) {
   u8 result = map[(addr >> 10) & 0xf][addr & 0x3ff];
   if (e->mapper_on_chr_read)
-    e->mapper_on_chr_read(e, addr, cy, false);
+    e->mapper_on_chr_read(e, addr, cy, from_cpu);
   return result;
 }
 
-static inline u8 nt_read(E *e, u16 addr, Ticks cy) {
+static inline u8 nt_read(E *e, u16 addr, Ticks cy, bool from_cpu) {
   if (e->mapper_on_ppu_addr_updated)
-    e->mapper_on_ppu_addr_updated(e, addr, cy, false);
+    e->mapper_on_ppu_addr_updated(e, addr, cy, from_cpu);
   return e->ppu_map[(addr >> 10) & 0xf][addr & 0x3ff];
 }
 
@@ -287,7 +285,7 @@ static u8 ppu_read(E *e, u16 addr) {
   switch ((addr >> 10) & 15) {
     case 0: case 1: case 2: case 3:   // 0x0000..0x0fff
     case 4: case 5: case 6: case 7:   // 0x1000..0x1fff
-      buffer = chr_read(e, e->ppu_map, addr, e->s.cy);
+      buffer = chr_read(e, e->ppu_map, addr, e->s.cy, true);
       break;
 
     case 15:
@@ -299,7 +297,7 @@ static u8 ppu_read(E *e, u16 addr) {
       // Fallthrough.
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
-      buffer = nt_read(e, addr, e->s.cy);
+      buffer = nt_read(e, addr, e->s.cy, true);
       break;
   }
   e->s.p.readbuf = buffer;
@@ -349,7 +347,7 @@ static void ppu_write(E *e, u16 addr, u8 val) {
 }
 
 static inline void read_ntb(E *e, Ticks cy) {
-  e->s.p.ntb = nt_read(e, 0x2000 | (e->s.p.v & 0xfff), cy);
+  e->s.p.ntb = nt_read(e, 0x2000 | (e->s.p.v & 0xfff), cy, false);
 }
 
 static inline void read_atb(E *e, Ticks cy) {
@@ -360,7 +358,7 @@ static inline void read_atb(E *e, Ticks cy) {
     u16 v = e->s.p.v;
     u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
     int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
-    atb1 = (nt_read(e, at, cy) >> shift) & 3;
+    atb1 = (nt_read(e, at, cy, false) >> shift) & 3;
   }
   u8 atb2 = (atb1 << 2) | atb1;
   u8 atb4 = (atb2 << 4) | atb2;
@@ -378,7 +376,7 @@ static inline u8 read_ptb(E *e, u8 addend, Ticks cy) {
       e->mapper_on_ppu_addr_updated(e, addr, cy, false);
     return e->ppu_bg_map[(addr >> 10) & 0x3][(bank << 12) + (addr & 0x3ff)];
   }
-  return chr_read(e, e->ppu_bg_map, addr, cy);
+  return chr_read(e, e->ppu_bg_map, addr, cy, false);
 }
 
 static inline void ppu_t_to_v(P *p, u16 mask) {
@@ -795,9 +793,9 @@ static inline u16 spr_chr_addr(u8 ppuctrl, u8 tile, u8 y) {
 }
 
 static inline u8 spr_ptb(E* e, u8 tile, u8 addend, Ticks cy) {
-  u8 result =
-      chr_read(e, e->ppu_spr_map,
-               spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend, cy);
+  u8 result = chr_read(
+      e, e->ppu_spr_map,
+      spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend, cy, false);
   DEBUG("        [%" PRIu64 "] spr_ptb state=%u [%u:%u]\n", cy, e->s.p.state,
         ppu_dot(e), ppu_line(e));
   return result;
