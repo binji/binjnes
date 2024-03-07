@@ -764,16 +764,18 @@ static void ppu_step(E* e, Ticks cy) {
 
 static void ppu_sync(E* e, const char* reason) {
   P* p = &e->s.p;
-  u64 cy = p->cy;
+  if (p->cy == e->s.cy) return;
+  // Update p->cy immediately so ppu_sync() isn't called recursively.
 #if 0
   printf("ppu_sync(\"%s\") %" PRIu64 " => %" PRIu64 "(delta=%" PRIu64
          ") state=%u\n",
          reason, p->cy, e->s.cy, e->s.cy - p->cy, p->state);
 #endif
+  u64 cy = p->cy;
+  p->cy = e->s.cy;
   while (cy < e->s.cy) {
     ppu_step(e, cy++);
   }
-  p->cy = cy;
 }
 
 static inline bool y_in_range(P *p, u8 y) {
