@@ -2206,10 +2206,11 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
       sched_clear(e, SCHED_MAPPER_IRQ);
       break;
     case 0x08:
-    case 0x10: {
+    case 0x10:
+    case 0x28: {
       bool reload = m->mmc3.irq_reload || p->a12_irq_counter == 0;
       u32 counter = 0, irq_dot = 0;
-      if (mode == 0x08) {
+      if ((mode & 8) == 8) {
         counter = reload ? m->mmc3.irq_latch + 1 : p->a12_irq_counter;
         irq_dot = 261;
       } else {
