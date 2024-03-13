@@ -2315,8 +2315,8 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       break;
     case 14: case 15: // IRQ disable / IRQ enable
       if (addr & 1) {
-        m->mmc3.irq_enable = true;
         ppu_sync(e, "mapper4_reschedule_irq");
+        m->mmc3.irq_enable = true;
         mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
       } else {
