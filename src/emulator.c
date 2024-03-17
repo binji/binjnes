@@ -191,14 +191,17 @@ static void sched_clear(E* e, Sched sched) {
   sched_update_next(e);
 }
 
+static inline int ppu_dot(E* e) { return e->s.p.state % 341; }
+static inline int ppu_line(E* e) { return e->s.p.state / 341; }
+
 static void sched_occurred(E* e, Sched sched, Ticks cy) {
   ++cy;
   if (e->s.sc.when[sched] != cy) {
     fprintf(stderr,
-            "!!! Prediction too late '%s' (predicted: %" PRIu64
+            "!!! Prediction too late '%s' [%u:%u] (predicted: %" PRIu64
             " actual: %" PRIu64 " diff: %" PRId64 ").\n",
-            s_sched_names[sched], e->s.sc.when[sched], cy,
-            cy - e->s.sc.when[sched]);
+            s_sched_names[sched], ppu_dot(e), ppu_line(e), e->s.sc.when[sched],
+            cy, cy - e->s.sc.when[sched]);
     fflush(stdout);
     abort();
   }
@@ -233,9 +236,10 @@ static void sched_run(E* e) {
   }
   for (int i = 0; i < SCHED_COUNT; ++i) {
     if (s->sc.when[i] < s->cy) {
-      printf("!!! Prediction too early '%s' (predicted: %" PRIu64
+      printf("!!! Prediction too early '%s' [%u:%u] (predicted: %" PRIu64
              " but didn't occur).\n",
-             s_sched_names[i], s->sc.when[i]);
+             s_sched_names[i], ppu_dot(e), ppu_line(e), s->sc.when[i]);
+      sched_clear(e, i);
       fflush(stdout);
       abort();
     }
@@ -311,9 +315,6 @@ static void update_palette(E *e) {
         e->s.p.emphasis | (e->s.p.palram[addr & 3 ? addr : 0] & mask);
   }
 }
-
-static inline int ppu_dot(E* e) { return e->s.p.state % 341; }
-static inline int ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void ppu_write(E *e, u16 addr, u8 val) {
   if (e->mapper_on_ppu_addr_updated)
@@ -796,8 +797,8 @@ static inline u8 spr_ptb(E* e, u8 tile, u8 addend, Ticks cy) {
   u8 result = chr_read(
       e, e->ppu_spr_map,
       spr_chr_addr(e->s.p.ppuctrl, tile, e->s.p.spr.y) + addend, cy, false);
-  DEBUG("        [%" PRIu64 "] spr_ptb state=%u [%u:%u]\n", cy, e->s.p.state,
-        ppu_dot(e), ppu_line(e));
+  DEBUG("        [%" PRIu64 "] spr_ptb state=%u tile=%u [%u:%u]\n", cy,
+        e->s.p.state, tile, ppu_dot(e), ppu_line(e));
   return result;
 }
 
