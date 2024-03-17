@@ -1,5 +1,6 @@
 #include <assert.h>
 #include <stdarg.h>
+#include <inttypes.h>
 
 #include "sokol/sokol_app.h"
 #include "sokol/sokol_audio.h"
@@ -60,6 +61,7 @@ static const char *s_read_joypad_movie_filename;
 static const char *s_write_joypad_filename;
 static const char *s_save_filename;
 static const char *s_save_state_filename;
+static int s_init_frames = 0;
 static bool s_running = true;
 static bool s_step_frame;
 static bool s_paused;
@@ -202,6 +204,7 @@ static void usage(int argc, char** argv) {
       "  -m,--read-movie FILE    read movie input from FILE\n"
       "  -j,--read-joypad FILE   read joypad input from FILE\n"
       "  -J,--write-joypad FILE  write joypad input to FILE\n"
+      "  -f,--frames N           run for N frames before rendering\n"
       "  -s,--seed SEED          random seed used for initializing RAM\n"
       "  -x,--scale SCALE        render scale\n"
       "     --p0 CONTROLLER      choose controller type for player 0\n"
@@ -219,6 +222,7 @@ static void parse_arguments(int argc, char** argv) {
     {'m', "read-movie", 1},
     {'j', "read-joypad", 1},
     {'J', "write-joypad", 1},
+    {'f', "frames", 1},
     {'s', "seed", 1},
     {'x', "scale", 1},
     {0, "p0", 1},
@@ -263,6 +267,10 @@ static void parse_arguments(int argc, char** argv) {
 
           case 'J':
             s_write_joypad_filename = result.value;
+            break;
+
+          case 'f':
+            s_init_frames = atoi(result.value);
             break;
 
           case 's':
@@ -533,6 +541,33 @@ static void init_emulator(void) {
   }
   emulator_schedule_reset_change(e, joypad_get_next_reset_change(s_joypad));
 
+  if (s_init_frames) {
+    Ticks total_ticks = (Ticks)s_init_frames * PPU_FRAME_TICKS;
+    Ticks until_ticks = emulator_get_ticks(e) + total_ticks;
+    printf("frames = %u total_ticks = %" PRIu64 "\n", s_init_frames,
+           total_ticks);
+    bool finish_at_next_frame = false;
+    while (true) {
+      EmulatorEvent event = emulator_run_until(e, until_ticks);
+      if (event &
+          (EMULATOR_EVENT_NEW_FRAME | EMULATOR_EVENT_AUDIO_BUFFER_FULL)) {
+        if (finish_at_next_frame) {
+          break;
+        }
+      }
+      if (event & EMULATOR_EVENT_UNTIL_TICKS) {
+        finish_at_next_frame = true;
+        until_ticks += PPU_FRAME_TICKS;
+      }
+      if (event & EMULATOR_EVENT_RESET_CHANGE) {
+        emulator_toggle_reset(e);
+        emulator_schedule_reset_change(e,
+                                       joypad_get_next_reset_change(s_joypad));
+      }
+    }
+    s_paused = true;
+  }
+
   return;
 
 error:
@@ -546,9 +581,9 @@ static void init_input(void) {
 }
 
 static void init(void) {
+  init_emulator();
   init_graphics();
   init_audio();
-  init_emulator();
   init_input();
 
   set_status_text("Loaded %s", s_rom_filename);
