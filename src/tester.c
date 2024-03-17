@@ -316,8 +316,6 @@ int main(int argc, char** argv) {
   printf("frames = %u total_ticks = %" PRIu64 "\n", s_frames, total_ticks);
   bool finish_at_next_frame = false;
   u32 animation_frame = 0; /* Will likely differ from PPU frame. */
-  u32 next_input_frame = 0;
-  u32 next_input_frame_buttons = 0;
   f64 start_time = get_time_sec();
   while (true) {
     EmulatorEvent event = emulator_run_until(e, until_ticks);
