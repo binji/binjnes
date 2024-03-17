@@ -6,6 +6,7 @@
 #include "sokol/sokol_audio.h"
 #include "sokol/sokol_gfx.h"
 #include "sokol/sokol_glue.h"
+#include "sokol/sokol_log.h"
 
 #include "atomic.h"
 #include "common.h"
@@ -350,7 +351,8 @@ static void update_viewport(void) {
 }
 
 static void init_graphics(void) {
-  sg_setup(&(sg_desc){.context = sapp_sgcontext()});
+  sg_setup(
+      &(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
 
   const float verts[] = {
       -1, +1, UL, VT, //
@@ -360,6 +362,13 @@ static void init_graphics(void) {
   };
   const uint16_t inds[] = {0, 1, 2, 1, 2, 3};
 
+  sg_sampler smp = sg_make_sampler(&(sg_sampler_desc){
+      .min_filter = SG_FILTER_NEAREST,
+      .mag_filter = SG_FILTER_NEAREST,
+      .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+      .wrap_v = SG_WRAP_CLAMP_TO_EDGE
+  });
+
   // Screen
   s_bindings[0].vertex_buffers[0] =
       sg_make_buffer(&(sg_buffer_desc){.data = SG_RANGE(verts)});
@@ -367,26 +376,40 @@ static void init_graphics(void) {
       .type = SG_BUFFERTYPE_INDEXBUFFER,
       .data = SG_RANGE(inds),
   });
-  s_bindings[0].fs_images[0] = sg_make_image(&(sg_image_desc){
+  s_bindings[0].fs.images[0] = sg_make_image(&(sg_image_desc){
       .width = SCREEN_WIDTH,
       .height = SCREEN_HEIGHT,
       .usage = SG_USAGE_STREAM,
   });
+  s_bindings[0].fs.samplers[0] = smp;
 
   // Overlay
   s_bindings[1].vertex_buffers[0] = s_bindings[0].vertex_buffers[0];
   s_bindings[1].index_buffer = s_bindings[0].index_buffer;
-  s_bindings[1].fs_images[0] = sg_make_image(&(sg_image_desc){
+  s_bindings[1].fs.images[0] = sg_make_image(&(sg_image_desc){
       .width = SCREEN_WIDTH,
       .height = SCREEN_HEIGHT,
       .usage = SG_USAGE_STREAM,
   });
+  s_bindings[1].fs.samplers[0] = smp;
 
   s_pass_action =
-      (sg_pass_action){.colors[0] = {.action = SG_ACTION_CLEAR,
-                                     .value = {0.1f, 0.1f, 0.1f, 1.0f}}};
+      (sg_pass_action){.colors[0] = {.load_action = SG_LOADACTION_CLEAR,
+                                     .clear_value = {0.1f, 0.1f, 0.1f, 1.0f}}};
   sg_shader shd = sg_make_shader(&(sg_shader_desc){
-      .fs.images[0] = {.name = "tex", .image_type = SG_IMAGETYPE_2D},
+      .fs = {.images[0] = {.used = true, .image_type = SG_IMAGETYPE_2D},
+             .samplers[0] = {.used = true},
+             .image_sampler_pairs[0] = {.used = true,
+                                        .glsl_name = "tex",
+                                        .image_slot = 0,
+                                        .sampler_slot = 0},
+             .source = "#version 330\n"
+                       "uniform sampler2D tex;"
+                       "in vec2 uv;\n"
+                       "out vec4 frag_color;\n"
+                       "void main() {\n"
+                       "  frag_color = texture(tex, uv);\n"
+                       "}\n"},
       .vs.source = "#version 330\n"
                    "layout(location = 0) in vec2 position;\n"
                    "layout(location = 1) in vec2 texcoord0;\n"
@@ -394,13 +417,6 @@ static void init_graphics(void) {
                    "void main() {\n"
                    "  gl_Position = vec4(position, 0.0, 1.0);\n"
                    "  uv = texcoord0;\n"
-                   "}\n",
-      .fs.source = "#version 330\n"
-                   "uniform sampler2D tex;"
-                   "in vec2 uv;\n"
-                   "out vec4 frag_color;\n"
-                   "void main() {\n"
-                   "  frag_color = texture(tex, uv);\n"
                    "}\n"});
   s_pipeline = sg_make_pipeline(&(sg_pipeline_desc){
       .shader = shd,
@@ -452,6 +468,7 @@ static void init_audio(void) {
       .num_channels = AUDIO_CHANNELS,
       .buffer_frames = AUDIO_FRAMES,
       .stream_cb = audio_stream,
+      .logger.func = slog_func
   });
 }
 
@@ -658,7 +675,7 @@ static void run_until_ticks(Ticks until_ticks) {
   if (new_frame) {
     emulator_convert_frame_buffer(e, s_frame_buffer);
     sg_update_image(
-        s_bindings[0].fs_images[0],
+        s_bindings[0].fs.images[0],
         &(sg_image_data){.subimage[0][0] = SG_RANGE(s_frame_buffer)});
   }
 
@@ -766,10 +783,11 @@ static void frame(void)  {
   }
 
   update_overlay();
-  sg_update_image(s_bindings[1].fs_images[0],
+  sg_update_image(s_bindings[1].fs.images[0],
                   &(sg_image_data){.subimage[0][0] = SG_RANGE(s_overlay_rgba)});
 
-  sg_begin_default_pass(&s_pass_action, sapp_width(), sapp_height());
+  sg_begin_pass(
+      &(sg_pass){.action = s_pass_action, .swapchain = sglue_swapchain()});
   sg_apply_viewportf(s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h, true);
   sg_apply_pipeline(s_pipeline);
   // Screen
@@ -891,5 +909,6 @@ sapp_desc sokol_main(int argc, char *argv[]) {
       .width = SCREEN_WIDTH * s_render_scale,
       .height = SCREEN_HEIGHT * s_render_scale,
       .window_title = "binjnes",
+      .logger.func = slog_func,
   };
 }
