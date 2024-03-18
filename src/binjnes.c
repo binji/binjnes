@@ -1,6 +1,8 @@
 #include <assert.h>
-#include <stdarg.h>
 #include <inttypes.h>
+#include <threads.h>
+#include <stdarg.h>
+#include <stdatomic.h>
 
 #include "sokol/sokol_app.h"
 #include "sokol/sokol_audio.h"
@@ -37,6 +39,7 @@
 
 #define KEYCODE_COUNT 400
 #define MOUSEBUTTON_COUNT 3
+#define MAX_EVENT_COUNT 2048
 
 #define OVERSCAN_TOP 8
 #define OVERSCAN_BOTTOM 8
@@ -56,6 +59,22 @@ typedef struct StatusText {
   u32 timeout;
 } StatusText;
 
+static thrd_t s_thread;
+static mtx_t s_frame_begin_mtx;
+static cnd_t s_frame_begin_cnd;
+static mtx_t s_frame_end_mtx;
+static cnd_t s_frame_end_cnd;
+static mtx_t s_emulator_done_mtx;
+static cnd_t s_emulator_done_cnd;
+static bool s_frame_begin;
+static bool s_frame_end;
+static bool s_emulator_done;
+static mtx_t s_event_mtx;
+static sapp_event s_events[MAX_EVENT_COUNT];
+static size_t s_event_count;
+static atomic_bool s_running = true;
+static f64 s_frame_duration;
+
 static const char *s_rom_filename;
 static const char *s_read_joypad_filename;
 static const char *s_read_joypad_movie_filename;
@@ -63,7 +82,6 @@ static const char *s_write_joypad_filename;
 static const char *s_save_filename;
 static const char *s_save_state_filename;
 static int s_init_frames = 0;
-static bool s_running = true;
 static bool s_step_frame;
 static bool s_paused;
 static Ticks s_rewind_start;
@@ -597,13 +615,21 @@ static void init_input(void) {
   }
 }
 
+static int emulator_thread(void *arg);
+
 static void init(void) {
-  init_emulator();
+  mtx_init(&s_event_mtx, mtx_plain);
+  mtx_init(&s_frame_begin_mtx, mtx_plain);
+  mtx_init(&s_frame_end_mtx, mtx_plain);
+  mtx_init(&s_emulator_done_mtx, mtx_plain);
+  cnd_init(&s_frame_begin_cnd);
+  cnd_init(&s_frame_end_cnd);
+  cnd_init(&s_emulator_done_cnd);
+  thrd_create(&s_thread, emulator_thread, NULL);
+
   init_graphics();
   init_audio();
   init_input();
-
-  set_status_text("Loaded %s", s_rom_filename);
 }
 
 static void inc_audio_volume(f32 delta) {
@@ -674,9 +700,6 @@ static void run_until_ticks(Ticks until_ticks) {
 
   if (new_frame) {
     emulator_convert_frame_buffer(e, s_frame_buffer);
-    sg_update_image(
-        s_bindings[0].fs.images[0],
-        &(sg_image_data){.subimage[0][0] = SG_RANGE(s_frame_buffer)});
   }
 
   if (event & EMULATOR_EVENT_INVALID_OPCODE) {
@@ -753,67 +776,6 @@ static void rewind_end(void) {
   memset(&s_rewind_state, 0, sizeof(s_rewind_state));
 }
 
-static void frame(void)  {
-  if (s_should_lock_mouse && sapp_mouse_locked() != !s_paused) {
-    sapp_lock_mouse(!s_paused);
-  }
-  if (s_rewind_state.rewinding) {
-    rewind_by(REWIND_CYCLES_PER_FRAME);
-  } else if (s_paused) {
-    // Clear audio buffer.
-    size_t read_head = atomic_load_size(&s_audio_buffer_read);
-    size_t write_head = atomic_load_size(&s_audio_buffer_write);
-    if (read_head > 0) {
-      if (write_head < read_head) {
-        memset(s_audio_buffer + write_head, 0,
-               (read_head - write_head - 1) * sizeof(f32));
-      } else {
-        size_t to_end = ARRAY_SIZE(s_audio_buffer) - write_head;
-        memset(s_audio_buffer + write_head, 0, to_end * sizeof(f32));
-        memset(s_audio_buffer, 0, (read_head - 1) * sizeof(f32));
-      }
-      atomic_store_size(&s_audio_buffer_write, read_head - 1);
-    }
-  } else {
-    f64 delta_sec = sapp_frame_duration();
-    Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
-    Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
-    run_until_ticks(until_ticks);
-    s_last_ticks = emulator_get_ticks(e);
-  }
-
-  update_overlay();
-  sg_update_image(s_bindings[1].fs.images[0],
-                  &(sg_image_data){.subimage[0][0] = SG_RANGE(s_overlay_rgba)});
-
-  sg_begin_pass(
-      &(sg_pass){.action = s_pass_action, .swapchain = sglue_swapchain()});
-  sg_apply_viewportf(s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h, true);
-  sg_apply_pipeline(s_pipeline);
-  // Screen
-  sg_apply_bindings(&s_bindings[0]);
-  sg_draw(0, 6, 1);
-  // Overlay
-  sg_apply_bindings(&s_bindings[1]);
-  sg_draw(0, 6, 1);
-  sg_end_pass();
-  sg_commit();
-}
-
-static void cleanup(void) {
-  if (s_write_joypad_filename) {
-    FileData file_data;
-    joypad_write(s_joypad, &file_data);
-    file_write(s_write_joypad_filename, &file_data);
-    file_data_delete(&file_data);
-  } else if (!(s_read_joypad_filename || s_read_joypad_movie_filename)) {
-    emulator_write_prg_ram_to_file(e, s_save_filename);
-  }
-
-  sg_shutdown();
-  saudio_shutdown();
-}
-
 static void save_state(void) {
   if (SUCCESS(emulator_write_state_to_file(e, s_save_state_filename))) {
     set_status_text("saved state");
@@ -830,12 +792,8 @@ static void load_state(void) {
   }
 }
 
-static void event(const sapp_event *event) {
+static void handle_event(const sapp_event *event) {
   switch (event->type) {
-  case SAPP_EVENTTYPE_RESIZED:
-    update_viewport();
-    break;
-
   case SAPP_EVENTTYPE_KEY_DOWN:
     switch (event->key_code) {
       case SAPP_KEYCODE_F6: save_state(); break;
@@ -896,6 +854,150 @@ static void event(const sapp_event *event) {
   default:
     break;
   }
+}
+
+static void handle_events(void) {
+  mtx_lock(&s_event_mtx);
+  for (size_t i = 0; i < s_event_count; ++i) {
+    handle_event(&s_events[i]);
+  }
+  s_event_count = 0;
+  mtx_unlock(&s_event_mtx);
+}
+
+static int emulator_thread(void *arg) {
+  init_emulator();
+  set_status_text("Loaded %s", s_rom_filename);
+  while (atomic_load(&s_running)) {
+    mtx_lock(&s_frame_begin_mtx);
+    while (!s_frame_begin) {
+      handle_events();
+      cnd_wait(&s_frame_begin_cnd, &s_frame_begin_mtx);
+    }
+    s_frame_begin = false;
+    f64 delta_sec = s_frame_duration;
+    mtx_unlock(&s_frame_begin_mtx);
+
+    if (s_rewind_state.rewinding) {
+      rewind_by(REWIND_CYCLES_PER_FRAME);
+    } else if (s_paused) {
+      // Clear audio buffer.
+      size_t read_head = atomic_load_size(&s_audio_buffer_read);
+      size_t write_head = atomic_load_size(&s_audio_buffer_write);
+      if (read_head > 0) {
+        if (write_head < read_head) {
+          memset(s_audio_buffer + write_head, 0,
+                 (read_head - write_head - 1) * sizeof(f32));
+        } else {
+          size_t to_end = ARRAY_SIZE(s_audio_buffer) - write_head;
+          memset(s_audio_buffer + write_head, 0, to_end * sizeof(f32));
+          memset(s_audio_buffer, 0, (read_head - 1) * sizeof(f32));
+        }
+        atomic_store_size(&s_audio_buffer_write, read_head - 1);
+      }
+    } else {
+      Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
+      Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
+      run_until_ticks(until_ticks);
+      s_last_ticks = emulator_get_ticks(e);
+    }
+
+    update_overlay();
+    mtx_lock(&s_frame_end_mtx);
+    s_frame_end = true;
+    cnd_signal(&s_frame_end_cnd);
+    mtx_unlock(&s_frame_end_mtx);
+  }
+  mtx_lock(&s_emulator_done_mtx);
+  s_emulator_done = true;
+  cnd_signal(&s_emulator_done_cnd);
+  mtx_unlock(&s_emulator_done_mtx);
+  return 0;
+}
+
+static void frame(void)  {
+  if (s_should_lock_mouse && sapp_mouse_locked() != !s_paused) {
+    sapp_lock_mouse(!s_paused);
+  }
+
+  mtx_lock(&s_frame_begin_mtx);
+  s_frame_begin = true;
+  s_frame_duration = sapp_frame_duration();
+  cnd_signal(&s_frame_begin_cnd);
+  mtx_unlock(&s_frame_begin_mtx);
+
+  mtx_lock(&s_frame_end_mtx);
+  while (!s_frame_end) {
+    cnd_wait(&s_frame_end_cnd, &s_frame_end_mtx);
+  }
+  s_frame_end = false;
+  sg_update_image(
+      s_bindings[0].fs.images[0],
+      &(sg_image_data){.subimage[0][0] = SG_RANGE(s_frame_buffer)});
+  mtx_unlock(&s_frame_end_mtx);
+
+  sg_update_image(s_bindings[1].fs.images[0],
+                  &(sg_image_data){.subimage[0][0] = SG_RANGE(s_overlay_rgba)});
+
+  sg_begin_pass(
+      &(sg_pass){.action = s_pass_action, .swapchain = sglue_swapchain()});
+  sg_apply_viewportf(s_viewport_x, s_viewport_y, s_viewport_w, s_viewport_h, true);
+  sg_apply_pipeline(s_pipeline);
+  // Screen
+  sg_apply_bindings(&s_bindings[0]);
+  sg_draw(0, 6, 1);
+  // Overlay
+  sg_apply_bindings(&s_bindings[1]);
+  sg_draw(0, 6, 1);
+  sg_end_pass();
+  sg_commit();
+}
+
+static void cleanup(void) {
+  atomic_store(&s_running, false);
+
+  // Make sure the emulator thread isn't waiting for the next frame.
+  mtx_lock(&s_frame_begin_mtx);
+  s_frame_begin = true;
+  cnd_signal(&s_frame_begin_cnd);
+  mtx_unlock(&s_frame_begin_mtx);
+
+  mtx_lock(&s_emulator_done_mtx);
+  while (!s_emulator_done) {
+    cnd_wait(&s_emulator_done_cnd, &s_emulator_done_mtx);
+  }
+  mtx_unlock(&s_emulator_done_mtx);
+
+  if (s_write_joypad_filename) {
+    FileData file_data;
+    joypad_write(s_joypad, &file_data);
+    file_write(s_write_joypad_filename, &file_data);
+    file_data_delete(&file_data);
+  } else if (!(s_read_joypad_filename || s_read_joypad_movie_filename)) {
+    emulator_write_prg_ram_to_file(e, s_save_filename);
+  }
+
+  sg_shutdown();
+  saudio_shutdown();
+}
+
+static void event(const sapp_event *event) {
+  // Handle events that should be executed on main thread.
+  switch (event->type) {
+  case SAPP_EVENTTYPE_RESIZED:
+    update_viewport();
+    return;
+
+  default:
+    break;
+  }
+
+  // Send the rest of the events to the emulator thread.
+  mtx_lock(&s_event_mtx);
+  if (s_event_count < MAX_EVENT_COUNT - 1) {
+    s_events[s_event_count++] = *event;
+  }
+  mtx_unlock(&s_event_mtx);
 }
 
 sapp_desc sokol_main(int argc, char *argv[]) {
