@@ -1026,7 +1026,7 @@ static void apu_tick(E *e, u64 cy, bool odd) {
   A* a = &e->s.a;
   AudioBuffer* ab = &e->audio_buffer;
   u16x8 timer_diff = odd ? V128_MAKE_U16(1, 1, 1, 1, 1, 0, 0, 0)
-                         : V128_MAKE_U16(0, 0, 1, 1, 0, 0, 0, 0);
+                         : V128_MAKE_U16(0, 0, 1, 0, 0, 0, 0, 0);
   u16x8 timer0 = v128_lt_u16(a->timer, timer_diff);
   a->timer = v128_blendv(v128_sub_u16(a->timer, timer_diff), a->period, timer0);
   timer0 = v128_and(timer0, a->play_mask);
