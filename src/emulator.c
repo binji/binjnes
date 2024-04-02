@@ -3677,6 +3677,14 @@ static void mapper78_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static void mapper79_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if ((addr & 0xe100) != 0x4100) return;
+  set_chr8k_map(e, (m->chr_bank[0] = (val & 7) & (e->ci.chr8k_banks - 1)));
+  set_prg32k_map(
+      e, (m->prg_bank[0] = ((val >> 3) & 1) & (e->ci.prg32k_banks - 1)));
+}
+
 static void mapper_vrc7_shared_write(E *e, u16 addr, u8 val, u8 shift, u8 mask) {
   M *m = &e->s.m;
   u16 fix_addr = (addr & 0xf000) | ((addr >> shift) & mask);
@@ -5533,6 +5541,14 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_79:
+  case BOARD_MAPPER_146:
+    e->mapper_write = mapper79_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg32k_map(e, e->ci.prg16k_banks - 1);
     break;
 
   case BOARD_MAPPER_85:
