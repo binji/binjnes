@@ -109,7 +109,7 @@
   /* Thexder */
   {.crc=0x06F15215, .board=BOARD_MAPPER_0, .mapper=0, .prg=2, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Ninja Jajamaru: Ginga Daisakusen */
-  {.crc=0x06F9C714, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x06F9C714, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Cadillac */
   {.crc=0x0719260C, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* WWF King of the Ring */
@@ -241,7 +241,7 @@
   /* Urusei Yatsura: Lum no Wedding Bell */
   {.crc=0x0DA5E32E, .board=BOARD_MAPPER_87, .mapper=87, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Plasma Ball */
-  {.crc=0x0DB4B382, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x0DB4B382, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Jesus: Kyoufu no Bio Monster */
   {.crc=0x0DC53188, .board=BOARD_MAPPER_1, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Mirai Shinwa Jarvas */
@@ -259,7 +259,7 @@
   /* Arkanoid II */
   {.crc=0x0F141525, .board=BOARD_UNSUPPORTED, .mapper=152, .prg=4, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Jajamaru Gekimaden: Maboroshi no Kinmajou */
-  {.crc=0x0F1BABE7, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0x0F1BABE7, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Double Dragon */
   {.crc=0x0F1CC048, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Times of Lore */
@@ -901,7 +901,7 @@
   /* Datsugoku */
   {.crc=0x360AA8B4, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Mezase Top Pro: Green ni Kakeru Yume */
-  {.crc=0x3691C120, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
+  {.crc=0x3691C120, .board=BOARD_MAPPER_18, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* King of Kings */
   {.crc=0x369DA42D, .board=BOARD_MAPPER_19, .mapper=19, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Double Strike */
@@ -1057,7 +1057,7 @@
   /* Nobunaga no Yabou: Zenkokuban */
   {.crc=0x3F7AD415, .board=BOARD_SOROM, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=2, .battery=1, .mirror=MIRROR_NONE},
   /* Moe Pro!: Saikyou-hen */
-  {.crc=0x3F8D6889, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x3F8D6889, .board=BOARD_MAPPER_18, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Super Star Force */
   {.crc=0x3FA96277, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Legend of Zelda, The */
@@ -1239,7 +1239,7 @@
   /* Excitebike */
   {.crc=0x49AEB3A6, .board=BOARD_MAPPER_0, .mapper=0, .prg=1, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Pizza Pop! */
-  {.crc=0x49DA2F76, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x49DA2F76, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* 720° */
   {.crc=0x49F745E0, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Teenage Mutant Ninja Turtles */
@@ -1247,7 +1247,7 @@
   /* Gomoku Narabe Renju */
   {.crc=0x4A99B47E, .board=BOARD_MAPPER_0, .mapper=0, .prg=1, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Shin Moero!! Pro Yakyuu */
-  {.crc=0x4AE58F5D, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x4AE58F5D, .board=BOARD_MAPPER_18, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Super Off Road, Ivan "Ironman" Stewart's */
   {.crc=0x4B041B6B, .board=BOARD_MAPPER_7, .mapper=7, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Dragon Fighter */
@@ -1637,7 +1637,7 @@
   /* Ankoku Shinwa: Yamato Takeru Densetsu */
   {.crc=0x644E312B, .board=BOARD_MAPPER_1, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Terao no Dosukoi Oozumou */
-  {.crc=0x6479E76A, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x6479E76A, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Pro Wrestling */
   {.crc=0x64B710D2, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Warpman */
@@ -1651,7 +1651,7 @@
   /* Nekketsu Koukou Dodgeball-bu: Soccer-hen */
   {.crc=0x64FD3BA6, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Tsuru Pika Hagemaru: Mezase! Tsuru Seko no Akashi */
-  {.crc=0x652F3324, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x652F3324, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Rad Racer */
   {.crc=0x654F4E90, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Addams Family, The */
@@ -1925,7 +1925,7 @@
   /* Lot Lot */
   {.crc=0x75A7E399, .board=BOARD_MAPPER_0, .mapper=0, .prg=2, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Saiyuuki World 2: Tenjoukai no Majin */
-  {.crc=0x75B3EB37, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x75B3EB37, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Solomon's Key */
   {.crc=0x75C3E7D4, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Mighty Final Fight */
@@ -2389,7 +2389,7 @@
   /* Super Mario Bros. / Duck Hunt */
   {.crc=0x91B4B1D7, .board=BOARD_MAPPER_66, .mapper=66, .prg=4, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* USA Ice Hockey in FC */
-  {.crc=0x91D52E9A, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x91D52E9A, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Magician */
   {.crc=0x91E2E863, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Magic of Scheherazade, The */
@@ -2617,7 +2617,7 @@
   /* Karakuri Kengouden: Musashi Road: Karakuribito Hashiru! */
   {.crc=0x9D9A4A26, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Moe Pro! '90: Kandou-hen */
-  {.crc=0x9DC96EC7, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x9DC96EC7, .board=BOARD_MAPPER_18, .mapper=18, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Miracle Piano Teaching System, The */
   {.crc=0x9DF58E80, .board=BOARD_MAPPER_1, .mapper=1, .prg=16, .chr=16, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Morita Shougi */
@@ -3509,7 +3509,7 @@
   /* Double Dribble */
   {.crc=0xD0E96F6B, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Lord of King, The */
-  {.crc=0xD0EB749F, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xD0EB749F, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Batman */
   {.crc=0xD0F70E36, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Kaiketsu Yanchamaru */
@@ -3645,7 +3645,7 @@
   /* Zen: Intergalactic Ninja */
   {.crc=0xD8578BFD, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Magic John */
-  {.crc=0xD8748E0A, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xD8748E0A, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Arkanoid */
   {.crc=0xD89E5A67, .board=BOARD_MAPPER_3, .mapper=3, .prg=2, .chr=4, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* Adventures of Rad Gravity, The */
@@ -3969,7 +3969,7 @@
   /* T2: Terminator 2: Judgment Day */
   {.crc=0xEA27B477, .board=BOARD_MC_ACC, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Toukon Club */
-  {.crc=0xEA3E78DD, .board=BOARD_UNSUPPORTED, .mapper=18, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xEA3E78DD, .board=BOARD_MAPPER_18, .mapper=18, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Touchdown Fever */
   {.crc=0xEA4EB69E, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Tatakae! Chou Robotto Seimeitai Transformers: Convoy no Nazo */

@@ -2852,6 +2852,79 @@ static void mapper11_write(E *e, u16 addr, u8 val) {
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
 }
 
+static void mapper18_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  addr &= 0xf003;
+  val &= 0xf;
+  int pb = ((addr >> 11) | ((addr & 2) >> 1)) - 16;
+  int cb = pb - 4;
+  switch (addr) {
+    case 0x8000: case 0x8002: case 0x9000:
+      m->prg_bank[pb] = (m->prg_bank[pb] & 0x30) | val;
+      goto update_prg;
+    case 0x8001: case 0x8003: case 0x9001:
+      m->prg_bank[pb] = (m->prg_bank[pb] & 0x0f) | (val & 0x3) << 4;
+      goto update_prg;
+    case 0x9002:
+      m->prg_ram_en = !!(val & 1);
+      m->prg_ram_write_en = !!(val & 2);
+      break;
+    case 0xa000: case 0xa002: case 0xb000: case 0xb002:
+    case 0xc000: case 0xc002: case 0xd000: case 0xd002:
+      m->chr_bank[cb] = (m->chr_bank[cb] & 0xf0) | val;
+      goto update_chr;
+    case 0xa001: case 0xa003: case 0xb001: case 0xb003:
+    case 0xc001: case 0xc003: case 0xd001: case 0xd003:
+      m->chr_bank[cb] = (m->chr_bank[cb] & 0x0f) | (val << 4);
+      goto update_chr;
+    case 0xe000: case 0xe001: case 0xe002: case 0xe003: {
+      int shift = ((addr & 3) * 4);
+      m->m18.irq_latch = (m->m18.irq_latch & ~(0xf << shift)) | (val << shift);
+      break;
+    }
+    case 0xf000:
+      m->m18.irq_counter = m->m18.irq_latch;
+      e->s.c.irq &= ~IRQ_MAPPER;
+      break;
+    case 0xf001:
+      m->m18.irq_enable = !!(val & 1);
+      m->m18.irq_counter_mask = val & 8   ? 0xf
+                                : val & 4 ? 0xff
+                                : val & 2 ? 0xfff
+                                          : 0xffff;
+      e->s.c.irq &= ~IRQ_MAPPER;
+      break;
+    case 0xf002: {
+      Mirror s_mirror[] = {MIRROR_HORIZONTAL, MIRROR_VERTICAL, MIRROR_SINGLE_0,
+                           MIRROR_SINGLE_1};
+      set_mirror(e, s_mirror[val & 3]);
+      break;
+    }
+
+    update_prg:
+      set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], m->prg_bank[2],
+                    e->ci.prg8k_banks - 1);
+      break;
+    update_chr:
+      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                    m->chr_bank[6], m->chr_bank[7]);
+      break;
+  }
+}
+
+static void mapper18_cpu_step(E* e) {
+  M* m = &e->s.m;
+  if (m->m18.irq_enable) {
+    m->m18.irq_counter = (m->m18.irq_counter & ~m->m18.irq_counter_mask) |
+                         ((m->m18.irq_counter - 1) & m->m18.irq_counter_mask);
+    if ((m->m18.irq_counter & m->m18.irq_counter_mask) ==
+        m->m18.irq_counter_mask) {
+      e->s.c.irq |= IRQ_MAPPER;
+    }
+  }
+}
+
 static u8 mapper19_read(E *e, u16 addr) {
   M *m = &e->s.m;
   DEBUG("mapper19_read(%04x)\n", addr);
@@ -5384,6 +5457,14 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0]);
+    break;
+
+  case BOARD_MAPPER_18:
+    e->mapper_write = mapper18_write;
+    e->mapper_cpu_step = mapper18_cpu_step;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
 
   case BOARD_MAPPER_19:

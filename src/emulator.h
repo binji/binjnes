@@ -180,6 +180,11 @@ typedef struct {
     } vrc;
 
     struct {
+      u16 irq_latch, irq_counter, irq_counter_mask;
+      bool irq_enable;
+    } m18;
+
+    struct {
       u8 reg_select, inner_bank, bank_mode, outer_bank;
     } m28;
 
