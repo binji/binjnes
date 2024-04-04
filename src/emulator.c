@@ -3414,7 +3414,8 @@ static void mapper28_write(E* e, u16 addr, u8 val) {
       m->m28.reg_select = val & 0x81;
       break;
 
-    default:
+    case 0x8: case 0x9: case 0xa: case 0xb:
+    case 0xc: case 0xd: case 0xe: case 0xf:
       switch (m->m28.reg_select) {
       case 0x00:
         set_chr8k_map(e, (m->chr_bank[0] = val & 3 & (e->ci.chr8k_banks - 1)));
