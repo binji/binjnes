@@ -3827,6 +3827,61 @@ static void mapper87_write(E *e, u16 addr, u8 val) {
                                     (e->ci.chr8k_banks - 1));
 }
 
+static void mapper210_shared_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr & 0xf800) {
+    case 0x8000: case 0x8800:
+    case 0x9000: case 0x9800:
+    case 0xa000: case 0xa800:
+    case 0xb000: case 0xb800: {
+      m->chr_bank[(addr >> 11) - 16] = val & (e->ci.chr1k_banks - 1);
+      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                    m->chr_bank[6], m->chr_bank[7]);
+      break;
+    }
+    case 0xc000:
+      // BOARD_NAMCOT_175 only. Safe to do here since PRG RAM is not enabled at
+      // all for BOARD_NAMCOT_340.
+      m->prg_ram_en = val & 1;
+      break;
+    case 0xe000:
+      m->prg_bank[0] = val & (e->ci.prg8k_banks - 1);
+      goto update_prg;
+    case 0xe800: case 0xf000: case 0xf800:
+      m->prg_bank[(addr >> 11) - 28] = val & (e->ci.prg8k_banks - 1);
+      // fallthrough.
+    update_prg:
+      set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], m->prg_bank[2],
+                    e->ci.prg8k_banks - 1);
+      break;
+  }
+}
+
+static void mapper_namcot_175_write(E *e, u16 addr, u8 val) {
+  mapper210_shared_write(e, addr, val);
+}
+
+static void mapper_namcot_340_write(E *e, u16 addr, u8 val) {
+  mapper210_shared_write(e, addr, val);
+  if ((addr & 0xf800) == 0xe000) {
+    Mirror s_mirror[] = {MIRROR_SINGLE_0, MIRROR_VERTICAL, MIRROR_SINGLE_1,
+                         MIRROR_HORIZONTAL};
+    set_mirror(e, s_mirror[val >> 6]);
+  }
+}
+
+static void mapper210_write(E *e, u16 addr, u8 val) {
+  mapper_namcot_340_write(e, addr, val);
+}
+
+static void mapper_namcot_175_prg_ram_write(E *e, u16 addr, u8 val) {
+  if (e->s.m.prg_ram_en && e->s.m.prg_ram_write_en) {
+    e->prg_ram_map[addr & 0x7ff] = val;
+    e->s.m.prg_ram_updated = true;
+  }
+}
+
 static inline u8 get_P(E *e, bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
          (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
@@ -5254,6 +5309,11 @@ static Result get_cart_info(E *e, const FileData *file_data) {
             case 2: ci->board = BOARD_VRC7A; break;
           }
           break;
+        case 210:
+          switch (submapper) {
+            case 1: ci->board = BOARD_NAMCOT_175; break;
+            case 2: ci->board = BOARD_NAMCOT_340; break;
+          }
         default:
           ci->board = (Board)ci->mapper;
           break;
@@ -5662,6 +5722,24 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
+    break;
+
+  case BOARD_MAPPER_210:
+    e->mapper_write = mapper210_write;
+    e->mapper_prg_ram_write = mapper_namcot_175_prg_ram_write;
+    goto mapper210_shared;
+  case BOARD_NAMCOT_175:
+    e->mapper_write = mapper_namcot_175_write;
+    e->mapper_prg_ram_write = mapper_namcot_175_prg_ram_write;
+    goto mapper210_shared;
+  case BOARD_NAMCOT_340:
+    e->mapper_write = mapper_namcot_340_write;
+    goto mapper210_shared;
+
+  mapper210_shared:
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
 
   unsupported:

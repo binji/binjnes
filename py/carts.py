@@ -23,36 +23,38 @@ PADS = {
 }
 
 BOARDS = {
-  'BNROM':    'BOARD_BNROM',
-  'NINA-01':  'BOARD_NINA001',
-  'HKROM':    'BOARD_HKROM',
-  'SNROM':    'BOARD_SNROM',
-  'SOROM':    'BOARD_SOROM',
-  'SUROM':    'BOARD_SUROM',
-  'SXROM':    'BOARD_SXROM',
-  'TBROM':    'BOARD_TXROM',
-  'TEROM':    'BOARD_TXROM',
-  'TFROM':    'BOARD_TXROM',
-  'TGROM':    'BOARD_TXROM',
-  'TKEPROM':  'BOARD_TXROM',
-  'TKROM':    'BOARD_TXROM',
-  'TKSROM':   'BOARD_TXROM',
-  'TL1ROM':   'BOARD_TXROM',
-  'TL2ROM':   'BOARD_TXROM',
-  'TLROM':    'BOARD_TXROM',
-  'TLSROM':   'BOARD_TXROM',
-  'TNROM':    'BOARD_TXROM',
-  'TQROM':    'BOARD_TXROM',
-  'TR1ROM':   'BOARD_TXROM',
-  'TSROM':    'BOARD_TXROM',
-  'TVROM':    'BOARD_TXROM',
-  'ALGN':     'BOARD_CAMERICA',
-  'BF9093':   'BOARD_CAMERICA',
-  'NR8N':     'BOARD_CAMERICA',
-  'BF9097':   'BOARD_CAMERICA_BF9097',
-  'MC-ACC':   'BOARD_MC_ACC',
-  'JF-16':    'BOARD_JF_16',
-  'HOLYDIVER':    'BOARD_HOLY_DIVER',
+  'BNROM':      'BOARD_BNROM',
+  'NINA-01':    'BOARD_NINA001',
+  'HKROM':      'BOARD_HKROM',
+  'SNROM':      'BOARD_SNROM',
+  'SOROM':      'BOARD_SOROM',
+  'SUROM':      'BOARD_SUROM',
+  'SXROM':      'BOARD_SXROM',
+  'TBROM':      'BOARD_TXROM',
+  'TEROM':      'BOARD_TXROM',
+  'TFROM':      'BOARD_TXROM',
+  'TGROM':      'BOARD_TXROM',
+  'TKEPROM':    'BOARD_TXROM',
+  'TKROM':      'BOARD_TXROM',
+  'TKSROM':     'BOARD_TXROM',
+  'TL1ROM':     'BOARD_TXROM',
+  'TL2ROM':     'BOARD_TXROM',
+  'TLROM':      'BOARD_TXROM',
+  'TLSROM':     'BOARD_TXROM',
+  'TNROM':      'BOARD_TXROM',
+  'TQROM':      'BOARD_TXROM',
+  'TR1ROM':     'BOARD_TXROM',
+  'TSROM':      'BOARD_TXROM',
+  'TVROM':      'BOARD_TXROM',
+  'ALGN':       'BOARD_CAMERICA',
+  'BF9093':     'BOARD_CAMERICA',
+  'NR8N':       'BOARD_CAMERICA',
+  'BF9097':     'BOARD_CAMERICA_BF9097',
+  'MC-ACC':     'BOARD_MC_ACC',
+  'JF-16':      'BOARD_JF_16',
+  'HOLYDIVER':  'BOARD_HOLY_DIVER',
+  'NAMCOT-175': 'BOARD_NAMCOT_175',
+  'NAMCOT-340': 'BOARD_NAMCOT_340',
 }
 
 BOARDS_TXROM = {
@@ -77,7 +79,7 @@ BOARDS_VRC4 = {
 }
 
 SUPPORTED_GENERIC_MAPPERS = {
-  0, 1, 2, 3, 5, 7, 9, 10, 11, 18, 19, 24, 26, 30, 66, 69, 78, 79, 85, 87, 146, 206,
+  0, 1, 2, 3, 5, 7, 9, 10, 11, 18, 19, 24, 26, 30, 66, 69, 78, 79, 85, 87, 146, 206, 210,
 }
 
 KEYS = ('name', 'mapper', 'board', 'prg', 'chip', 'chr', 'wram', 'battery',
@@ -130,6 +132,8 @@ def get_board(name, chips):
             return BOARDS_TXROM[chip_type]
       else:
         return BOARDS[parts[1]]
+    elif name in BOARDS:
+        return BOARDS[name]
   return None
 
 def is_equal(a, b):

@@ -211,7 +211,7 @@
   /* Bomberman II */
   {.crc=0x0C401790, .board=BOARD_SNROM, .mapper=1, .prg=8, .chr=0, .vram=2, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Chibi Maruko-chan: Uki Uki Shopping */
-  {.crc=0x0C47946D, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x0C47946D, .board=BOARD_NAMCOT_175, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Fantasy Zone II: Opa-Opa no Namida */
   {.crc=0x0C5A6297, .board=BOARD_UNSUPPORTED, .mapper=67, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Devil World */
@@ -485,7 +485,7 @@
   /* Geimos */
   {.crc=0x1DBD1D2B, .board=BOARD_MAPPER_0, .mapper=0, .prg=2, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Wagyan Land 2 */
-  {.crc=0x1DC0F740, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x1DC0F740, .board=BOARD_NAMCOT_340, .mapper=210, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Heroes of the Lance, Advanced Dungeons & Dragons */
   {.crc=0x1E472E7A, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Yoshi no Tamago */
@@ -575,7 +575,7 @@
   /* Major League */
   {.crc=0x243A8735, .board=BOARD_UNSUPPORTED, .mapper=32, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Top Striker */
-  {.crc=0x2447E03B, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x2447E03B, .board=BOARD_NAMCOT_340, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Duck Hunt */
   {.crc=0x24598791, .board=BOARD_MAPPER_0, .mapper=0, .prg=1, .chr=2, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Pyramid */
@@ -1115,7 +1115,7 @@
   /* P'radikus Conflict */
   {.crc=0x42749A95, .board=BOARD_MAPPER_11, .mapper=11, .prg=4, .chr=16, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Famista '94 */
-  {.crc=0x429103C9, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x429103C9, .board=BOARD_NAMCOT_340, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Barker Bill's Trick Shooting */
   {.crc=0x4318A2F8, .board=BOARD_MAPPER_1, .mapper=1, .prg=4, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Pyokotan no Dai Meiro */
@@ -1183,7 +1183,7 @@
   /* Maison Ikkoku */
   {.crc=0x46F30F2D, .board=BOARD_SNROM, .mapper=1, .prg=16, .chr=0, .vram=2, .wram=1, .battery=1, .mirror=MIRROR_NONE},
   /* Splatterhouse: Wanpaku Graffiti */
-  {.crc=0x46FD7843, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x46FD7843, .board=BOARD_NAMCOT_340, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Top Rider */
   {.crc=0x47232739, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=8, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Nigel Mansell's World Championship Racing */
@@ -1805,7 +1805,7 @@
   /* Adventures of Tom Sawyer */
   {.crc=0x6E85D8DD, .board=BOARD_MAPPER_1, .mapper=1, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Famista '92 */
-  {.crc=0x6EC51DE5, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0x6EC51DE5, .board=BOARD_NAMCOT_340, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Mega Man */
   {.crc=0x6EE4BB0A, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Smash T.V. */
@@ -2061,7 +2061,7 @@
   /* Wizards & Warriors III */
   {.crc=0x806DE21E, .board=BOARD_MAPPER_7, .mapper=7, .prg=16, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Famista '91 */
-  {.crc=0x808606F0, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x808606F0, .board=BOARD_NAMCOT_175, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Super Mario USA */
   {.crc=0x80FB7E6B, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Blaster Master */
@@ -2087,7 +2087,7 @@
   /* Noah's Ark */
   {.crc=0x81B2A3CD, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=1, .battery=0, .mirror=MIRROR_NONE},
   /* Heisei Tensai Bakabon */
-  {.crc=0x81B7F1A8, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0x81B7F1A8, .board=BOARD_NAMCOT_175, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Wally Bear and the No! Gang */
   {.crc=0x81ECDA0D, .board=BOARD_MAPPER_11, .mapper=11, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Famicom Meijin Sen */
@@ -2915,7 +2915,7 @@
   /* Bakushou!! Jinsei Gekijou */
   {.crc=0xADF606F6, .board=BOARD_UNSUPPORTED, .mapper=33, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Famista '93 */
-  {.crc=0xADFFD64F, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xADFFD64F, .board=BOARD_NAMCOT_340, .mapper=210, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Law of the West */
   {.crc=0xAE128FAC, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Pro Yakyuu Family Stadium '88 */
@@ -3169,7 +3169,7 @@
   /* Doki! Doki! Yuuenchi: Crazyland Daisakusen */
   {.crc=0xBD50F230, .board=BOARD_TXROM_MMC3B, .mapper=4, .prg=8, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Dream Master */
-  {.crc=0xBD523011, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=16, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xBD523011, .board=BOARD_NAMCOT_340, .mapper=210, .prg=16, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Bomber King */
   {.crc=0xBD9D0E85, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Kage no Densetsu */
@@ -3257,7 +3257,7 @@
   /* Batman Returns */
   {.crc=0xC247A23D, .board=BOARD_TXROM_MMC3C, .mapper=4, .prg=8, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Family Circuit '91 */
-  {.crc=0xC247CC80, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=32, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
+  {.crc=0xC247CC80, .board=BOARD_NAMCOT_175, .mapper=210, .prg=32, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Deadly Towers */
   {.crc=0xC2730C30, .board=BOARD_BNROM, .mapper=34, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_HORIZONTAL},
   /* SD Gundam Gaiden: Knight Gundam Monogatari 3: Densetsu no Kishi Dan */
@@ -3561,7 +3561,7 @@
   /* RockMan */
   {.crc=0xD31DC910, .board=BOARD_MAPPER_2, .mapper=2, .prg=8, .chr=0, .vram=2, .wram=0, .battery=0, .mirror=MIRROR_VERTICAL},
   /* Wagyan Land 3 */
-  {.crc=0xD323B806, .board=BOARD_UNSUPPORTED, .mapper=210, .prg=16, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
+  {.crc=0xD323B806, .board=BOARD_NAMCOT_340, .mapper=210, .prg=16, .chr=64, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* Famicom Jump: Eiyuu Retsuden */
   {.crc=0xD343C66A, .board=BOARD_UNSUPPORTED, .mapper=16, .prg=16, .chr=32, .vram=0, .wram=0, .battery=0, .mirror=MIRROR_NONE},
   /* F-15 Strike Eagle */
