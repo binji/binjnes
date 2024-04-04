@@ -2440,13 +2440,13 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       LOG("✓  Pulse 2 audio = %u (%02x)\n", val, val);
       break;
     case 0x5010:
-      printf("✓  PCM Mode/IRQ = %02x\n", val);
+      LOG("✓  PCM Mode/IRQ = %02x\n", val);
       break;
     case 0x5011:
-      printf("✓  Raw PCM = %02x\n", val);
+      LOG("✓  Raw PCM = %02x\n", val);
       break;
     case 0x5015:
-      printf("✓  APU status = %02x\n", val);
+      LOG("✓  APU status = %02x\n", val);
       break;
 
     case 0x5100:
@@ -2454,7 +2454,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       m->mmc5.prg_mode = val & 3;
       goto update_prg;
     case 0x5101:
-      printf("✓  CHR mode = %u\n", val & 3);
+      LOG("✓  CHR mode = %u\n", val & 3);
       m->mmc5.chr_mode = val & 3;
       mapper5_update_chr(e);
       break;
@@ -2470,7 +2470,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       m->prg_ram_write_en = m->mmc5.ramprot[0] == 2 && m->mmc5.ramprot[1] == 1;
       break;
     case 0x5104:
-      printf("✓  Extended RAM mode = %u\n", val & 3);
+      LOG("✓  Extended RAM mode = %u\n", val & 3);
       m->mmc5.exram_mode = val & 3;
       m->is_mmc5_ex_attr_mode = m->mmc5.exram_mode == 1;
       mapper5_update_chr(e);
@@ -2498,12 +2498,12 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       update_nt_map_banking(e);
       break;
     case 0x5106:
-      printf("✓  Fill-mode tile = %u (%02x)\n", val, val);
+      LOG("✓  Fill-mode tile = %u (%02x)\n", val, val);
       memset(e->s.p.ram + (3 << 10), val, 0x3c0);
       break;
     case 0x5107:
       val &= 3;
-      printf("✓  Fill-mode color = %u\n", val);
+      LOG("✓  Fill-mode color = %u\n", val);
       memset(e->s.p.ram + (3 << 10) + 0x3c0,
              val | (val << 2) | (val << 4) | (val << 6), 0x40);
       break;
@@ -2545,19 +2545,19 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
     }
 
     case 0x5130:
-      printf("✓  CHR bank upper bits = %u\n", val & 3);
+      LOG("✓  CHR bank upper bits = %u\n", val & 3);
       break;
 
     case 0x5200:
-      printf("✓  Vertical split mode = %02x\n", val);
+      LOG("✓  Vertical split mode = %02x\n", val);
       break;
 
     case 0x5201:
-      printf("✓  Vertical split scroll = %u\n", val);
+      LOG("✓  Vertical split scroll = %u\n", val);
       break;
 
     case 0x5202:
-      printf("✓  Vertical split bank = %u\n", val);
+      LOG("✓  Vertical split bank = %u\n", val);
       break;
 
     case 0x5203:
@@ -2581,19 +2581,19 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       break;
 
     case 0x5207:
-      printf("✓  MMC5A CL3/SL3 Data Dir. and Output Data Source = %02x\n", val);
+      LOG("✓  MMC5A CL3/SL3 Data Dir. and Output Data Source = %02x\n", val);
       break;
 
     case 0x5208:
-      printf("✓  MMC5A CL3/SL3 status = %02x\n", val);
+      LOG("✓  MMC5A CL3/SL3 status = %02x\n", val);
       break;
 
     case 0x5209:
-      printf("✓  Hardware timer lo = %02x\n", val);
+      LOG("✓  Hardware timer lo = %02x\n", val);
       break;
 
     case 0x520a:
-      printf("✓  Hardware timer hi = %02x\n", val);
+      LOG("✓  Hardware timer hi = %02x\n", val);
       break;
 
     default:
@@ -2610,7 +2610,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
           e->prg_rom_map[bank][addr & 0x1fff] = val;
         }
       } else {
-        printf("  Unknown\n");
+        LOG("  Unknown\n");
       }
       break;
 
@@ -2647,11 +2647,11 @@ static u8 mapper5_read(E* e, u16 addr) {
 
   switch (addr) {
     case 0x5010:
-      printf("✓  PCM Mode/IRQ\n");
+      LOG("✓  PCM Mode/IRQ\n");
       break;
 
     case 0x5015:
-      printf("✓  APU status\n");
+      LOG("✓  APU status\n");
       break;
 
     case 0x5204: {
@@ -2672,7 +2672,7 @@ static u8 mapper5_read(E* e, u16 addr) {
       return (m->mmc5.mullo * m->mmc5.mulhi) >> 8;
 
     case 0x5209:
-      printf("✓  Hardware timer status\n");
+      LOG("✓  Hardware timer status\n");
       break;
 
     case 0x5000: case 0x5001: case 0x5002: case 0x5003:
@@ -2702,7 +2702,7 @@ static u8 mapper5_read(E* e, u16 addr) {
           return 0;
         }
       } else if (addr > 0x4017) {
-        printf("✓  unknown read(%04x)\n", addr);
+        LOG("✓  unknown read(%04x)\n", addr);
       }
       break;
   }
