@@ -1790,8 +1790,8 @@ static void update_ppu_bank(E *e, int index, u16 bank, PPUBankLoc loc) {
 
 static void update_ppu_bg_spr_bank(E *e, int index, u16 bgbank, u16 sprbank,
                                    PPUBankLoc loc) {
-  DEBUG("  update_ppu_bg_spr_bank ix:%u bgbank:%u sprbank:%u loc:%s\n",
-        index, bgbank, sprbank, s_loc_names[loc]);
+  DEBUG("  update_ppu_bg_spr_bank ix:%u bgbank:%u sprbank:%u loc:%s\n", index,
+        bgbank, sprbank, s_loc_names[loc]);
   switch (loc) {
   case PPU_BANK_CHR:
     e->ppu_bg_map[index] =
@@ -1826,6 +1826,9 @@ static void update_nt_map_mirror(E *e) {
     break;
   case MIRROR_SINGLE_1:
     bank[0] = bank[1] = bank[2] = bank[3] = 1;
+    break;
+  case MIRROR_FOUR_SCREEN:
+    assert(0);
     break;
   }
   for (int i = 8; i < 16; ++i) {
@@ -1964,37 +1967,43 @@ static void mapper_prg_ram_write(E *e, u16 addr, u8 val) {
 
 static void mapper0_write(E *e, u16 addr, u8 val) {}
 
-static bool mapper_mmc1_shared_pre_write(E *e, u16 addr, u8 val) {
+static void mapper1_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  if (addr < 0x8000) return false;
+  if (addr < 0x8000) return;
   if (val & 0x80) {
     m->mmc1.bits = 5;
     m->mmc1.data = 0;
     m->mmc1.ctrl |= 0xc;
-  } else {
-    m->mmc1.data = (m->mmc1.data >> 1) | (val & 1) << 7;
-    if (--m->mmc1.bits == 0) {
-      m->mmc1.bits = 5;
-      m->mmc1.data >>= 3;
-      return true;
-    }
+    return;
   }
-  return false;
-}
+  m->mmc1.data = (m->mmc1.data >> 1) | (val & 1) << 7;
+  if (--m->mmc1.bits > 0) return;
+  m->mmc1.bits = 5;
+  m->mmc1.data >>= 3;
 
-static void mapper_mmc1_shared_post_write(E *e, u16 addr) {
-  M* m = &e->s.m;
   switch (addr >> 13) {
     case 4:
       m->mmc1.ctrl = m->mmc1.data;
       set_mirror(e, m->mmc1.data & 3);
       break;
-    case 5:
-      m->chr_bank[0] = m->mmc1.data;
+    case 5: case 6: {
+      u8 bank = (addr >> 13) - 5;
+      m->chr_bank[bank] = m->mmc1.data & (e->ci.chr4k_banks - 1);
+      if (bank == 0 || m->mmc1.ctrl & 0x10) {
+        switch (e->ci.prgram8k_banks) {
+          case 2:
+            set_prgram8k_map(e, (m->mmc1.data >> 3) & 1);
+            break;
+          case 4:
+            set_prgram8k_map(e, (m->mmc1.data >> 2) & 3);
+            break;
+        }
+        if (e->ci.prg16k_banks == 32) {
+          m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
+        }
+      }
       break;
-    case 6:
-      m->chr_bank[1] = m->mmc1.data;
-      break;
+    }
     case 7:
       assert(is_power_of_two(e->ci.prg16k_banks));
       m->prg_bank[0] = m->mmc1.data & 0xf & (e->ci.prg16k_banks - 1);
@@ -2018,82 +2027,6 @@ static void mapper_mmc1_shared_post_write(E *e, u16 addr) {
     set_prg16k_map(e, m->mmc1.prg256k | m->prg_bank[0],
                    m->mmc1.prg256k | ((e->ci.prg16k_banks - 1) & 0xf));
     break;
-  }
-}
-
-static void mapper1_write(E *e, u16 addr, u8 val) {
-  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
-    mapper_mmc1_shared_post_write(e, addr);
-  }
-}
-
-static void mapper_snrom_write(E *e, u16 addr, u8 val) {
-  M* m = &e->s.m;
-  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
-    switch (addr >> 13) {
-    case 5:
-      m->prg_ram_en = !(m->mmc1.data & 0x80);
-      break;
-    case 6:
-      if (m->mmc1.ctrl & 0x10) {
-        m->prg_ram_en = !(m->mmc1.data & 0x80);
-      }
-      break;
-    }
-    mapper_mmc1_shared_post_write(e, addr);
-  }
-}
-
-static void mapper_surom_write(E *e, u16 addr, u8 val) {
-  M* m = &e->s.m;
-  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
-    switch (addr >> 13) {
-    case 5:
-      m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
-      break;
-    case 6:
-      if (m->mmc1.ctrl & 0x10) {
-        m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
-      }
-      break;
-    }
-    mapper_mmc1_shared_post_write(e, addr);
-  }
-}
-
-static void mapper_sorom_write(E *e, u16 addr, u8 val) {
-  M* m = &e->s.m;
-  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
-    switch (addr >> 13) {
-    case 5:
-      set_prgram8k_map(e, (e->s.m.mmc1.data >> 3) & 1);
-      break;
-    case 6:
-      if (m->mmc1.ctrl & 0x10) {
-        set_prgram8k_map(e, (e->s.m.mmc1.data >> 3) & 1);
-      }
-      break;
-    }
-    mapper_mmc1_shared_post_write(e, addr);
-  }
-}
-
-static void mapper_sxrom_write(E *e, u16 addr, u8 val) {
-  M* m = &e->s.m;
-  if (mapper_mmc1_shared_pre_write(e, addr, val)) {
-    switch (addr >> 13) {
-    case 5:
-      m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
-      set_prgram8k_map(e, (e->s.m.mmc1.data >> 2) & 3);
-      break;
-    case 6:
-      if (m->mmc1.ctrl & 0x10) {
-        m->mmc1.prg256k = m->mmc1.data & 0x10 & (e->ci.prg16k_banks - 1);
-        set_prgram8k_map(e, (e->s.m.mmc1.data >> 2) & 3);
-      }
-      break;
-    }
-    mapper_mmc1_shared_post_write(e, addr);
   }
 }
 
@@ -2251,7 +2184,7 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
         }
       } else {
         m->mmc3.bank_select = val;
-        if (e->ci.board == BOARD_HKROM) {
+        if (e->ci.submapper == SUBMAPPER_4_MMC6) {
           m->prg_ram_en = !!(val & 0x20);
           DEBUG("     [%" PRIu64 "] mmc6 prg ram en:%u\n", e->s.cy,
                 m->prg_ram_en);
@@ -2281,7 +2214,7 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
     }
     case 10: case 11: // Mirroring / PRG RAM enable
       if (addr & 1) {
-        if (e->ci.board == BOARD_HKROM) {
+        if (e->ci.submapper == SUBMAPPER_4_MMC6) {
           m->mmc3.prgram512b_write_en[0] = !!(val & 0x10);
           m->mmc3.prgram512b_en[0] = !!(val & 0x20);
           m->mmc3.prgram512b_write_en[1] = !!(val & 0x40);
@@ -2353,7 +2286,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
             p->frame, ppu_dot(e), ppu_line(e));
         p->a12_irq_counter = m->mmc3.irq_latch;
         m->mmc3.irq_reload = false;
-        if (e->ci.board != BOARD_TXROM_MMC3A && p->a12_irq_counter == 0) {
+        if (e->ci.submapper != SUBMAPPER_4_NEC && p->a12_irq_counter == 0) {
           trigger_irq = true;
         }
       } else {
@@ -3563,6 +3496,8 @@ static void mapper34_nina001_write(E *e, u16 addr, u8 val) {
                   (m->chr_bank[1] = val & 0xf & (e->ci.chr4k_banks - 1)));
     break;
   }
+  e->prg_ram_map[addr & 0x1fff] = val;
+  e->s.m.prg_ram_updated = true;
 }
 
 static void mapper66_write(E *e, u16 addr, u8 val) {
@@ -3718,16 +3653,11 @@ static void mapper69_apu_tick(E* e, u8 update, bool odd) {
 
 static void mapper71_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
-  if (addr < 0xc000) return;
-  set_prg16k_map(e, m->prg_bank[0] = val & 0xf & (e->ci.prg16k_banks - 1),
-                 e->ci.prg16k_banks - 1);
-}
-
-static void mapper71_bf9097_write(E *e, u16 addr, u8 val) {
-  M *m = &e->s.m;
   switch (addr >> 13) {
     case 4: // 0x8000..0x9fff
-      set_mirror(e, (val >> 4) & 1);
+      if (e->ci.submapper == SUBMAPPER_71_BF9097) {
+        set_mirror(e, (val >> 4) & 1);
+      }
       break;
 
     case 6: case 7: // 0xc000..0xffff
@@ -3743,7 +3673,7 @@ static void mapper78_write(E *e, u16 addr, u8 val) {
   set_prg16k_map(e, (m->prg_bank[0] = val & 7 & (e->ci.prg16k_banks - 1)),
                  e->ci.prg16k_banks - 1);
   set_chr8k_map(e, (m->chr_bank[0] = (val >> 4) & (e->ci.chr8k_banks - 1)));
-  if (e->ci.board == BOARD_JF_16) {
+  if (e->ci.submapper == SUBMAPPER_78_JF_16) {
     set_mirror(e, (val >> 3) & 1);
   } else {
     set_mirror(e, 2 + !((val >> 3) & 1));
@@ -3810,11 +3740,11 @@ static void mapper_vrc7_shared_write(E *e, u16 addr, u8 val, u8 shift, u8 mask) 
 }
 
 static void mapper_vrc7a_write(E *e, u16 addr, u8 val) {
-  return mapper_vrc7_shared_write(e, addr, val, 3, 1);
+  return mapper_vrc7_shared_write(e, addr, val, 4, 1);
 }
 
 static void mapper_vrc7b_write(E *e, u16 addr, u8 val) {
-  return mapper_vrc7_shared_write(e, addr, val, 4, 1);
+  return mapper_vrc7_shared_write(e, addr, val, 3, 1);
 }
 
 static void mapper85_write(E *e, u16 addr, u8 val) {
@@ -3841,8 +3771,8 @@ static void mapper210_shared_write(E *e, u16 addr, u8 val) {
       break;
     }
     case 0xc000:
-      // BOARD_NAMCOT_175 only. Safe to do here since PRG RAM is not enabled at
-      // all for BOARD_NAMCOT_340.
+      // SUBMAPPER_210_NAMCOT_175 only. Safe to do here since PRG RAM is not
+      // enabled at all for SUBMAPPER_210_NAMCOT_340.
       m->prg_ram_en = val & 1;
       break;
     case 0xe000:
@@ -5197,38 +5127,30 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     LOG("Found in cartdb\n");
     ci->is_nes2_0 = false;
     ci->has_trainer = false;
-    ci->ignore_mirror = false;
-    ci->fourscreen = false;
     ci->mapper = cart_db_info->mapper;
+    ci->submapper = cart_db_info->submapper;
     ci->mirror = cart_db_info->mirror;
     ci->has_bat_ram = cart_db_info->battery;
-    ci->prg16k_banks = cart_db_info->prg;
-    ci->chr4k_banks = cart_db_info->chr;
-    ci->board = cart_db_info->board;
+    ci->prg32k_banks = cart_db_info->prgrom >> 15;
+    ci->prg16k_banks = cart_db_info->prgrom >> 14;
+    ci->prg8k_banks = cart_db_info->prgrom >> 13;
     ci->prg_data = file_data->data + kHeaderSize;
-    ci->prgram8k_banks = cart_db_info->wram;
-
-    ci->prg32k_banks = ci->prg16k_banks / 2;
-    ci->prg8k_banks = ci->prg16k_banks * 2;
-    ci->prgram512b_banks =
-        ci->board == BOARD_HKROM ? 2 : ci->prgram8k_banks * 16;
-
-    if (cart_db_info->vram && ci->chr4k_banks == 0) {
-      ci->chr_data = e->s.p.chr_ram;
-      ci->chr8k_banks = cart_db_info->vram / 2;
-      ci->chr4k_banks = cart_db_info->vram;
-      ci->chr2k_banks = cart_db_info->vram * 2;
-      ci->chr1k_banks = cart_db_info->vram * 4;
-    } else {
+    ci->prgram8k_banks = cart_db_info->prgram >> 14;
+    ci->prgram512b_banks = cart_db_info->prgram >> 9;
+    if (cart_db_info->chrrom) {
+      ci->chr8k_banks = cart_db_info->chrrom >> 13;
+      ci->chr4k_banks = cart_db_info->chrrom >> 12;
+      ci->chr2k_banks = cart_db_info->chrrom >> 11;
+      ci->chr1k_banks = cart_db_info->chrrom >> 10;
       ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
-      ci->chr8k_banks = ci->chr4k_banks / 2;
-      ci->chr2k_banks = ci->chr4k_banks * 2;
-      ci->chr1k_banks = ci->chr4k_banks * 4;
-      if (cart_db_info->vram == 2) {
-        // Assume it is used for four screen mode.
-        ci->ignore_mirror = ci->fourscreen = true;
-      }
+    } else {
+      ci->chr8k_banks = cart_db_info->chrram >> 13;
+      ci->chr4k_banks = cart_db_info->chrram >> 12;
+      ci->chr2k_banks = cart_db_info->chrram >> 11;
+      ci->chr1k_banks = cart_db_info->chrram >> 10;
+      ci->chr_data = e->s.p.chr_ram;
     }
+
     ci->chr_data_write = e->s.p.chr_ram;
   } else {
     const u32 kTrainerSize = 512;
@@ -5238,11 +5160,9 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     const u8 flag9 = file_data->data[9];
 
     ci->mirror = (flag6 & 1) ? MIRROR_VERTICAL : MIRROR_HORIZONTAL;
-    ci->has_bat_ram = (flag6 & 4) != 0;
-    ci->has_trainer = (flag6 & 8) != 0 &&
+    ci->has_bat_ram = (flag6 & 2) != 0;
+    ci->has_trainer = (flag6 & 4) != 0 &&
                       (file_data->size & 8191) == kHeaderSize + kTrainerSize;
-    ci->ignore_mirror = (flag6 & 0x10) != 0;
-    ci->fourscreen = false;
 
     u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
     u32 ines_prg16k_banks = file_data->data[4];
@@ -5269,55 +5189,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->is_nes2_0 = true;
       ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
                    ((flag6 & 0xf0) >> 4);
-      u8 submapper = file_data->data[8] >> 4;
-      switch (ci->mapper) {
-        case 21:
-          switch (submapper) {
-            case 1: ci->board = BOARD_VRC4A; break;
-            case 2: ci->board = BOARD_VRC4C; break;
-          }
-          break;
-        case 23:
-          switch (submapper) {
-            case 1: ci->board = BOARD_VRC4F; break;
-            case 2: ci->board = BOARD_VRC4E; break;
-            case 3: ci->board = BOARD_VRC2B; break;
-          }
-          break;
-        case 25:
-          switch (submapper) {
-            case 1: ci->board = BOARD_VRC4B; break;
-            case 2: ci->board = BOARD_VRC4D; break;
-            case 3: ci->board = BOARD_VRC2C; break;
-          }
-          break;
-        case 34:
-          switch (submapper) {
-            case 1: ci->board = BOARD_NINA001; break;
-            case 2: ci->board = BOARD_BNROM; break;
-          }
-          break;
-        case 78:
-          switch (submapper) {
-            case 1: ci->board = BOARD_JF_16; break;
-            case 3: ci->board = BOARD_HOLY_DIVER; break;
-          }
-          break;
-        case 85:
-          switch (submapper) {
-            case 1: ci->board = BOARD_VRC7B; break;
-            case 2: ci->board = BOARD_VRC7A; break;
-          }
-          break;
-        case 210:
-          switch (submapper) {
-            case 1: ci->board = BOARD_NAMCOT_175; break;
-            case 2: ci->board = BOARD_NAMCOT_340; break;
-          }
-        default:
-          ci->board = (Board)ci->mapper;
-          break;
-      }
+      ci->submapper = file_data->data[8] >> 4;
       ci->prg16k_banks = nes2_prg16k_banks;
       ci->chr8k_banks = nes2_chr8k_banks;
       if (nes2_prg_ram_bat_banks > nes2_prg_ram_banks) {
@@ -5331,7 +5203,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       if (chrram8k_banks > 0) {
         ci->chr_data = e->s.p.chr_ram;
         ci->chr8k_banks = chrram8k_banks;
-        printf("chrram from nes 2.0 header: %u banks\n", chrram8k_banks);
+        LOG("chrram from nes 2.0 header: %u banks\n", chrram8k_banks);
       } else {
         ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
       }
@@ -5343,14 +5215,12 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->prg16k_banks = ines_prg16k_banks;
       ci->chr8k_banks = ines_chr8k_banks;
       ci->prgram8k_banks = file_data->data[8];
-      ci->board = (Board)ci->mapper;
     } else {
       LOG("Found archaic iNES header\n");
       ci->mapper = (flag6 & 0xf0) >> 4;
       ci->prg16k_banks = ines_prg16k_banks;
       ci->chr8k_banks = ines_chr8k_banks;
       ci->prgram8k_banks = file_data->data[8];
-      ci->board = (Board)ci->mapper;
     }
 
     ci->prg32k_banks = ci->prg16k_banks / 2;
@@ -5379,6 +5249,13 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->chr_data_write = e->s.p.chr_ram;
   }
 
+  printf("mapper=%u submapper=%u mirror=%u\n", ci->mapper, ci->submapper,
+      ci->mirror);
+  printf("prg: 32k=%u 16k=%u 8k=%u\n", ci->prg32k_banks, ci->prg16k_banks,
+      ci->prg8k_banks);
+  printf("chr: 8k=%u 4k=%u 2k=%u 1k=%u\n", ci->chr8k_banks, ci->chr4k_banks,
+      ci->chr2k_banks, ci->chr1k_banks);
+
   return OK;
   ON_ERROR_RETURN;
 }
@@ -5392,32 +5269,17 @@ static Result init_mapper(E *e) {
   e->s.m.prg_ram_en = e->s.m.prg_ram_write_en = true;
   e->mapper_prg_ram_read = mapper_prg_ram_read;
   e->mapper_prg_ram_write = mapper_prg_ram_write;
-  e->mapper_update_nt_map =
-      e->ci.fourscreen ? update_nt_map_fourscreen : update_nt_map_mirror;
+  e->mapper_update_nt_map = update_nt_map_mirror;
   e->mapper_read = mapper_read_open_bus;
 
-  switch (e->ci.board) {
-  case BOARD_MAPPER_0:
+  switch (e->ci.mapper) {
+  case 0:
     CHECK_MSG(e->ci.prg8k_banks <= 4, "Too many PRG banks.\n");
     e->mapper_write = mapper0_write;
     goto shared;
 
-  case BOARD_MAPPER_1:
+  case 1:
     e->mapper_write = mapper1_write;
-    goto shared_mmc1;
-  case BOARD_SNROM:
-    e->mapper_write = mapper_snrom_write;
-    goto shared_mmc1;
-  case BOARD_SUROM:
-    e->mapper_write = mapper_surom_write;
-    goto shared_mmc1;
-  case BOARD_SOROM:
-    e->mapper_write = mapper_sorom_write;
-    goto shared_mmc1;
-  case BOARD_SXROM:
-    e->mapper_write = mapper_sxrom_write;
-    goto shared_mmc1;
-  shared_mmc1:
     e->s.m.mmc1.ctrl = 0xc | e->ci.mirror;
     e->s.m.mmc1.bits = 5;
     e->s.m.chr_bank[0] = 0;
@@ -5425,11 +5287,11 @@ static Result init_mapper(E *e) {
     e->s.m.prg_bank[0] = 0;
     goto shared;
 
-  case BOARD_MAPPER_2:
+  case 2:
     e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper2_write;
     goto shared;
-  case BOARD_MAPPER_3:
+  case 3:
     e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper3_write;
     goto shared;
@@ -5438,20 +5300,14 @@ static Result init_mapper(E *e) {
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
-  case BOARD_MAPPER_4:
-  case BOARD_TXROM_MMC3A:
-  case BOARD_TXROM_MMC3B:
-  case BOARD_TXROM_MMC3C:
-  case BOARD_MC_ACC:
-  case BOARD_HKROM:
+  case 4:
     e->mapper_write = mapper4_write;
     e->mapper_on_ppu_addr_updated = mapper4_on_ppu_addr_updated;
     e->mapper_on_chr_read = mapper4_on_ppu_addr_updated;
     e->mapper_reschedule_irq = mapper4_reschedule_irq;
-    e->ci.fourscreen = e->ci.ignore_mirror;
-    if (e->ci.fourscreen) {
-      e->mapper_update_nt_map = update_nt_map_fourscreen;
-    }
+    e->mapper_update_nt_map = e->ci.mirror == MIRROR_FOUR_SCREEN
+                                  ? update_nt_map_fourscreen
+                                  : update_nt_map_mirror;
     e->s.m.mmc3.bank_select = 0;
     e->s.m.mmc3.irq_latch = 0;
     e->s.m.mmc3.irq_reload = true;
@@ -5463,7 +5319,7 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
-    if (e->ci.board == BOARD_HKROM) {
+    if (e->ci.submapper == 1) {
       e->s.m.mmc3.prgram512b_en[0] = true;
       e->s.m.mmc3.prgram512b_en[1] = true;
       e->s.m.mmc3.prgram512b_write_en[0] = true;
@@ -5472,7 +5328,7 @@ static Result init_mapper(E *e) {
       e->mapper_prg_ram_write = mapper4_hkrom_prg_ram_write;
     }
     break;
-  case BOARD_MAPPER_5:
+  case 5:
     e->mapper_read = mapper5_read;
     e->mapper_write = mapper5_write;
     e->mapper_io_write = mapper5_io_write;
@@ -5489,14 +5345,14 @@ static Result init_mapper(E *e) {
     set_chr8k_map(e, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
-  case BOARD_MAPPER_7:
+  case 7:
     e->s.m.prg_bank[0] = 0;
     e->mapper_write = mapper7_write;
     set_mirror(e, MIRROR_SINGLE_0);
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
     set_prg32k_map(e, e->ci.prg32k_banks - 1);
     break;
-  case BOARD_MAPPER_9:
+  case 9:
     e->mapper_write = mapper9_write;
     e->mapper_on_chr_read = mmc2_on_chr_read;
     set_mirror(e, e->ci.mirror);
@@ -5504,14 +5360,14 @@ static Result init_mapper(E *e) {
     set_prg8k_map(e, e->s.m.prg_bank[0], e->ci.prg8k_banks - 3,
                   e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
-  case BOARD_MAPPER_10:
+  case 10:
     e->mapper_write = mapper10_write;
     e->mapper_on_chr_read = mmc2_on_chr_read;
     set_mirror(e, e->ci.mirror);
     set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
     set_prg16k_map(e, e->s.m.prg_bank[0], e->ci.prg16k_banks - 1);
     break;
-  case BOARD_MAPPER_11:
+  case 11:
     e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1;
     e->mapper_write = mapper11_write;
     set_mirror(e, e->ci.mirror);
@@ -5519,7 +5375,7 @@ static Result init_mapper(E *e) {
     set_prg32k_map(e, e->s.m.prg_bank[0]);
     break;
 
-  case BOARD_MAPPER_18:
+  case 18:
     e->mapper_write = mapper18_write;
     e->mapper_cpu_step = mapper18_cpu_step;
     set_mirror(e, e->ci.mirror);
@@ -5527,7 +5383,7 @@ static Result init_mapper(E *e) {
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_MAPPER_19:
+  case 19:
     e->mapper_read = mapper19_read;
     e->mapper_write = mapper19_write;
     e->mapper_cpu_step = mapper19_cpu_step;
@@ -5538,47 +5394,36 @@ static Result init_mapper(E *e) {
     set_prg8k_map(e, 0, 0, 0, e->s.m.prg_bank[3] = e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_VRC4A:
-    e->mapper_write = mapper_vrc4a_write;
+  case 21:
+    switch (e->ci.submapper) {
+      case 0:                  e->mapper_write = mapper21_write; break;
+      case SUBMAPPER_21_VRC4A: e->mapper_write = mapper_vrc4a_write; break;
+      case SUBMAPPER_21_VRC4C: e->mapper_write = mapper_vrc4c_write; break;
+      default: goto unsupported;
+    }
     goto vrc4_shared;
-  case BOARD_VRC4C:
-    e->mapper_write = mapper_vrc4c_write;
+  case 23:
+    switch (e->ci.submapper) {
+      case 0:                  e->mapper_write = mapper23_write; break;
+      case SUBMAPPER_23_VRC4F: e->mapper_write = mapper_vrc4f_write; break;
+      case SUBMAPPER_23_VRC4E: e->mapper_write = mapper_vrc4e_write; break;
+      case SUBMAPPER_23_VRC2B: e->mapper_write = mapper_vrc2b_write; goto vrc_shared;
+      default: goto unsupported;
+    }
     goto vrc4_shared;
-  case BOARD_VRC2A:
-  case BOARD_MAPPER_22:
-    e->mapper_write = mapper_vrc2a_write;
-    goto vrc_shared;
-  case BOARD_VRC2B:
-    e->mapper_write = mapper_vrc2b_write;
-    goto vrc_shared;
-  case BOARD_VRC4E:
-    e->mapper_write = mapper_vrc4e_write;
+  case 25:
+    switch (e->ci.submapper) {
+      case 0:                  e->mapper_write = mapper25_write; break;
+      case SUBMAPPER_25_VRC4B: e->mapper_write = mapper_vrc4b_write; break;
+      case SUBMAPPER_25_VRC4D: e->mapper_write = mapper_vrc4d_write; break;
+      case SUBMAPPER_25_VRC2C: e->mapper_write = mapper_vrc2c_write; goto vrc_shared;
+      default: goto unsupported;
+    }
     goto vrc4_shared;
-  case BOARD_VRC4F:
-    e->mapper_write = mapper_vrc4f_write;
-    goto vrc4_shared;
-  case BOARD_VRC2C:
-    e->mapper_write = mapper_vrc2c_write;
-    goto vrc_shared;
-  case BOARD_VRC4B:
-    e->mapper_write = mapper_vrc4b_write;
-    goto vrc4_shared;
-  case BOARD_VRC4D:
-    e->mapper_write = mapper_vrc4d_write;
-    goto vrc4_shared;
-  case BOARD_MAPPER_21:
-    e->mapper_write = mapper21_write;
-    goto vrc4_shared;
-  case BOARD_MAPPER_23:
-    e->mapper_write = mapper23_write;
-    goto vrc4_shared;
-  case BOARD_MAPPER_25:
-    e->mapper_write = mapper25_write;
-    goto vrc4_shared;
-  case BOARD_MAPPER_24:
+  case 24:
     e->mapper_write = mapper_vrc6a_write;
     goto vrc6_shared;
-  case BOARD_MAPPER_26:
+  case 26:
     e->mapper_write = mapper_vrc6b_write;
     goto vrc6_shared;
 
@@ -5595,14 +5440,14 @@ static Result init_mapper(E *e) {
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_MAPPER_28:
+  case 28:
     e->mapper_write = mapper28_write;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_MAPPER_30:
+  case 30:
     e->mapper_write = mapper30_write;
     if (e->ci.chr_data == e->s.p.chr_ram) {
       // Bump it up from 8k -> 32k.
@@ -5616,23 +5461,21 @@ static Result init_mapper(E *e) {
     set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_MAPPER_34:
-  case BOARD_BNROM:
-  case BOARD_NINA001:
+  case 34:
     e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1;
-    if (e->ci.board == BOARD_MAPPER_34) {
+    if (e->ci.submapper == 0) {
       if (e->ci.chr4k_banks > 2) {
-        e->ci.board = BOARD_NINA001;
+        e->ci.submapper = SUBMAPPER_34_NINA001;
       } else if (e->ci.chr4k_banks == 0 || e->ci.prg32k_banks > 2) {
-        e->ci.board = BOARD_BNROM;
+        e->ci.submapper = SUBMAPPER_34_BNROM;
       }
     }
-    if (e->ci.board == BOARD_BNROM) {
+    if (e->ci.submapper == SUBMAPPER_34_BNROM) {
       e->mapper_write = mapper34_bnrom_write;
       set_mirror(e, e->ci.mirror);
       set_chr8k_map(e, 0);
       set_prg32k_map(e, e->s.m.prg_bank[0]);
-    } else if (e->ci.board == BOARD_NINA001) {
+    } else if (e->ci.submapper == SUBMAPPER_34_NINA001) {
       e->mapper_write = mapper0_write;
       e->mapper_prg_ram_write = mapper34_nina001_write;
       set_mirror(e, MIRROR_VERTICAL);
@@ -5643,14 +5486,14 @@ static Result init_mapper(E *e) {
     }
     break;
 
-  case BOARD_MAPPER_66:
+  case 66:
     e->mapper_write = mapper66_write;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1);
     break;
 
-  case BOARD_MAPPER_69:
+  case 69:
     e->s.m.prg_bank[3] = e->ci.prg8k_banks - 1;
     e->mapper_write = mapper69_write;
     e->mapper_prg_ram_write = mapper69_prg_ram_write;
@@ -5662,54 +5505,42 @@ static Result init_mapper(E *e) {
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_MAPPER_71:
-  case BOARD_CAMERICA:
-  case BOARD_CAMERICA_BF9097:
-    if (e->ci.board == BOARD_CAMERICA_BF9097) {
-      e->mapper_write = mapper71_bf9097_write;
-    } else {
-      e->mapper_write = mapper71_write;
-    }
+  case 71:
+    e->mapper_write = mapper71_write;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
 
-  case BOARD_MAPPER_78:
-  case BOARD_HOLY_DIVER:
-  case BOARD_JF_16:
+  case 78:
     e->mapper_write = mapper78_write;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
 
-  case BOARD_MAPPER_79:
-  case BOARD_MAPPER_146:
+  case 79:
+  case 146:
     e->mapper_write = mapper79_write;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->ci.prg16k_banks - 1);
     break;
 
-  case BOARD_MAPPER_85:
-    e->mapper_write = mapper85_write;
-    goto vrc7_shared;
-  case BOARD_VRC7A:
-    e->mapper_write = mapper_vrc7a_write;
-    goto vrc7_shared;
-  case BOARD_VRC7B:
-    e->mapper_write = mapper_vrc7b_write;
-    goto vrc7_shared;
-
-  vrc7_shared:
+  case 85:
+    switch (e->ci.submapper) {
+      case 0:                  e->mapper_write = mapper85_write; break;
+      case SUBMAPPER_85_VRC7B: e->mapper_write = mapper_vrc7b_write; break;
+      case SUBMAPPER_85_VRC7A: e->mapper_write = mapper_vrc7a_write; break;
+      default: goto unsupported;
+    }
     e->mapper_cpu_step = mapper_vrc_cpu_step;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_MAPPER_87:
+  case 87:
     e->mapper_write = mapper0_write;
     e->mapper_prg_ram_write = mapper87_write;
     set_mirror(e, e->ci.mirror);
@@ -5717,26 +5548,28 @@ static Result init_mapper(E *e) {
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
 
-  case BOARD_MAPPER_206:
+  case 206:
     e->mapper_write = mapper206_write;
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
 
-  case BOARD_MAPPER_210:
-    e->mapper_write = mapper210_write;
-    e->mapper_prg_ram_write = mapper_namcot_175_prg_ram_write;
-    goto mapper210_shared;
-  case BOARD_NAMCOT_175:
-    e->mapper_write = mapper_namcot_175_write;
-    e->mapper_prg_ram_write = mapper_namcot_175_prg_ram_write;
-    goto mapper210_shared;
-  case BOARD_NAMCOT_340:
-    e->mapper_write = mapper_namcot_340_write;
-    goto mapper210_shared;
-
-  mapper210_shared:
+  case 210:
+    switch (e->ci.submapper) {
+      case 0:
+        e->mapper_write = mapper210_write;
+        e->mapper_prg_ram_write = mapper_namcot_175_prg_ram_write;
+        break;
+      case SUBMAPPER_210_NAMCOT_175:
+        e->mapper_write = mapper_namcot_175_write;
+        e->mapper_prg_ram_write = mapper_namcot_175_prg_ram_write;
+        break;
+      case SUBMAPPER_210_NAMCOT_340:
+        e->mapper_write = mapper_namcot_340_write;
+        break;
+      default: goto unsupported;
+    }
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
