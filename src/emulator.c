@@ -353,10 +353,15 @@ static inline void read_ntb(E *e, Ticks cy) {
 
 static inline void read_atb(E *e, Ticks cy) {
   u8 atb1;
+  u16 v = e->s.p.v;
   if (e->s.m.is_mmc5_ex_attr_mode) {
-    atb1 = e->s.p.ram[(2 << 10) + (e->s.p.v & 0x3ff)] >> 6;
+    // TODO: This address is arbitrary, what is the real address put on the bus
+    // in this case?
+    u16 addr = 0x800 + (v & 0x3ff);
+    atb1 = e->s.p.ram[addr] >> 6;
+    if (e->mapper_on_ppu_addr_updated)
+      e->mapper_on_ppu_addr_updated(e, addr, cy, false);
   } else {
-    u16 v = e->s.p.v;
     u16 at = 0x23c0 | (v & 0xc00) | ((v >> 4) & 0x38) | ((v >> 2) & 7);
     int shift = (((v >> 5) & 2) | ((v >> 1) & 1)) * 2;
     atb1 = (nt_read(e, at, cy, false) >> shift) & 3;
@@ -1425,10 +1430,18 @@ static void oam_write(E* e, u8 addr, u8 val) {
   e->s.p.oam[addr] = (addr & 3) == 2 ? val & 0xe3 : val;
 }
 
+static inline u8 rom_read(E *e, u16 addr) {
+  return e->s.c.open_bus = e->prg_rom_map[(addr >> 13) & 3][addr & 0x1fff];
+}
+
 static u8 cpu_read(E *e, u16 addr) {
   C* c = &e->s.c;
   if (LIKELY(addr >= 0x8000)) {
-    return c->open_bus = e->prg_rom_map[(addr >> 13) & 3][addr & 0x1fff];
+    // Some mappers (just mmc5?) snoop on access to the vectors.
+    if (UNLIKELY(addr >= 0xfffa)) {
+      return c->open_bus = e->mapper_read(e, addr);
+    }
+    return rom_read(e, addr);
   }
 
   A* a = &e->s.a;
@@ -1545,6 +1558,11 @@ static void cpu_write(E *e, u16 addr, u8 val) {
               p->ppumask, val, e->s.p.state);
         if (p->state > 89340) {
           p->toggled_rendering_near_skipped_cycle = true;
+        }
+        // HACK: mmc5 detects when rendering is disabled.
+        if (e->ci.mapper == 5 && (val & 0x18) == 0) {
+          e->s.m.mmc5.in_frame = false;
+          e->s.m.mmc5.lastaddr = ~0;
         }
       }
       p->ppumask = val;
@@ -1946,7 +1964,7 @@ static void update_prgram_map(E* e) {
 }
 
 static u8 mapper_read_open_bus(E* e, u16 addr) {
-  return e->s.c.open_bus;
+  return addr >= 0xfffa ? rom_read(e, addr) : e->s.c.open_bus;
 }
 
 static void set_prgram8k_map(E* e, u16 bank) {
@@ -2234,27 +2252,25 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       }
       break;
     case 12: case 13: // IRQ latch / IRQ reload
+      ppu_sync(e, "mapper4_reschedule_irq");
       if (addr & 1) {
         m->mmc3.irq_reload = true;
         e->s.p.a12_irq_counter = 0;
-        ppu_sync(e, "mapper4_reschedule_irq");
         mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
       } else {
         m->mmc3.irq_latch = val;
-        ppu_sync(e, "mapper4_reschedule_irq");
         mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq latch = %u\n", e->s.cy, val);
       }
       break;
     case 14: case 15: // IRQ disable / IRQ enable
+      ppu_sync(e, "mapper4_reschedule_irq");
       if (addr & 1) {
-        ppu_sync(e, "mapper4_reschedule_irq");
         m->mmc3.irq_enable = true;
         mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
       } else {
-        ppu_sync(e, "mapper irq disabled");
         m->mmc3.irq_enable = false;
         sched_clear(e, SCHED_MAPPER_IRQ);
         e->s.c.irq &= ~IRQ_MAPPER;
@@ -2332,6 +2348,57 @@ static void mapper4_hkrom_prg_ram_write(E* e, u16 addr, u8 val) {
   if (m->mmc3.prgram512b_en[bank] && m->mmc3.prgram512b_write_en[bank]) {
     e->s.c.prg_ram[addr & 0x3ff] = val;
   }
+}
+
+static void mapper5_update_in_frame(E *e, Ticks cy) {
+  M* m = &e->s.m;
+  if (cy - e->s.p.last_vram_access_cy >= 3 * 3) {
+    if (m->mmc5.in_frame) {
+      LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
+    }
+    m->mmc5.in_frame = false;
+    m->mmc5.lastaddr = ~0;
+  }
+}
+
+static void mapper5_reschedule_irq(E* e, u32 pstate, Ticks cy) {
+  M* m = &e->s.m;
+  P* p = &e->s.p;
+  int dot = pstate % 341;
+  int line = pstate / 341;
+  if (!m->mmc5.irq_enable || m->mmc5.scan_cmp == 0 || m->mmc5.scan_cmp >= 240 ||
+      (p->ppumask & 0x18) == 0) {
+    LOG("[%" PRIu64
+          "] clearing mapper irq state=%u [%u:%u] frame=%u irq_enable=%u "
+          "ppumask=%02x\n",
+          cy, p->state, dot, line, p->frame, m->mmc5.irq_enable, p->ppumask);
+    sched_clear(e, SCHED_MAPPER_IRQ);
+    return;
+  }
+  int irq_dot = 3;
+  int counter;
+  int choice = 0;
+  mapper5_update_in_frame(e, cy);
+  if (!m->mmc5.in_frame) {
+    counter =
+        m->mmc5.scan_cmp + 1 + (line >= 240 && (line < 261 || dot < irq_dot));
+    choice = 1;
+  } else if (m->mmc5.scan < m->mmc5.scan_cmp ||
+             (m->mmc5.scan == m->mmc5.scan_cmp && dot < irq_dot)) {
+    counter = m->mmc5.scan_cmp - m->mmc5.scan;
+    choice = 2;
+  } else {
+    counter = m->mmc5.scan_cmp - MIN(m->mmc5.scan, 240) + 241;
+    choice = 3;
+  }
+  int dcy = mapper4_irq_delta_cy(irq_dot, counter, dot, line, p->frame & 1);
+  (void)choice;
+  LOG("[%" PRIu64
+         "] scheduling irq [%u:%u] ppumask=%02x frame=%u scan=%u->%u == %u "
+         "[#%u] @ %" PRIu64 " (+%u) \n",
+         cy, dot, line, p->ppumask, p->frame, m->mmc5.scan, m->mmc5.scan_cmp,
+         counter, choice, cy + dcy, dcy);
+  sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper5");
 }
 
 static void mapper5_update_chr(E* e) {
@@ -2495,12 +2562,20 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
 
     case 0x5203:
       LOG("✓  IRQ scanline compare value = %u\n", val);
+      ppu_sync(e, "mapper5_reschedule_irq");
       m->mmc5.scan_cmp = val;
+      mapper5_reschedule_irq(e, e->s.p.state, e->s.cy);
       break;
 
     case 0x5204:
       LOG("✓  Write IRQ status = %u\n", val);
+      ppu_sync(e, "mapper5_reschedule_irq");
       m->mmc5.irq_enable = !!(val & 0x80);
+      if (m->mmc5.irq_enable) {
+        mapper5_reschedule_irq(e, e->s.p.state, e->s.cy);
+      } else {
+        sched_clear(e, SCHED_MAPPER_IRQ);
+      }
       break;
 
     case 0x5205:
@@ -2588,6 +2663,8 @@ static u8 mapper5_read(E* e, u16 addr) {
       break;
 
     case 0x5204: {
+      ppu_sync(e, "$5204 read");
+      mapper5_update_in_frame(e, e->s.cy);
       u8 result = (m->mmc5.irq_pending << 7) | (m->mmc5.in_frame << 6) |
                   (e->s.c.open_bus & 0x3f);
       m->mmc5.irq_pending = false;
@@ -2623,6 +2700,19 @@ static u8 mapper5_read(E* e, u16 addr) {
     case 0x520a:
       break;
 
+    case 0xfffa: case 0xfffb:
+      if (m->mmc5.in_frame) {
+        LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
+      }
+      m->mmc5.in_frame = false;
+      m->mmc5.lastaddr = ~0;
+      m->mmc5.irq_pending = false;
+      e->s.c.irq &= ~IRQ_MAPPER;
+      // fallthrough
+    case 0xfffc: case 0xfffd:
+    case 0xfffe: case 0xffff:
+      return rom_read(e, addr);
+
     default:
       if (addr >= 0x5c00 && addr <= 0x5fff) {
         u16 ramaddr = (2<<10) + (addr & 0x3ff);
@@ -2650,44 +2740,37 @@ static void mapper5_prg_ram_write(E *e, u16 addr, u8 val) {
   mapper_prg_ram_write(e, addr, val);
 }
 
-static void mapper5_cpu_step(E* e) {
-  M* m = &e->s.m;
-  if (e->s.cy - e->s.p.last_vram_access_cy >= 3 * 3) {
-    if (m->mmc5.in_frame) {
-      LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
-    }
-    m->mmc5.in_frame = false;
-    m->mmc5.lastaddr = ~0;
-  }
-}
-
 static void mapper5_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
                                         bool from_cpu) {
   M* m = &e->s.m;
+  if (m->mmc5.match_count == 2) {
+    mapper5_update_in_frame(e, cy);
+    if (!m->mmc5.in_frame) {
+      m->mmc5.in_frame = true;
+      m->mmc5.scan = 0;
+      LOG("✓  [%3u:%3u] MMC5, setting scan to 0, in_frame = true\n", ppu_dot(e), ppu_line(e));
+    } else {
+      if (++m->mmc5.scan == m->mmc5.scan_cmp) {
+        LOG("✓  [%3u:%3u] MMC5, scanline match = %u\n", ppu_dot(e),
+            ppu_line(e), m->mmc5.scan);
+        m->mmc5.irq_pending = true;
+        if (m->mmc5.irq_enable) {
+          e->s.c.irq |= IRQ_MAPPER;
+          sched_occurred(e, SCHED_MAPPER_IRQ, cy);
+          mapper5_reschedule_irq(e, e->s.p.state + 1, cy + 1);
+          LOG("✓  [%3u:%3u] MMC5 irq occured\n", ppu_dot(e), ppu_line(e));
+        }
+      } else {
+        LOG("✓  [%3u:%3u] MMC5, scan = %u\n", ppu_dot(e), ppu_line(e),
+            m->mmc5.scan);
+      }
+    }
+  }
   if ((addr & 0x3000) == 0x2000 && addr == m->mmc5.lastaddr) {
     LOG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", ppu_dot(e),
         ppu_line(e), m->mmc5.match_count + 1, m->mmc5.lastaddr);
     ++m->mmc5.match_count;
   } else {
-    if (m->mmc5.match_count == 2) {
-      if (!m->mmc5.in_frame) {
-        m->mmc5.in_frame = true;
-        m->mmc5.scan = 0;
-        LOG("✓  [%3u:%3u] MMC5, setting scan to 0\n", ppu_dot(e), ppu_line(e));
-      } else {
-        if (++m->mmc5.scan == m->mmc5.scan_cmp) {
-          LOG("✓  [%3u:%3u] MMC5, scanline match = %u\n", ppu_dot(e),
-              ppu_line(e), m->mmc5.scan);
-          m->mmc5.irq_pending = true;
-          if (m->mmc5.irq_enable) {
-            e->s.c.irq |= IRQ_MAPPER;
-          }
-        } else {
-          LOG("✓  [%3u:%3u] MMC5, scan = %u\n", ppu_dot(e), ppu_line(e),
-              m->mmc5.scan);
-        }
-      }
-    }
     m->mmc5.match_count = 0;
   }
   m->mmc5.lastaddr = addr;
@@ -2875,6 +2958,8 @@ static u8 mapper19_read(E *e, u16 addr) {
       return m->namco163.irq_counter & 0xff;
     case 11: // 0x5800..0x5fff            IRQ counter high
       return m->namco163.irq_counter >> 8;
+    case 31: // 0xf800..0xffff
+      return rom_read(e, addr);
   }
   return e->s.c.open_bus;
 }
@@ -5335,9 +5420,9 @@ static Result init_mapper(E *e) {
     e->mapper_io_write = mapper5_io_write;
     e->mapper_prg_ram_write = mapper5_prg_ram_write;
     e->mapper_prg_ram_read = mapper5_prg_ram_read;
-    e->mapper_cpu_step = mapper5_cpu_step;
     e->mapper_on_ppu_addr_updated = mapper5_on_ppu_addr_updated;
     e->mapper_on_chr_read = mapper5_on_ppu_addr_updated;
+    e->mapper_reschedule_irq = mapper5_reschedule_irq;
     e->mapper_update_nt_map = update_nt_map_banking;
     e->s.m.prg_bank[3] = 0xff;
     e->s.m.mmc5.prg_mode = 3;
