@@ -2062,32 +2062,6 @@ static void mapper3_write(E *e, u16 addr, u8 val) {
   set_chr8k_map(e, m->chr_bank[0]);
 }
 
-static void mapper206_write(E *e, u16 addr, u8 val) {
-  M* m = &e->s.m;
-  if (addr < 0x8000) return;
-  if ((addr & 0xe001) == 0x8000) { // Bank Select
-    m->m206.bank_select = val & 7;
-  } else if ((addr & 0xe001) == 0x8001) { // Bank data
-    u8 select = m->m206.bank_select;
-    switch (select) {
-      case 0: case 1:  // CHR 2k banks at $0000, $0800
-        m->chr_bank[select] = val & 0b111110 & (e->ci.chr2k_banks - 1);
-        break;
-      case 2: case 3: case 4: case 5:  // CHR 1k banks at $1000, $1400, $1800, $1C00
-        m->chr_bank[select] = val & 0b111111 & (e->ci.chr1k_banks - 1);
-        break;
-      case 6: case 7:  // PRG 8k bank at $8000, $A000
-        m->prg_bank[select - 6] = val & 0b1111 & (e->ci.prg8k_banks - 1);
-        break;
-    }
-    set_chr1k_map(e, m->chr_bank[0], m->chr_bank[0] + 1, m->chr_bank[1],
-                  m->chr_bank[1] + 1, m->chr_bank[2], m->chr_bank[3],
-                  m->chr_bank[4], m->chr_bank[5]);
-    set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], e->ci.prg8k_banks - 2,
-                  e->ci.prg8k_banks - 1);
-  }
-}
-
 static int mapper4_irq_delta_cy(int irq_dot, uint8_t irq_counter, int start_dot,
                                 int line, bool odd_frame) {
   int dcy = 0;
@@ -2193,6 +2167,7 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   switch (addr >> 12) {
     case 8: case 9: { // Bank Select / Bank Data
+      ppu_sync(e, "mapper4 write");
       if (addr & 1) {
         u8 reg = m->mmc3.bank_select & 7;
         if (reg <= 5) { // Set CHR bank
@@ -2209,7 +2184,6 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
         }
       }
 
-      ppu_sync(e, "mapper4 write");
       if (m->mmc3.bank_select & 0x80) {
         set_chr1k_map(e, m->chr_bank[2], m->chr_bank[3], m->chr_bank[4],
                       m->chr_bank[5], m->chr_bank[0] & ~1,
@@ -2248,7 +2222,10 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
                 m->prg_ram_en, m->prg_ram_write_en);
         }
       } else {
-        set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
+        // HACK
+        if (e->ci.mapper != 118) {
+          set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
+        }
       }
       break;
     case 12: case 13: // IRQ latch / IRQ reload
@@ -3843,6 +3820,32 @@ static void mapper87_write(E *e, u16 addr, u8 val) {
                                     (e->ci.chr8k_banks - 1));
 }
 
+static void mapper206_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (addr < 0x8000) return;
+  if ((addr & 0xe001) == 0x8000) { // Bank Select
+    m->m206.bank_select = val & 7;
+  } else if ((addr & 0xe001) == 0x8001) { // Bank data
+    u8 select = m->m206.bank_select;
+    switch (select) {
+      case 0: case 1:  // CHR 2k banks at $0000, $0800
+        m->chr_bank[select] = val & 0b111110 & (e->ci.chr2k_banks - 1);
+        break;
+      case 2: case 3: case 4: case 5:  // CHR 1k banks at $1000, $1400, $1800, $1C00
+        m->chr_bank[select] = val & 0b111111 & (e->ci.chr1k_banks - 1);
+        break;
+      case 6: case 7:  // PRG 8k bank at $8000, $A000
+        m->prg_bank[select - 6] = val & 0b1111 & (e->ci.prg8k_banks - 1);
+        break;
+    }
+    set_chr1k_map(e, m->chr_bank[0], m->chr_bank[0] + 1, m->chr_bank[1],
+                  m->chr_bank[1] + 1, m->chr_bank[2], m->chr_bank[3],
+                  m->chr_bank[4], m->chr_bank[5]);
+    set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], e->ci.prg8k_banks - 2,
+                  e->ci.prg8k_banks - 1);
+  }
+}
+
 static void mapper210_shared_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   switch (addr & 0xf800) {
@@ -3884,6 +3887,25 @@ static void mapper_namcot_340_write(E *e, u16 addr, u8 val) {
     Mirror s_mirror[] = {MIRROR_SINGLE_0, MIRROR_VERTICAL, MIRROR_SINGLE_1,
                          MIRROR_HORIZONTAL};
     set_mirror(e, s_mirror[val >> 6]);
+  }
+}
+
+static void mapper118_write(E *e, u16 addr, u8 val) {
+  mapper4_write(e, addr, val);
+  M* m = &e->s.m;
+  if ((addr & 0xe001) == 0x8001) {
+    u8 reg = m->mmc3.bank_select & 7;
+    u8 bank = val >> 7;
+    if (reg < 2) {
+      if (!(m->mmc3.bank_select & 0x80)) {
+        m->ppu1k_bank[8 + reg * 2] = m->ppu1k_bank[9 + reg * 2] = bank;
+      }
+    } else if (reg < 6) {
+      if (m->mmc3.bank_select & 0x80) {
+        m->ppu1k_bank[8 + reg - 2] = bank;
+      }
+    }
+    update_nt_map_banking(e);
   }
 }
 
@@ -5387,13 +5409,26 @@ static Result init_mapper(E *e) {
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
   case 4:
-    e->mapper_write = mapper4_write;
+  case 118:
+    if (e->ci.mapper == 4) {
+      e->mapper_write = mapper4_write;
+      e->mapper_update_nt_map = e->ci.mirror == MIRROR_FOUR_SCREEN
+                                    ? update_nt_map_fourscreen
+                                    : update_nt_map_mirror;
+      set_mirror(e, e->ci.mirror);
+    } else {
+      assert(e->ci.mapper == 118);
+      e->mapper_write = mapper118_write;
+      e->mapper_update_nt_map = update_nt_map_banking;
+      for (int i = 8; i < 16; ++i) {
+        e->s.m.ppu1k_bank[i] = 0;
+        e->s.m.ppu1k_loc[i] = PPU_BANK_NTRAM;
+      }
+      update_nt_map_banking(e);
+    }
     e->mapper_on_ppu_addr_updated = mapper4_on_ppu_addr_updated;
     e->mapper_on_chr_read = mapper4_on_ppu_addr_updated;
     e->mapper_reschedule_irq = mapper4_reschedule_irq;
-    e->mapper_update_nt_map = e->ci.mirror == MIRROR_FOUR_SCREEN
-                                  ? update_nt_map_fourscreen
-                                  : update_nt_map_mirror;
     e->s.m.mmc3.bank_select = 0;
     e->s.m.mmc3.irq_latch = 0;
     e->s.m.mmc3.irq_reload = true;
@@ -5402,7 +5437,6 @@ static Result init_mapper(E *e) {
         e->s.m.chr_bank[5] = 0;
     e->s.m.chr_bank[1] = e->s.m.chr_bank[3] = 1;
     e->s.m.prg_bank[0] = e->s.m.prg_bank[1] = 0;
-    set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     if (e->ci.submapper == 1) {
