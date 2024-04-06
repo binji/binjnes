@@ -2051,6 +2051,9 @@ static void mapper1_write(E *e, u16 addr, u8 val) {
 static void mapper2_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
+  if (e->ci.submapper == 2) {
+    val &= rom_read(e, addr);
+  }
   m->prg_bank[0] = val & (e->ci.prg16k_banks - 1);
   set_prg16k_map(e, m->prg_bank[0], e->ci.prg16k_banks - 1);
 }
@@ -2058,6 +2061,9 @@ static void mapper2_write(E *e, u16 addr, u8 val) {
 static void mapper3_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
+  if (e->ci.submapper == 2) {
+    val &= rom_read(e, addr);
+  }
   m->chr_bank[0] = val & (e->ci.chr8k_banks - 1);
   set_chr8k_map(e, m->chr_bank[0]);
 }
@@ -2757,6 +2763,9 @@ static void mapper5_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
 static void mapper7_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
+  if (e->ci.submapper == 2) {
+    val &= rom_read(e, addr);
+  }
   m->prg_bank[0] = (val & 7) & (e->ci.prg32k_banks - 1);
   set_prg32k_map(e, m->prg_bank[0]);
   set_mirror(e, MIRROR_SINGLE_0 + ((val & 0x10) ? 0 : 1));
