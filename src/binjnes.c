@@ -652,6 +652,9 @@ static void run_until_ticks(Ticks until_ticks) {
     event = emulator_run_until(e, until_ticks);
 
     if (event & EMULATOR_EVENT_NEW_FRAME) {
+      if (!new_frame) {
+        emulator_convert_frame_buffer(e, s_frame_buffer);
+      }
       new_frame = true;
 
       if (!s_rewind_state.rewinding) {
@@ -697,10 +700,6 @@ static void run_until_ticks(Ticks until_ticks) {
     }
   } while (!(event & (EMULATOR_EVENT_UNTIL_TICKS | EMULATOR_EVENT_BREAKPOINT |
                       EMULATOR_EVENT_INVALID_OPCODE)));
-
-  if (new_frame) {
-    emulator_convert_frame_buffer(e, s_frame_buffer);
-  }
 
   if (event & EMULATOR_EVENT_INVALID_OPCODE) {
     // set_status_text("invalid opcode!");

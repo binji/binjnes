@@ -340,9 +340,6 @@ int main(int argc, char** argv) {
         size_t wrote = fwrite(audio_buffer->data, 1, bytes, output_audio_file);
         CHECK_MSG(wrote == bytes, "Failed to write %zu bytes.\n", wrote);
       }
-      if (finish_at_next_frame) {
-        break;
-      }
     }
     if (event & EMULATOR_EVENT_UNTIL_TICKS) {
       finish_at_next_frame = true;
