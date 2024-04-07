@@ -2074,47 +2074,125 @@ static void mapper3_write(E *e, u16 addr, u8 val) {
   set_chr8k_map(e, m->chr_bank[0]);
 }
 
-static int mapper4_irq_delta_cy(int irq_dot, uint8_t irq_counter, int start_dot,
-                                int line, bool odd_frame) {
+static void mapper4_push_a12_high(E *e, int line, int fetch) {
+  assert(e->mmc3_a12_high_count < ARRAY_SIZE(e->mmc3_a12_high));
+  e->mmc3_a12_high[e->mmc3_a12_high_count++] = line * 341 + fetch * 8 + 5;
+  e->mmc3_a12_high[e->mmc3_a12_high_count++] = line * 341 + fetch * 8 + 7;
+}
+
+static void mapper4_calculate_a12_high_scanline(E *e, int line) {
+  P* p = &e->s.p;
+  if (p->ppuctrl & 0x10) {  // BG pattern table 0x1000
+    for (int n = 0; n < 32; ++n) {
+      mapper4_push_a12_high(e, line, n);
+    }
+  }
+  if ((p->ppuctrl & 0x28) == 0x08) {  // Sprite pattern table 0x1000
+    for (int n = 32; n < 40; ++n) {
+      mapper4_push_a12_high(e, line, n);
+    }
+  } else if ((p->ppuctrl & 0x20) == 0x20) {  // 8x16 sprites
+    // Calculate tiles of sprites for this line
+    uint8_t tiles[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
+    int s_count = 0;
+    if (line != 0) {
+      for (int s = 0; s < 64; ++s) {
+        int y = p->oam[s * 4];
+        if ((unsigned)(line - (y+1)) < 16) {
+          tiles[s_count++] = p->oam[s * 4 + 1];
+          if (s_count >= 8) {
+            break;
+          }
+        }
+      }
+    }
+    // Mark any sprites using the "high" table (0x1000)
+    for (int s = 0; s < 8; ++s) {
+      if (tiles[s] & 1) {
+        mapper4_push_a12_high(e, line, s + 32);
+      }
+    }
+  }
+  if (p->ppuctrl & 0x10) {
+    for (int n = 40; n < 42; ++n) {
+      mapper4_push_a12_high(e, line, n);
+    }
+  }
+}
+
+static void mapper4_calculate_a12_high_table(E *e) {
+  e->mmc3_a12_high_count = 0;
+  e->mmc3_irq_clock_count = 0;
+  for (int sl = 0; sl < 240; ++sl) {
+    mapper4_calculate_a12_high_scanline(e, sl);
+  }
+  mapper4_calculate_a12_high_scanline(e, 261);
+}
+
+static void mapper4_calculate_irq_clock_table(E *e) {
+  if (e->mmc3_a12_high_count == 0) return;
+  int last_low = e->mmc3_a12_high[e->mmc3_a12_high_count - 1] - 341 * 262 + 2;
+  for (u32 i = 0; i < e->mmc3_a12_high_count; ++i) {
+    int cur_high = e->mmc3_a12_high[i];
+    if (cur_high - last_low >= 10) {
+      e->mmc3_irq_clock[e->mmc3_irq_clock_count++] = cur_high;
+    }
+    last_low = cur_high + 2;
+  }
+}
+
+static int mapper4_predict_irq_delta_cy(E* e, int irq_counter, u32 state,
+                                        bool odd_frame) {
   int dcy = 0;
   if (irq_counter == 0) return 0;
-  // Move to irq_dot
-  if (line <= 239) {
-    if (start_dot <= irq_dot) {
-      if (line == 0 && start_dot == 0 && (odd_frame ^= 1)) {
-        dcy--;
-      }
-      dcy += irq_dot - start_dot;
-    } else if (line == 239) {
-      dcy += irq_dot - start_dot + 341 * (261 - line);
-      line = 261;
-    } else {
-      dcy += irq_dot - start_dot + 341;
-      ++line;
+#define MAPPER4_GET(x) (x)
+#define MAPPER4_CMP(x, y) ((x) < (y))
+  LOWER_BOUND(u32, a12_high, &e->mmc3_a12_high[0],
+              &e->mmc3_a12_high[e->mmc3_a12_high_count], state, MAPPER4_GET,
+              MAPPER4_CMP);
+  assert(a12_high != NULL);
+  u32 index = a12_high - &e->mmc3_a12_high[0];
+  while (e->mmc3_a12_high[index] < state) {
+    if (++index == e->mmc3_a12_high_count) {
+      index = 0;
+      break;
     }
-  } else if (line < 261) {
-    dcy += irq_dot - start_dot + 341 * (261 - line);
-    line = 261;
-  } else if (start_dot <= irq_dot) {
-    dcy += irq_dot - start_dot;
-  } else {
-    if (odd_frame ^= 1) dcy--;
-    dcy += irq_dot - start_dot + 341;
-    if (++line == 262) line = 0;
   }
-  while (--irq_counter > 0) {
-    if (line < 239) {
-      int left = MIN(irq_counter, 239 - line);
-      dcy += 341 * left;
-      line += left;
-      irq_counter -= left - 1;
-    } else if (line == 261) {
-      dcy += 341 - (odd_frame ^= 1);
-      line = 0;
-    } else {
-      dcy += 341 * (261 - line);
-      line = 261;
+  if (irq_counter == 1) {
+    int diff = e->mmc3_a12_high[index] - state;
+    DEBUG("irq_counter=%u low_count=%u state=%u next_high=%u (diff=%d)\n",
+           irq_counter, (u32)e->s.p.a12_low_count, state,
+           e->mmc3_a12_high[index], diff);
+    if (diff + e->s.p.a12_low_count >= 10) {
+      return diff;
     }
+  }
+
+  // binary search to find next clock.
+  LOWER_BOUND(u32, irq_clock, &e->mmc3_irq_clock[0],
+              &e->mmc3_irq_clock[e->mmc3_irq_clock_count], state, MAPPER4_GET,
+              MAPPER4_CMP);
+#undef MAPPER4_GET
+#undef MAPPER4_CMP
+  assert(irq_clock != NULL);
+  index = irq_clock - &e->mmc3_irq_clock[0];
+  if (e->mmc3_irq_clock[index] < state && ++index == e->mmc3_irq_clock_count) {
+    index = 0;
+  }
+  DEBUG("started at [%u:%u] (clocks=%u)\n", state % 341, state / 341,
+        irq_counter);
+  while (--irq_counter >= 0) {
+    u32 last_dcy = dcy;
+    u32 next_clock = e->mmc3_irq_clock[index++];
+    if (index == e->mmc3_irq_clock_count) index = 0;
+    if (next_clock < state) {
+      dcy += next_clock + (341 * 262 - state - (odd_frame ^= 1));
+    } else {
+      dcy += next_clock - state;
+    }
+    state = next_clock;
+    DEBUG("moved to [%u:%u] (state=%u) (+%d) (clocks=%u)\n", state % 341,
+          state / 341, state, dcy - last_dcy, irq_counter);
   }
   return dcy;
 }
@@ -2124,55 +2202,28 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   P* p = &e->s.p;
   int dot = pstate % 341;
   int line = pstate / 341;
-  if (!m->mmc3.irq_enable || (p->ppumask & 0x18) == 0) {
-    LOG("[%" PRIu64
+  u8 mode = p->ppuctrl & 0x38;
+  if (!m->mmc3.irq_enable || (p->ppumask & 0x18) == 0 || mode == 0) {
+    DEBUG("[%" PRIu64
         "] clearing mapper irq state=%u [%u:%u] frame=%u irq_enable=%u "
         "ppumask=%02x\n",
         cy, p->state, dot, line, p->frame, m->mmc3.irq_enable, p->ppumask);
     sched_clear(e, SCHED_MAPPER_IRQ);
     return;
   }
-  u8 mode = p->ppuctrl & 0x38;
   DEBUG("[%" PRIu64
         "] scheduling irq state=%u [%u:%u] frame=%u latch=%u counter=%u "
         "mode=%02x\n",
         cy, p->state, dot, line, p->frame, m->mmc3.irq_latch,
         p->a12_irq_counter, mode);
-  switch (mode) {
-    case 0x00:
-      LOG("[%" PRIu64 "] clearing mapper irq since ppuctrl=00\n", cy);
-      sched_clear(e, SCHED_MAPPER_IRQ);
-      break;
-    case 0x08:
-    case 0x10:
-    case 0x28: {
-      bool reload = m->mmc3.irq_reload || p->a12_irq_counter == 0;
-      u32 counter = 0, irq_dot = 0;
-      if ((mode & 8) == 8) {
-        counter = reload ? m->mmc3.irq_latch + 1 : p->a12_irq_counter;
-        irq_dot = 261;
-      } else {
-        // Most mmc3 clocks for mode 0x10 occur on dot 325 of the previous
-        // scanline, but the first one occurs on dot 5 of scanline 261.
-        counter = reload ? m->mmc3.irq_latch : p->a12_irq_counter - 1;
-        irq_dot = 325;
-        if (counter == 0) {
-          counter++;
-          irq_dot = 5;
-        }
-      }
-      int dcy = mapper4_irq_delta_cy(irq_dot, counter, dot, line, p->frame & 1);
-      LOG("[%" PRIu64 "] scheduling mapper irq at %" PRIu64 "\n", cy, cy + dcy);
-      sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
-      break;
-    }
-    default:
-      fprintf(stderr, "unsupported mapper4 irq configuration %02x\n",
-              p->ppuctrl);
-      fflush(stdout);
-      abort();
-      break;
-  }
+  mapper4_calculate_a12_high_table(e);
+  mapper4_calculate_irq_clock_table(e);
+  bool reload = m->mmc3.irq_reload || p->a12_irq_counter == 0;
+  int counter = reload ? m->mmc3.irq_latch + 1 : p->a12_irq_counter;
+  int dcy =
+      mapper4_predict_irq_delta_cy(e, counter, pstate, p->frame & 1);
+  DEBUG("[%" PRIu64 "] scheduling mapper irq at %" PRIu64 "\n", cy, cy + dcy);
+  sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
 }
 
 static void mapper4_write(E *e, u16 addr, u8 val) {
@@ -2283,6 +2334,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
         cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, ppu_dot(e),
         ppu_line(e), p->ppuctrl, from_cpu);
 
+  bool reschedule = false;
   if (!low) {
     if (p->a12_low_count >= 10) {
       bool trigger_irq = false;
@@ -2311,16 +2363,19 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
             e->s.sc.when[SCHED_MAPPER_IRQ] = cy + 1;
           }
           sched_occurred(e, SCHED_MAPPER_IRQ, cy);
-          mapper4_reschedule_irq(e, e->s.p.state + 1, cy + 1);
+          reschedule = true;
         }
       } else if (from_cpu) {
-        mapper4_reschedule_irq(e, e->s.p.state + 1, cy + 1);
+        reschedule = true;
       }
     }
     p->a12_low_count = 0;
   }
   p->a12_low = low;
   p->last_vram_access_cy = cy;
+  if (reschedule) {
+    mapper4_reschedule_irq(e, e->s.p.state + 1, cy + 1);
+  }
 }
 
 static u8 mapper4_hkrom_prg_ram_read(E* e, u16 addr) {
@@ -2348,6 +2403,52 @@ static void mapper5_update_in_frame(E *e, Ticks cy) {
     m->mmc5.in_frame = false;
     m->mmc5.lastaddr = ~0;
   }
+}
+
+// TODO: rename and clean this up since it is only used by mapper5 now.
+static int mapper4_irq_delta_cy(int irq_dot, uint8_t irq_counter, int start_dot,
+                                int line, bool odd_frame) {
+  int dcy = 0;
+  if (irq_counter == 0) return 0;
+  // Move to irq_dot
+  if (line <= 239) {
+    if (start_dot <= irq_dot) {
+      if (line == 0 && start_dot == 0 && (odd_frame ^= 1)) {
+        dcy--;
+      }
+      dcy += irq_dot - start_dot;
+    } else if (line == 239) {
+      dcy += irq_dot - start_dot + 341 * (261 - line);
+      line = 261;
+    } else {
+      dcy += irq_dot - start_dot + 341;
+      ++line;
+    }
+  } else if (line < 261) {
+    dcy += irq_dot - start_dot + 341 * (261 - line);
+    line = 261;
+  } else if (start_dot <= irq_dot) {
+    dcy += irq_dot - start_dot;
+  } else {
+    if (odd_frame ^= 1) dcy--;
+    dcy += irq_dot - start_dot + 341;
+    if (++line == 262) line = 0;
+  }
+  while (--irq_counter > 0) {
+    if (line < 239) {
+      int left = MIN(irq_counter, 239 - line);
+      dcy += 341 * left;
+      line += left;
+      irq_counter -= left - 1;
+    } else if (line == 261) {
+      dcy += 341 - (odd_frame ^= 1);
+      line = 0;
+    } else {
+      dcy += 341 * (261 - line);
+      line = 261;
+    }
+  }
+  return dcy;
 }
 
 static void mapper5_reschedule_irq(E* e, u32 pstate, Ticks cy) {
