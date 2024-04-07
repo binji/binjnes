@@ -591,10 +591,9 @@ static void ppu18(E *e, Ticks cy) { read_atb(e, cy); shift_en(e); spr_step(e, cy
 static void ppu19(E *e, Ticks cy) { read_ntb(e, cy); }
 static void ppu20(E *e, Ticks cy) { read_ntb(e, cy); shift_bg(e); reload(e, false); }
 static void ppu21(E *e, Ticks cy) { read_ntb(e, cy); shift_en(e); reload(e, false); spr_step(e, cy); }
-static void ppu22(E *e, Ticks cy) { read_ntb(e, cy); spr_step(e, cy); }
 static void ppu23(E *e, Ticks cy) { shift_bg(e); }
 static void ppu24(E *e, Ticks cy) { shift_dis(e); }
-static void ppu25(E *e, Ticks cy) { shift_dis(e); sprfetch(e, cy); }
+static void ppu25(E *e, Ticks cy) { shift_dis(e); sprfetch(e, cy); spr_step(e, cy); }
 static void ppu26(E *e, Ticks cy) { shift_en(e); reload(e, false); sprfetch(e, cy); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
 static void ppu27(E *e, Ticks cy) { shift_en(e); spr_step(e, cy); }
 static void ppu28(E *e, Ticks cy) { spr_step(e, cy); }
@@ -615,12 +614,11 @@ static void ppu31(E *e, Ticks cy) {
   }
   e->s.p.toggled_rendering_near_skipped_cycle = false;
 }
-static void ppu32(E *e, Ticks cy) { sprfetch(e, cy); }
+static void ppu32(E *e, Ticks cy) { sprfetch(e, cy); spr_step(e, cy); }
 static void ppu33(E *e, Ticks cy) { sprfetch(e, cy); spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x041f); }
 static void ppu34(E *e, Ticks cy) { spreval(e); inch(&e->s.p); shift_en(e); spr_step(e, cy); }
 static void ppu35(E *e, Ticks cy) { spreval(e); shift_dis(e); }
 
-static void ppu36(E *e, Ticks cy) { read_ntb(e, cy); }
 static void ppu37(E *e, Ticks cy) { shift_en(e); }
 static void ppu38(E *e, Ticks cy) { read_atb(e, cy); shift_en(e); }
 static void ppu39(E *e, Ticks cy) { e->s.p.ptbl = read_ptb(e, 0, cy); shift_en(e); }
@@ -643,10 +641,25 @@ static void init_ppu_steps(E* e) {
       3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
       3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
       3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
-      0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1,
+      0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
   };
   static const u8 s_steps[][341] = {
       {0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+      {0, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -680,22 +693,7 @@ static void init_ppu_steps(E* e) {
        29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 29, 28,
        28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 19, 23, 17,
        23, 13, 23, 10, 5,  20, 23, 17, 23, 13, 23, 10, 5,  43, 0,  19, 15},
-      {0, 3, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-      {30, 36, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42,
+      {30, 19, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42,
        37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38,
        37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39,
        37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 34, 21, 27, 18, 27, 14, 27, 11,
@@ -714,7 +712,7 @@ static void init_ppu_steps(E* e) {
        28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28,
        28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 19, 23, 17,
        23, 13, 23, 10, 5,  20, 23, 17, 23, 13, 23, 10, 5,  43, 0,  19, 0},
-      {31, 36, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42,
+      {31, 19, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42,
        37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38,
        37, 39, 37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 41, 42, 37, 38, 37, 39,
        37, 40, 41, 42, 37, 38, 37, 39, 37, 40, 34, 21, 27, 18, 27, 14, 27, 11,
@@ -738,14 +736,14 @@ static void init_ppu_steps(E* e) {
       // Enabled
       NULL,   &ppu1,  &ppu2,  &ppu3,  &ppu4,  &ppu5,  &ppu6,  &ppu7,  &ppu8,
       &ppu9,  &ppu10, &ppu11, &ppu12, &ppu13, &ppu14, &ppu15, &ppu16, &ppu17,
-      &ppu18, &ppu19, &ppu20, &ppu21, &ppu22, &ppu23, &ppu24, &ppu25, &ppu26,
-      &ppu27, &ppu28, &ppu29, &ppu30, &ppu31, &ppu32, &ppu33, &ppu34, &ppu35,
-      &ppu36, &ppu37, &ppu38, &ppu39, &ppu40, &ppu41, &ppu42, &ppu43,
+      &ppu18, &ppu19, &ppu20, &ppu21, NULL,   &ppu23, &ppu24, NULL,   &ppu26,
+      &ppu27, &ppu28, &ppu29, &ppu30, &ppu31, NULL,   &ppu33, &ppu34, NULL,
+      NULL,   &ppu37, &ppu38, &ppu39, &ppu40, &ppu41, &ppu42, &ppu43,
       // Disabled
       NULL,   &ppu1,  &ppu2,  &ppu3,  NULL,   NULL,   &ppu24, NULL,   &ppu24,
       NULL,   NULL,   &ppu24, NULL,   NULL,   &ppu24, &ppu15, NULL,   NULL,
       &ppu24, NULL,   NULL,   &ppu24, NULL,   NULL,   NULL,   NULL,   &ppu25,
-      &ppu24, NULL,   NULL,   &ppu30, &ppu31, NULL,   &ppu32, &ppu35, NULL,
+      &ppu24, &ppu28, &ppu28, &ppu30, &ppu31, NULL,   &ppu32, &ppu35, NULL,
       NULL,   &ppu24, &ppu24, &ppu24, &ppu24, &ppu24, &ppu24, NULL,
   };
   e->ppu_steps = xmalloc(2 * num_lines * num_dots * sizeof(PPUStepFunc));
@@ -833,9 +831,16 @@ static void spr5(E *e, Ticks cy) {
 static void spr6(E *e, Ticks cy) { ++e->s.p.spr.s; }
 static void spr7(E *e, Ticks cy) { e->s.p.spr.state = e->s.p.spr.s >= 256 ? 17 : 9; }
 static void spr8(E *e, Ticks cy) { e->s.p.spr.state = 17; }
-static void spr9(E *e, Ticks cy) { read_ntb(e, cy); }  // garbage read}
-static void spr10(E *e, Ticks cy) { read_atb(e, cy); } // garbage read
+static void spr9(E *e, Ticks cy) {
+  if (!e->s.p.enabled) return;
+  read_ntb(e, cy);  // garbage read
+}
+static void spr10(E *e, Ticks cy) {
+  if (!e->s.p.enabled) return;
+  read_atb(e, cy);  // garbage read
+}
 static void spr11(E *e, Ticks cy) {
+  if (!e->s.p.enabled) return;
   P* p = &e->s.p;
   Spr* spr = &e->s.p.spr;
   spr->y = (scany(p) - 1) - p->oam2[spr->s];
@@ -852,6 +857,7 @@ static void spr11(E *e, Ticks cy) {
   }
 }
 static void spr12(E *e, Ticks cy) {
+  if (!e->s.p.enabled) return;
   P* p = &e->s.p;
   Spr* spr = &e->s.p.spr;
   int idx = spr->s >> 2;
