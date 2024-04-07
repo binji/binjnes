@@ -3945,7 +3945,7 @@ static void mapper206_write(E *e, u16 addr, u8 val) {
     u8 select = m->m206.bank_select;
     switch (select) {
       case 0: case 1:  // CHR 2k banks at $0000, $0800
-        m->chr_bank[select] = val & 0b111110 & (e->ci.chr2k_banks - 1);
+        m->chr_bank[select] = val & 0b111110 & (e->ci.chr1k_banks - 1);
         break;
       case 2: case 3: case 4: case 5:  // CHR 1k banks at $1000, $1400, $1800, $1C00
         m->chr_bank[select] = val & 0b111111 & (e->ci.chr1k_banks - 1);
