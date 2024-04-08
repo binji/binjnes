@@ -5348,7 +5348,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
   const CartDbInfo* cart_db_info = cartdb_info_from_file(file_data);
   if (cart_db_info) {
-    LOG("Found in cartdb\n");
+    printf("Found in cartdb\n");
     ci->is_nes2_0 = false;
     ci->has_trainer = false;
     ci->mapper = cart_db_info->mapper;
@@ -5359,8 +5359,9 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->prg16k_banks = cart_db_info->prgrom >> 14;
     ci->prg8k_banks = cart_db_info->prgrom >> 13;
     ci->prg_data = file_data->data + kHeaderSize;
-    ci->prgram8k_banks = cart_db_info->prgram >> 14;
-    ci->prgram512b_banks = cart_db_info->prgram >> 9;
+    u32 prgram = MAX(cart_db_info->prgram, cart_db_info->prgnvram);
+    ci->prgram8k_banks = prgram >> 13;
+    ci->prgram512b_banks = prgram >> 9;
     if (cart_db_info->chrrom) {
       ci->chr8k_banks = cart_db_info->chrrom >> 13;
       ci->chr4k_banks = cart_db_info->chrrom >> 12;
@@ -5368,10 +5369,11 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->chr1k_banks = cart_db_info->chrrom >> 10;
       ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
     } else {
-      ci->chr8k_banks = cart_db_info->chrram >> 13;
-      ci->chr4k_banks = cart_db_info->chrram >> 12;
-      ci->chr2k_banks = cart_db_info->chrram >> 11;
-      ci->chr1k_banks = cart_db_info->chrram >> 10;
+      u32 chrram = MAX(cart_db_info->chrram, cart_db_info->chrnvram);
+      ci->chr8k_banks = chrram >> 13;
+      ci->chr4k_banks = chrram >> 12;
+      ci->chr2k_banks = chrram >> 11;
+      ci->chr1k_banks = chrram >> 10;
       ci->chr_data = e->s.p.chr_ram;
     }
 
@@ -5408,7 +5410,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
     /* Use detection from NESwiki */
     if ((flag7 & 0xc) == 8 && file_data->size >= data_size + nes2_data_size) {
-      LOG("Found NES 2.0 header\n");
+      printf("Found NES 2.0 header\n");
       data_size += nes2_data_size;
       ci->is_nes2_0 = true;
       ci->mapper = ((file_data->data[8] & 0xf) << 8) | (flag7 & 0xf0) |
@@ -5432,7 +5434,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
         ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
       }
     } else if ((flag7 & 0xc) == 0) {
-      LOG("Found iNES header\n");
+      printf("Found iNES header\n");
       data_size += ines_data_size;
       ci->is_nes2_0 = false;
       ci->mapper = (flag7 & 0xf0) | ((flag6 & 0xf0) >> 4);
@@ -5440,7 +5442,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->chr8k_banks = ines_chr8k_banks;
       ci->prgram8k_banks = file_data->data[8];
     } else {
-      LOG("Found archaic iNES header\n");
+      printf("Found archaic iNES header\n");
       ci->mapper = (flag6 & 0xf0) >> 4;
       ci->prg16k_banks = ines_prg16k_banks;
       ci->chr8k_banks = ines_chr8k_banks;
@@ -5475,9 +5477,10 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
   printf("mapper=%u submapper=%u mirror=%u\n", ci->mapper, ci->submapper,
       ci->mirror);
-  printf("prg: 32k=%u 16k=%u 8k=%u\n", ci->prg32k_banks, ci->prg16k_banks,
+  printf("prgrom: 32k=%u 16k=%u 8k=%u\n", ci->prg32k_banks, ci->prg16k_banks,
       ci->prg8k_banks);
-  printf("chr: 8k=%u 4k=%u 2k=%u 1k=%u\n", ci->chr8k_banks, ci->chr4k_banks,
+  printf("prgram: 8k=%u 512b=%u\n", ci->prgram8k_banks, ci->prgram512b_banks);
+  printf("chrr*m: 8k=%u 4k=%u 2k=%u 1k=%u\n", ci->chr8k_banks, ci->chr4k_banks,
       ci->chr2k_banks, ci->chr1k_banks);
 
   return OK;
