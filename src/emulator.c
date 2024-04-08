@@ -4039,6 +4039,24 @@ static void mapper_namcot_175_prg_ram_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static void mapper232_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr >> 14) {
+    case 2: // 0x8000..0xbfff
+      if (e->ci.submapper == 1) {
+        // Swap outer bank bits
+        val = ((val << 1) & 0x10) | ((val >> 1) & 8);
+      }
+      m->prg_bank[0] = (m->prg_bank[0] & 3) | ((val & 0x18) >> 1);
+      break;
+
+    case 3: // 0xc000..0xffff
+      m->prg_bank[0] = (m->prg_bank[0] & ~3) | (val & 3);
+      break;
+  }
+  set_prg16k_map(e, m->prg_bank[0], m->prg_bank[0] | 3);
+}
+
 static inline u8 get_P(E *e, bool B) {
   return (e->s.c.N << 7) | (e->s.c.V << 6) | 0x20 | (B << 4) | (e->s.c.D << 3) |
          (e->s.c.I << 2) | (e->s.c.Z << 1) | (e->s.c.C << 0);
@@ -5351,7 +5369,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
 
   const CartDbInfo* cart_db_info = cartdb_info_from_file(file_data);
   if (cart_db_info) {
-    printf("Found in cartdb\n");
+    printf("Found in cartdb (crc=%04x)\n", cart_db_info->crc);
     ci->is_nes2_0 = false;
     ci->has_trainer = false;
     ci->mapper = cart_db_info->mapper;
@@ -5815,6 +5833,14 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
+    break;
+
+  case 232:
+    e->mapper_write = mapper232_write;
+    e->s.m.prg_bank[0] = (e->ci.prg16k_banks - 1) & ~3;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, e->s.m.prg_bank[0], e->ci.prg16k_banks - 1);
     break;
 
   unsupported:
