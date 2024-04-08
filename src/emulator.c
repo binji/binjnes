@@ -1994,12 +1994,15 @@ static void mapper0_write(E *e, u16 addr, u8 val) {}
 static void mapper1_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
+  u64 last_write_cy = m->mmc1.last_write_cy;
+  m->mmc1.last_write_cy = e->s.cy;
   if (val & 0x80) {
     m->mmc1.bits = 5;
     m->mmc1.data = 0;
     m->mmc1.ctrl |= 0xc;
     return;
   }
+  if (e->s.cy - last_write_cy <= 3) return;
   m->mmc1.data = (m->mmc1.data >> 1) | (val & 1) << 7;
   if (--m->mmc1.bits > 0) return;
   m->mmc1.bits = 5;

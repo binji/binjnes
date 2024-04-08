@@ -129,6 +129,7 @@ typedef struct {
   u16 nt_bank[4];
   union {
     struct {
+      u64 last_write_cy;
       u8 bits, data, ctrl;
       u8 prg256k;
     } mmc1;
