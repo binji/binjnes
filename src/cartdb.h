@@ -61,7 +61,7 @@ typedef struct {
   bool battery;
 } CartDbInfo;
 
-const CartDbInfo* cartdb_info_from_file(const FileData*);
+bool cartdb_info_from_file(const FileData*, CartDbInfo*);
 
 #ifdef __cplusplus
 }

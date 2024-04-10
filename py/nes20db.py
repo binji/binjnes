@@ -2,8 +2,14 @@
 
 import argparse
 import collections
+import math
 import sys
 import xml.etree.ElementTree as ET
+
+MAPPERS = set([
+    0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 18, 19, 21, 23, 24, 25, 26, 28, 30,
+    34, 66, 69, 71, 78, 79, 85, 87, 118, 146, 163, 206, 210, 232,
+])
 
 class CommentedTreeBuilder(ET.TreeBuilder):
   def comment(self, data):
@@ -20,6 +26,15 @@ def main(args):
      tree = ET.parse(f, parser=ET.XMLParser(target=CommentedTreeBuilder()))
 
   crcs = collections.defaultdict(dict)
+  carts = set()
+  prgrom_s = set()
+  prgram_s = set()
+  prgnvram_s = set()
+  chrrom_s = set()
+  chrram_s = set()
+  chrnvram_s = set()
+
+  cart_crcs = collections.defaultdict(list)
 
   for game in tree.findall('game'):
     name = ""
@@ -30,10 +45,15 @@ def main(args):
     rom = game.find('rom')
     crc = rom.attrib['crc32']
     pcb = game.find('pcb')
-    mapper = pcb.attrib['mapper']
-    submapper = pcb.attrib['submapper']
+    mapper = int(pcb.attrib['mapper'])
+
+    # Don't bother including database entries for mappers we don't support
+    if int(mapper) not in MAPPERS:
+      continue
+
+    submapper = int(pcb.attrib['submapper'])
     mirror = pcb.attrib['mirroring']
-    battery = pcb.attrib['battery']
+    battery = int(pcb.attrib['battery'])
     prgrom = game.find('prgrom')
     prgrom_size = int(prgrom.attrib['size']) if prgrom is not None else 0
     chrrom = game.find('chrrom')
@@ -47,42 +67,123 @@ def main(args):
     chrnvram = game.find('chrnvram')
     chrnvram_size = int(chrnvram.attrib['size']) if chrnvram is not None else 0
 
-    assert crc not in crcs
-    crcs[crc] = {
-      'name': name,
-      'mapper': mapper,
-      'submapper': submapper,
-      'mirror': mirror,
-      'battery': battery,
-      'prgrom': prgrom_size,
-      'chrrom': chrrom_size,
-      'prgram': prgram_size,
-      'chrram': chrram_size,
-      'prgnvram': prgnvram_size,
-      'chrnvram': chrnvram_size,
-    }
+    prgrom_s.add(prgrom_size)
+    prgram_s.add(prgram_size)
+    prgnvram_s.add(prgnvram_size)
+    chrrom_s.add(chrrom_size)
+    chrram_s.add(chrram_size)
+    chrnvram_s.add(chrnvram_size)
 
-  for crc in sorted(crcs.keys()):
-    game = crcs[crc]
-    name = game['name']
-    mapper = game['mapper']
-    submapper = game['submapper']
-    mirror = {
-      'H': 'MIRROR_HORIZONTAL',
-      'V': 'MIRROR_VERTICAL',
-      '0': 'MIRROR_SINGLE_0',
-      '1': 'MIRROR_SINGLE_1',
-      '4': 'MIRROR_FOUR_SCREEN',
-    }[game['mirror']]
-    battery = game['battery']
-    prgrom = game['prgrom']
-    prgram = game['prgram']
-    prgnvram = game['prgnvram']
-    chrrom = game['chrrom']
-    chrram = game['chrram']
-    chrnvram = game['chrnvram']
-    print(f'  /* {name} */')
-    print(f'  {{.crc=0x{crc}, .mapper={mapper}, .submapper={submapper}, .mirror={mirror}, .battery={battery}, .prgrom={prgrom}, .prgram={prgram}, .prgnvram={prgnvram}, .chrrom={chrrom}, .chrram={chrram}, .chrnvram={chrnvram}}},')
+    assert crc not in crcs
+    cart = (
+      mapper,submapper,mirror,battery,
+      prgrom_size,chrrom_size,prgram_size,
+      chrram_size,prgnvram_size,chrnvram_size
+    )
+    carts.add(cart)
+    cart_crcs[cart].append((name, crc))
+    # crcs[crc] = { 'name': name, 'cart': cart }
+
+  sizes = sorted(prgrom_s | chrrom_s | prgram_s | chrram_s | prgnvram_s | chrnvram_s)
+  print('typedef enum {')
+  for size in sizes:
+    assert size % 1024 == 0
+    print(f'  SIZE_{size//1024}K,')
+  print('} Size;\n')
+
+  print('static const u32 s_sizes[] = {')
+  for size in sizes:
+    print(f'  {size},')
+  print('};\n')
+
+  print('''typedef struct {
+  u16 mapper;
+  u8 submapper;
+  Size prgrom, prgram, prgnvram;
+  Size chrrom, chrram, chrnvram;
+  Mirror mirror;
+  bool battery;
+} Cart;\n''')
+
+  mirror_enum = {
+    'H': 'MIRROR_HORIZONTAL',
+    'V': 'MIRROR_VERTICAL',
+    '0': 'MIRROR_SINGLE_0',
+    '1': 'MIRROR_SINGLE_1',
+    '4': 'MIRROR_FOUR_SCREEN',
+  }
+
+  def size(s):
+      return f'SIZE_{s//1024}K'
+
+  carts = sorted(carts)
+
+  print('static const Cart s_carts[] = {')
+  for i, cart in enumerate(carts):
+    mapper, submapper, mirror, battery, prgrom_size, chrrom_size, prgram_size, chrram_size, prgnvram_size, chrnvram_size = cart
+    print(f'  /* {i} */ {{', end='')
+    print(f'.mapper={mapper},', end='')
+    if submapper:
+      print(f'.submapper={submapper},', end='')
+    print(f'.prgrom={size(prgrom_size)},', end='')
+    if prgram_size:
+      print(f'.prgram={size(prgram_size)},', end='')
+    if prgnvram_size:
+      print(f'.prgnvram={size(prgnvram_size)},', end='')
+    if chrrom_size:
+      print(f'.chrrom={size(chrrom_size)},', end='')
+    if chrram_size:
+      print(f'.chrram={size(chrram_size)},', end='')
+    if chrnvram_size:
+      print(f'.chrnvram={size(chrnvram_size)},', end='')
+    print(f'.mirror={mirror_enum[mirror]},', end='')
+    if battery:
+      print(f'.battery={battery},', end='')
+    print('},\n', end='')
+  print('};\n')
+
+  cart_crc_keys = sorted(cart_crcs.keys())
+  print('static const u32 s_crcs[] = {')
+  for i, cart in enumerate(cart_crc_keys):
+    crcs = cart_crcs[cart]
+    mapper, submapper, mirror, battery, prgrom_size, chrrom_size, prgram_size, chrram_size, prgnvram_size, chrnvram_size = cart
+    print(f'/**** {i} ', end='')
+    print(f'mapper={mapper} ', end='')
+    if submapper:
+      print(f'submapper={submapper} ', end='')
+    print(f'prgrom={prgrom_size//1024}K ', end='')
+    if prgram_size:
+      print(f'prgram={prgram_size//1024}K ', end='')
+    if prgnvram_size:
+      print(f'prgnvram={prgnvram_size//1024}K ', end='')
+    if chrrom_size:
+      print(f'chrrom={chrrom_size//1024}K ', end='')
+    if chrram_size:
+      print(f'chrram={chrram_size//1024}K ', end='')
+    if chrnvram_size:
+      print(f'chrnvram={chrnvram_size//1024}K ', end='')
+    print(f'mirror={mirror} ', end='')
+    if battery:
+      print(f'battery={battery} ', end='')
+    print('*/')
+
+    for j, (name, crc) in enumerate(sorted(crcs)):
+      print(f'    0x{crc}, // {name}')
+  print('};\n')
+
+  counts = [str(len(cart_crcs[key])) for key in cart_crc_keys]
+  max_count_len = max(len(x) for x in counts)
+  max_offset_len = len(str(len(counts)))
+  cols = math.ceil((80 - max_offset_len - 2 - 6) / (max_count_len + 2))
+  print('static const u32 s_cart_crc_count[] = {')
+  offset = 0
+  while offset < len(counts):
+    print(f'  /* {str(offset).rjust(max_offset_len)} */' +
+          ', '.join(x.rjust(max_count_len) for x in counts[offset:offset+cols]) +
+          ', ')
+    offset += cols
+  print('};\n')
+
 
 if __name__ == '__main__':
   main(sys.argv[1:])

@@ -5433,30 +5433,30 @@ static Result get_cart_info(E *e, const FileData *file_data) {
                 file_data->data[2] == 'S' && file_data->data[3] == '\x1a',
             "NES header not found.");
 
-  const CartDbInfo* cart_db_info = cartdb_info_from_file(file_data);
-  if (cart_db_info) {
-    printf("Found in cartdb (crc=%04x)\n", cart_db_info->crc);
+  CartDbInfo cart_db_info;
+  if (cartdb_info_from_file(file_data, &cart_db_info)) {
+    printf("Found in cartdb (crc=%04x)\n", cart_db_info.crc);
     ci->is_nes2_0 = false;
     ci->has_trainer = false;
-    ci->mapper = cart_db_info->mapper;
-    ci->submapper = cart_db_info->submapper;
-    ci->mirror = cart_db_info->mirror;
-    ci->has_bat_ram = cart_db_info->battery;
-    ci->prg32k_banks = cart_db_info->prgrom >> 15;
-    ci->prg16k_banks = cart_db_info->prgrom >> 14;
-    ci->prg8k_banks = cart_db_info->prgrom >> 13;
+    ci->mapper = cart_db_info.mapper;
+    ci->submapper = cart_db_info.submapper;
+    ci->mirror = cart_db_info.mirror;
+    ci->has_bat_ram = cart_db_info.battery;
+    ci->prg32k_banks = cart_db_info.prgrom >> 15;
+    ci->prg16k_banks = cart_db_info.prgrom >> 14;
+    ci->prg8k_banks = cart_db_info.prgrom >> 13;
     ci->prg_data = file_data->data + kHeaderSize;
-    u32 prgram = MAX(cart_db_info->prgram, cart_db_info->prgnvram);
+    u32 prgram = MAX(cart_db_info.prgram, cart_db_info.prgnvram);
     ci->prgram8k_banks = prgram >> 13;
     ci->prgram512b_banks = prgram >> 9;
-    if (cart_db_info->chrrom) {
-      ci->chr8k_banks = cart_db_info->chrrom >> 13;
-      ci->chr4k_banks = cart_db_info->chrrom >> 12;
-      ci->chr2k_banks = cart_db_info->chrrom >> 11;
-      ci->chr1k_banks = cart_db_info->chrrom >> 10;
+    if (cart_db_info.chrrom) {
+      ci->chr8k_banks = cart_db_info.chrrom >> 13;
+      ci->chr4k_banks = cart_db_info.chrrom >> 12;
+      ci->chr2k_banks = cart_db_info.chrrom >> 11;
+      ci->chr1k_banks = cart_db_info.chrrom >> 10;
       ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
     } else {
-      u32 chrram = MAX(cart_db_info->chrram, cart_db_info->chrnvram);
+      u32 chrram = MAX(cart_db_info.chrram, cart_db_info.chrnvram);
       ci->chr8k_banks = chrram >> 13;
       ci->chr4k_banks = chrram >> 12;
       ci->chr2k_banks = chrram >> 11;

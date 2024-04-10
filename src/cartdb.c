@@ -1,8 +1,6 @@
 #include "cartdb.h"
 
-static const CartDbInfo s_cart_db[] = {
-#include "cartdb.inc"
-};
+#include "cartdb.inc.h"
 
 // https://datatracker.ietf.org/doc/html/rfc1952#section-8
 static u32 crc_table[256] = {
@@ -65,17 +63,34 @@ static u32 get_crc(u8 *buf, int len) {
   return update_crc(0L, buf, len);
 }
 
-#define GET_CRC(x) ((x).crc)
-#define CMP_LT(x, y) ((x) < (y))
-
-const CartDbInfo* cartdb_info_from_file(const FileData* file_data) {
+bool cartdb_info_from_file(const FileData* file_data, CartDbInfo* info) {
   const size_t kHeaderSize = 16;
-  const size_t kCartDbLength = ARRAY_SIZE(s_cart_db);
   u32 crc = get_crc(file_data->data + kHeaderSize, (int)(file_data->size - kHeaderSize));
-  const CartDbInfo* begin = &s_cart_db[0];
-  const CartDbInfo* end = &s_cart_db[kCartDbLength];
-  LOWER_BOUND(const CartDbInfo, found, begin, end, crc, GET_CRC, CMP_LT);
-  return found->crc == crc ? found : NULL;
+
+  int carti = 0;
+  int cart_count = s_cart_crc_count[0];
+  for (size_t i = 0; i < ARRAY_SIZE(s_crcs); ++i) {
+    if (crc == s_crcs[i]) {
+      // Found.
+      const Cart* cart = &s_carts[carti];
+      info->crc = crc;
+      info->prgrom = s_sizes[cart->prgrom];
+      info->prgram = s_sizes[cart->prgram];
+      info->prgnvram = s_sizes[cart->prgnvram];
+      info->chrrom = s_sizes[cart->chrrom];
+      info->chrram = s_sizes[cart->chrram];
+      info->chrnvram = s_sizes[cart->chrnvram];
+      info->mapper = cart->mapper;
+      info->submapper = cart->submapper;
+      info->mirror = cart->mirror;
+      info->battery = cart->battery;
+      return true;
+    }
+    if (--cart_count == 0) {
+      cart_count = s_cart_crc_count[++carti];
+    }
+  }
+  return false;
 }
 
 /* Generated from wip/NesCarts (2017-08-21).xml */
