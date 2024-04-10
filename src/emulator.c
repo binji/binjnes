@@ -5520,6 +5520,9 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       } else {
         ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
       }
+      if (ci->mapper == 4 && (flag6 & 8)) {
+        ci->mirror = MIRROR_FOUR_SCREEN;
+      }
     } else if ((flag7 & 0xc) == 0) {
       printf("Found iNES header\n");
       data_size += ines_data_size;
