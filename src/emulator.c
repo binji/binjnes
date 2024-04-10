@@ -2098,7 +2098,7 @@ static void mapper4_calculate_a12_high_scanline(E *e, int line) {
     // Calculate tiles of sprites for this line
     uint8_t tiles[8] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
     int s_count = 0;
-    if (line != 0) {
+    if ((unsigned)(line - 1) < 239) {
       for (int s = 0; s < 64; ++s) {
         int y = p->oam[s * 4];
         if ((unsigned)(line - (y+1)) < 16) {
