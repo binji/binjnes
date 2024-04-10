@@ -2225,7 +2225,7 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   int counter = reload ? m->mmc3.irq_latch + 1 : p->a12_irq_counter;
   int dcy =
       mapper4_predict_irq_delta_cy(e, counter, pstate, p->frame & 1);
-  DEBUG("[%" PRIu64 "] scheduling mapper irq at %" PRIu64 "\n", cy, cy + dcy);
+  DEBUG("  scheduling mapper irq at %" PRIu64 " (%+d)\n", cy + dcy, dcy);
   sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
 }
 
@@ -2342,7 +2342,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
     if (p->a12_low_count >= 10) {
       bool trigger_irq = false;
       if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
-        LOG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) [%u:%u]\n", cy,
+        DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) [%u:%u]\n", cy,
             p->frame, ppu_dot(e), ppu_line(e));
         p->a12_irq_counter = m->mmc3.irq_latch;
         m->mmc3.irq_reload = false;
@@ -2350,7 +2350,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
           trigger_irq = true;
         }
       } else {
-        LOG("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u]\n", cy,
+        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u]\n", cy,
             p->frame, ppu_dot(e), ppu_line(e));
         if (--p->a12_irq_counter == 0) {
           trigger_irq = true;
@@ -2359,7 +2359,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
 
       if (trigger_irq) {
         if (m->mmc3.irq_enable) {
-          LOG("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u]\n", cy,
+          DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u]\n", cy,
               p->frame, ppu_dot(e), ppu_line(e));
           e->s.c.irq |= IRQ_MAPPER;
           if (from_cpu && e->s.sc.when[SCHED_MAPPER_IRQ] == ~(u64)0) {
@@ -2401,7 +2401,7 @@ static void mapper5_update_in_frame(E *e, Ticks cy) {
   M* m = &e->s.m;
   if (cy - e->s.p.last_vram_access_cy >= 3 * 3) {
     if (m->mmc5.in_frame) {
-      LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
+      DEBUG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
     }
     m->mmc5.in_frame = false;
     m->mmc5.lastaddr = ~0;
@@ -2461,7 +2461,7 @@ static void mapper5_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   int line = pstate / 341;
   if (!m->mmc5.irq_enable || m->mmc5.scan_cmp == 0 || m->mmc5.scan_cmp >= 240 ||
       (p->ppumask & 0x18) == 0) {
-    LOG("[%" PRIu64
+    DEBUG("[%" PRIu64
           "] clearing mapper irq state=%u [%u:%u] frame=%u irq_enable=%u "
           "ppumask=%02x\n",
           cy, p->state, dot, line, p->frame, m->mmc5.irq_enable, p->ppumask);
@@ -2486,11 +2486,11 @@ static void mapper5_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   }
   int dcy = mapper4_irq_delta_cy(irq_dot, counter, dot, line, p->frame & 1);
   (void)choice;
-  LOG("[%" PRIu64
-         "] scheduling irq [%u:%u] ppumask=%02x frame=%u scan=%u->%u == %u "
-         "[#%u] @ %" PRIu64 " (+%u) \n",
-         cy, dot, line, p->ppumask, p->frame, m->mmc5.scan, m->mmc5.scan_cmp,
-         counter, choice, cy + dcy, dcy);
+  DEBUG("[%" PRIu64
+        "] scheduling irq [%u:%u] ppumask=%02x frame=%u scan=%u->%u == %u "
+        "[#%u] @ %" PRIu64 " (+%u) \n",
+        cy, dot, line, p->ppumask, p->frame, m->mmc5.scan, m->mmc5.scan_cmp,
+        counter, choice, cy + dcy, dcy);
   sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper5");
 }
 
@@ -2524,54 +2524,54 @@ static void mapper5_update_chr(E* e) {
 
 static void mapper5_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
-  LOG("mapper5_write(%04x, %02x)\n", addr, val);
+  DEBUG("mapper5_write(%04x, %02x)\n", addr, val);
   switch (addr) {
     case 0x5000: case 0x5001: case 0x5002: case 0x5003:
-      LOG("✓  Pulse 1 audio = %u (%02x)\n", val, val);
+      DEBUG("✓  Pulse 1 audio = %u (%02x)\n", val, val);
       break;
     case 0x5004: case 0x5005: case 0x5006: case 0x5007:
-      LOG("✓  Pulse 2 audio = %u (%02x)\n", val, val);
+      DEBUG("✓  Pulse 2 audio = %u (%02x)\n", val, val);
       break;
     case 0x5010:
-      LOG("✓  PCM Mode/IRQ = %02x\n", val);
+      DEBUG("✓  PCM Mode/IRQ = %02x\n", val);
       break;
     case 0x5011:
-      LOG("✓  Raw PCM = %02x\n", val);
+      DEBUG("✓  Raw PCM = %02x\n", val);
       break;
     case 0x5015:
-      LOG("✓  APU status = %02x\n", val);
+      DEBUG("✓  APU status = %02x\n", val);
       break;
 
     case 0x5100:
-      LOG("  PRG mode = %u\n", val & 3);
+      DEBUG("  PRG mode = %u\n", val & 3);
       m->mmc5.prg_mode = val & 3;
       goto update_prg;
     case 0x5101:
-      LOG("✓  CHR mode = %u\n", val & 3);
+      DEBUG("✓  CHR mode = %u\n", val & 3);
       m->mmc5.chr_mode = val & 3;
       mapper5_update_chr(e);
       break;
     case 0x5102:
-      LOG("✓  PRG ram protect 1 = %u\n", val & 3);
+      DEBUG("✓  PRG ram protect 1 = %u\n", val & 3);
       m->mmc5.ramprot[0] = val & 3;
       goto ramprotect;
     case 0x5103:
-      LOG("✓  PRG ram protect 2 = %u\n", val & 3);
+      DEBUG("✓  PRG ram protect 2 = %u\n", val & 3);
       m->mmc5.ramprot[1] = val & 3;
       goto ramprotect;
     ramprotect:
       m->prg_ram_write_en = m->mmc5.ramprot[0] == 2 && m->mmc5.ramprot[1] == 1;
       break;
     case 0x5104:
-      LOG("✓  Extended RAM mode = %u\n", val & 3);
+      DEBUG("✓  Extended RAM mode = %u\n", val & 3);
       m->mmc5.exram_mode = val & 3;
       m->is_mmc5_ex_attr_mode = m->mmc5.exram_mode == 1;
       mapper5_update_chr(e);
       break;
     case 0x5105:
-      LOG("✓  [%3u:%3u] Nametable mapping = %u:%u:%u:%u\n", ppu_dot(e),
-          ppu_line(e), (val >> 0) & 3, (val >> 2) & 3, (val >> 4) & 3,
-          (val >> 6) & 3);
+      DEBUG("✓  [%3u:%3u] Nametable mapping = %u:%u:%u:%u\n", ppu_dot(e),
+            ppu_line(e), (val >> 0) & 3, (val >> 2) & 3, (val >> 4) & 3,
+            (val >> 6) & 3);
       for (int i = 0; i < 4; ++i) {
         u8 bits = (val >> (i * 2)) & 3;
         switch (bits) {
@@ -2591,26 +2591,26 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       update_nt_map_banking(e);
       break;
     case 0x5106:
-      LOG("✓  Fill-mode tile = %u (%02x)\n", val, val);
+      DEBUG("✓  Fill-mode tile = %u (%02x)\n", val, val);
       memset(e->s.p.ram + (3 << 10), val, 0x3c0);
       break;
     case 0x5107:
       val &= 3;
-      LOG("✓  Fill-mode color = %u\n", val);
+      DEBUG("✓  Fill-mode color = %u\n", val);
       memset(e->s.p.ram + (3 << 10) + 0x3c0,
              val | (val << 2) | (val << 4) | (val << 6), 0x40);
       break;
     case 0x5113:
-      LOG("  PRG RAM bankswitching %04x..%04x = %02x\n",
-          (addr - 0x5113) * 0x2000 + 0x6000, (addr - 0x5113) * 0x2000 + 0x7fff,
-          val);
+      DEBUG("  PRG RAM bankswitching %04x..%04x = %02x\n",
+            (addr - 0x5113) * 0x2000 + 0x6000,
+            (addr - 0x5113) * 0x2000 + 0x7fff, val);
       set_prgram8k_map(e, m->prgram_bank = val);
       break;
     case 0x5114: case 0x5115: case 0x5116: case 0x5117: {
       u8 bankidx = addr - 0x5114;
-      LOG("  PRG bankswitching %04x..%04x = %02x\n",
-          (addr - 0x5113) * 0x2000 + 0x6000, (addr - 0x5113) * 0x2000 + 0x7fff,
-          val);
+      DEBUG("  PRG bankswitching %04x..%04x = %02x\n",
+            (addr - 0x5113) * 0x2000 + 0x6000,
+            (addr - 0x5113) * 0x2000 + 0x7fff, val);
       m->prg_bank[bankidx] = val & 0x7f;
       m->prg_bank_is_prgram[bankidx] = !(val & 0x80);
       goto update_prg;
@@ -2619,8 +2619,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
     case 0x5120: case 0x5121: case 0x5122: case 0x5123:
     case 0x5124: case 0x5125: case 0x5126: case 0x5127: {
       u8 bankidx = addr - 0x5120;
-      LOG("✓  CHR bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
-          bankidx * 0x400 + 0x3ff, val);
+      DEBUG("✓  CHR bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
+            bankidx * 0x400 + 0x3ff, val);
       m->chr_bank[bankidx] = m->chr_spr_bank[bankidx] = val;
       memcpy(m->chr_bank, m->chr_spr_bank, sizeof(m->chr_bank));
       mapper5_update_chr(e);
@@ -2629,8 +2629,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
 
     case 0x5128: case 0x5129: case 0x512a: case 0x512b: {
       u8 bankidx = addr - 0x5128;
-      LOG("✓  CHR BG bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
-          bankidx * 0x400 + 0x3ff, val);
+      DEBUG("✓  CHR BG bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
+            bankidx * 0x400 + 0x3ff, val);
       m->chr_bg_bank[bankidx] = m->chr_bg_bank[bankidx + 4] = val;
       memcpy(m->chr_bank, m->chr_bg_bank, sizeof(m->chr_bank));
       mapper5_update_chr(e);
@@ -2638,30 +2638,30 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
     }
 
     case 0x5130:
-      LOG("✓  CHR bank upper bits = %u\n", val & 3);
+      DEBUG("✓  CHR bank upper bits = %u\n", val & 3);
       break;
 
     case 0x5200:
-      LOG("✓  Vertical split mode = %02x\n", val);
+      DEBUG("✓  Vertical split mode = %02x\n", val);
       break;
 
     case 0x5201:
-      LOG("✓  Vertical split scroll = %u\n", val);
+      DEBUG("✓  Vertical split scroll = %u\n", val);
       break;
 
     case 0x5202:
-      LOG("✓  Vertical split bank = %u\n", val);
+      DEBUG("✓  Vertical split bank = %u\n", val);
       break;
 
     case 0x5203:
-      LOG("✓  IRQ scanline compare value = %u\n", val);
+      DEBUG("✓  IRQ scanline compare value = %u\n", val);
       ppu_sync(e, "mapper5_reschedule_irq");
       m->mmc5.scan_cmp = val;
       mapper5_reschedule_irq(e, e->s.p.state, e->s.cy);
       break;
 
     case 0x5204:
-      LOG("✓  Write IRQ status = %u\n", val);
+      DEBUG("✓  Write IRQ status = %u\n", val);
       ppu_sync(e, "mapper5_reschedule_irq");
       m->mmc5.irq_enable = !!(val & 0x80);
       if (m->mmc5.irq_enable) {
@@ -2672,29 +2672,29 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       break;
 
     case 0x5205:
-      LOG("✓  Unsigned 8x8 multiplier lo = %u\n", val);
+      DEBUG("✓  Unsigned 8x8 multiplier lo = %u\n", val);
       m->mmc5.mullo = val;
       break;
 
     case 0x5206:
-      LOG("✓  Unsigned 8x8 multiplier hi = %u\n", val);
+      DEBUG("✓  Unsigned 8x8 multiplier hi = %u\n", val);
       m->mmc5.mulhi = val;
       break;
 
     case 0x5207:
-      LOG("✓  MMC5A CL3/SL3 Data Dir. and Output Data Source = %02x\n", val);
+      DEBUG("✓  MMC5A CL3/SL3 Data Dir. and Output Data Source = %02x\n", val);
       break;
 
     case 0x5208:
-      LOG("✓  MMC5A CL3/SL3 status = %02x\n", val);
+      DEBUG("✓  MMC5A CL3/SL3 status = %02x\n", val);
       break;
 
     case 0x5209:
-      LOG("✓  Hardware timer lo = %02x\n", val);
+      DEBUG("✓  Hardware timer lo = %02x\n", val);
       break;
 
     case 0x520a:
-      LOG("✓  Hardware timer hi = %02x\n", val);
+      DEBUG("✓  Hardware timer hi = %02x\n", val);
       break;
 
     default:
@@ -2702,8 +2702,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
         if (m->mmc5.exram_mode != 3) {
           u16 ramaddr = (2 << 10) + (addr & 0x3ff);
           e->s.p.ram[ramaddr] = val;
-          LOG("✓  [%3u: %3u] Write internal RAM %04x <= %02x\n", ppu_dot(e),
-              ppu_line(e), ramaddr, val);
+          DEBUG("✓  [%3u: %3u] Write internal RAM %04x <= %02x\n", ppu_dot(e),
+                ppu_line(e), ramaddr, val);
         }
       } else if (addr >= 0x8000) {
         u16 bank = (addr >> 13) & 3;
@@ -2711,7 +2711,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
           e->prg_rom_map[bank][addr & 0x1fff] = val;
         }
       } else {
-        LOG("  Unknown\n");
+        DEBUG("  Unknown\n");
       }
       break;
 
@@ -2748,11 +2748,11 @@ static u8 mapper5_read(E* e, u16 addr) {
 
   switch (addr) {
     case 0x5010:
-      LOG("✓  PCM Mode/IRQ\n");
+      DEBUG("✓  PCM Mode/IRQ\n");
       break;
 
     case 0x5015:
-      LOG("✓  APU status\n");
+      DEBUG("✓  APU status\n");
       break;
 
     case 0x5204: {
@@ -2762,20 +2762,20 @@ static u8 mapper5_read(E* e, u16 addr) {
                   (e->s.c.open_bus & 0x3f);
       m->mmc5.irq_pending = false;
       e->s.c.irq &= ~IRQ_MAPPER;
-      LOG("✓  Read IRQ status = %02x\n", result);
+      DEBUG("✓  Read IRQ status = %02x\n", result);
       return result;
     }
 
     case 0x5205:
-      LOG("✓  Multiplier lo\n");
+      DEBUG("✓  Multiplier lo\n");
       return (m->mmc5.mullo * m->mmc5.mulhi) & 0xff;
 
     case 0x5206:
-      LOG("✓  Multiplier hi\n");
+      DEBUG("✓  Multiplier hi\n");
       return (m->mmc5.mullo * m->mmc5.mulhi) >> 8;
 
     case 0x5209:
-      LOG("✓  Hardware timer status\n");
+      DEBUG("✓  Hardware timer status\n");
       break;
 
     case 0x5000: case 0x5001: case 0x5002: case 0x5003:
@@ -2795,7 +2795,7 @@ static u8 mapper5_read(E* e, u16 addr) {
 
     case 0xfffa: case 0xfffb:
       if (m->mmc5.in_frame) {
-        LOG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
+        DEBUG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
       }
       m->mmc5.in_frame = false;
       m->mmc5.lastaddr = ~0;
@@ -2811,14 +2811,14 @@ static u8 mapper5_read(E* e, u16 addr) {
         u16 ramaddr = (2<<10) + (addr & 0x3ff);
         if (m->mmc5.exram_mode & 2) {
           u8 result = e->s.p.ram[ramaddr];
-          LOG("✓  Read internal RAM %04x >= %02x\n", ramaddr, result);
+          DEBUG("✓  Read internal RAM %04x >= %02x\n", ramaddr, result);
           return result;
         } else {
-          LOG("✓  Read internal RAM %04x >= zero\n", ramaddr);
+          DEBUG("✓  Read internal RAM %04x >= zero\n", ramaddr);
           return 0;
         }
       } else if (addr > 0x4017) {
-        LOG("✓  unknown read(%04x)\n", addr);
+        DEBUG("✓  unknown read(%04x)\n", addr);
       }
       break;
   }
@@ -2841,27 +2841,28 @@ static void mapper5_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
     if (!m->mmc5.in_frame) {
       m->mmc5.in_frame = true;
       m->mmc5.scan = 0;
-      LOG("✓  [%3u:%3u] MMC5, setting scan to 0, in_frame = true\n", ppu_dot(e), ppu_line(e));
+      DEBUG("✓  [%3u:%3u] MMC5, setting scan to 0, in_frame = true\n",
+            ppu_dot(e), ppu_line(e));
     } else {
       if (++m->mmc5.scan == m->mmc5.scan_cmp) {
-        LOG("✓  [%3u:%3u] MMC5, scanline match = %u\n", ppu_dot(e),
-            ppu_line(e), m->mmc5.scan);
+        DEBUG("✓  [%3u:%3u] MMC5, scanline match = %u\n", ppu_dot(e),
+              ppu_line(e), m->mmc5.scan);
         m->mmc5.irq_pending = true;
         if (m->mmc5.irq_enable) {
           e->s.c.irq |= IRQ_MAPPER;
           sched_occurred(e, SCHED_MAPPER_IRQ, cy);
           mapper5_reschedule_irq(e, e->s.p.state + 1, cy + 1);
-          LOG("✓  [%3u:%3u] MMC5 irq occured\n", ppu_dot(e), ppu_line(e));
+          DEBUG("✓  [%3u:%3u] MMC5 irq occured\n", ppu_dot(e), ppu_line(e));
         }
       } else {
-        LOG("✓  [%3u:%3u] MMC5, scan = %u\n", ppu_dot(e), ppu_line(e),
-            m->mmc5.scan);
+        DEBUG("✓  [%3u:%3u] MMC5, scan = %u\n", ppu_dot(e), ppu_line(e),
+              m->mmc5.scan);
       }
     }
   }
   if ((addr & 0x3000) == 0x2000 && addr == m->mmc5.lastaddr) {
-    LOG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", ppu_dot(e),
-        ppu_line(e), m->mmc5.match_count + 1, m->mmc5.lastaddr);
+    DEBUG("✓  [%3u:%3u] MMC5, match count=%u addr=%04x\n", ppu_dot(e),
+          ppu_line(e), m->mmc5.match_count + 1, m->mmc5.lastaddr);
     ++m->mmc5.match_count;
   } else {
     m->mmc5.match_count = 0;
@@ -5515,7 +5516,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       if (chrram8k_banks > 0) {
         ci->chr_data = e->s.p.chr_ram;
         ci->chr8k_banks = chrram8k_banks;
-        LOG("chrram from nes 2.0 header: %u banks\n", chrram8k_banks);
+        DEBUG("chrram from nes 2.0 header: %u banks\n", chrram8k_banks);
       } else {
         ci->chr_data = ci->prg_data + (ci->prg16k_banks << 14);
       }
