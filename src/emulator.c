@@ -3939,6 +3939,90 @@ static void mapper87_write(E *e, u16 addr, u8 val) {
                                     (e->ci.chr8k_banks - 1));
 }
 
+static void mapper118_write(E *e, u16 addr, u8 val) {
+  mapper4_write(e, addr, val);
+  M* m = &e->s.m;
+  if ((addr & 0xe001) == 0x8001) {
+    u8 reg = m->mmc3.bank_select & 7;
+    u8 bank = val >> 7;
+    if (reg < 2) {
+      if (!(m->mmc3.bank_select & 0x80)) {
+        m->ppu1k_bank[8 + reg * 2] = m->ppu1k_bank[9 + reg * 2] = bank;
+      }
+    } else if (reg < 6) {
+      if (m->mmc3.bank_select & 0x80) {
+        m->ppu1k_bank[8 + reg - 2] = bank;
+      }
+    }
+    update_nt_map_banking(e);
+  }
+}
+
+static void mapper163_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  u8 sval =
+      m->m163.swap_01 ? (val & ~3) | ((val >> 1) & 1) | ((val << 1) & 2) : val;
+  switch (addr & 0xff01) {
+    case 0x5000: case 0x5001:  // PRG Bank Low/CHR_RAM switch
+      m->prg_bank[0] = (m->prg_bank[0] & ~0xf) | (sval & 0xf);
+      m->m163.auto_switch = !!(val & 0x80);
+      if (m->m163.auto_switch == 0) {
+        set_chr4k_map(e, 0, 1);
+      }
+      goto update_prg;
+    case 0x5200: case 0x5201:  // PRG Bank High
+      // 1MiB ROMS wire PRG A19 directly (no mode swap bits)
+      m->prg_bank[0] = (m->prg_bank[0] & 0xf) |
+                       (((e->ci.prg32k_banks > 32 ? sval : val) & 0x3) << 4);
+      goto update_prg;
+    case 0x5100:  // Feedback Write
+      m->m163.feedback = sval;
+      break;
+    case 0x5101:  // Feedback Write
+      if ((m->m163.feedback ^ sval) & m->m163.feedback & 1) {
+        m->m163.feedback =
+            (m->m163.feedback & ~5) | (m->m163.feedback ^ 4) | (sval & 1);
+      } else {
+        m->m163.feedback = (m->m163.feedback & ~1) | (sval & 1);
+      }
+      break;
+    case 0x5300: case 0x5301:  // Mode
+      m->m163.swap_01 = val & 1;
+      m->m163.prg_fixed = !(val & 4);
+      goto update_prg;
+
+    update_prg:
+      set_prg32k_map(e, m->m163.prg_fixed ? 3 : m->prg_bank[0]);
+      break;
+  }
+}
+
+static void mapper163_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
+                                          bool from_cpu) {
+  M* m = &e->s.m;
+  u16 last_addr = m->m163.last_addr;
+  m->m163.last_addr = addr;
+  if (!m->m163.auto_switch) return;
+  if ((last_addr ^ addr) & addr & 0x2000) {
+    m->chr_bank[0] = (addr >> 9) & 1;
+    set_chr4k_map(e, m->chr_bank[0], m->chr_bank[0]);
+  }
+}
+
+static u8 mapper163_read(E *e, u16 addr) {
+  M *m = &e->s.m;
+  if ((addr & 0xf300) == 0x5100) {
+    return e->s.c.open_bus = (~m->m163.feedback & 4) | (e->s.c.open_bus & ~4);
+  }
+  switch (addr) {
+    case 0xfffa: case 0xfffb:
+    case 0xfffc: case 0xfffd:
+    case 0xfffe: case 0xffff:
+      return e->s.c.open_bus = rom_read(e, addr);
+  }
+  return e->s.c.open_bus;
+}
+
 static void mapper206_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
@@ -4006,25 +4090,6 @@ static void mapper_namcot_340_write(E *e, u16 addr, u8 val) {
     Mirror s_mirror[] = {MIRROR_SINGLE_0, MIRROR_VERTICAL, MIRROR_SINGLE_1,
                          MIRROR_HORIZONTAL};
     set_mirror(e, s_mirror[val >> 6]);
-  }
-}
-
-static void mapper118_write(E *e, u16 addr, u8 val) {
-  mapper4_write(e, addr, val);
-  M* m = &e->s.m;
-  if ((addr & 0xe001) == 0x8001) {
-    u8 reg = m->mmc3.bank_select & 7;
-    u8 bank = val >> 7;
-    if (reg < 2) {
-      if (!(m->mmc3.bank_select & 0x80)) {
-        m->ppu1k_bank[8 + reg * 2] = m->ppu1k_bank[9 + reg * 2] = bank;
-      }
-    } else if (reg < 6) {
-      if (m->mmc3.bank_select & 0x80) {
-        m->ppu1k_bank[8 + reg - 2] = bank;
-      }
-    }
-    update_nt_map_banking(e);
   }
 }
 
@@ -5806,6 +5871,16 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case 163:
+    e->mapper_write = mapper163_write;
+    e->mapper_on_ppu_addr_updated = mapper163_on_ppu_addr_updated;
+    e->mapper_on_chr_read = mapper163_on_ppu_addr_updated;
+    e->mapper_read = mapper163_read;
+    set_mirror(e, e->ci.mirror);
+    set_chr4k_map(e, 0, 0);
+    set_prg32k_map(e, 3);
     break;
 
   case 206:

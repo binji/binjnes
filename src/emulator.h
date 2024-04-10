@@ -212,6 +212,12 @@ typedef struct {
       u8 numchans, curchan, chantick;
       bool sound_enable, autoinc, update_audio;
     } namco163;
+
+    struct {
+      u16 last_addr;
+      u8 feedback;
+      bool swap_01, prg_fixed, auto_switch;
+    } m163;
   };
   PPUBankLoc ppu1k_loc[16];
   bool prg_ram_en, prg_ram_write_en, prg_ram_to_rom, is_mmc5_ex_attr_mode;
