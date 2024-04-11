@@ -2164,8 +2164,8 @@ static int mapper4_predict_irq_delta_cy(E* e, int irq_counter, u32 state,
   if (irq_counter == 1) {
     int diff = e->mmc3_a12_high[index] - state;
     DEBUG("irq_counter=%u low_count=%u state=%u next_high=%u (diff=%d)\n",
-           irq_counter, (u32)e->s.p.a12_low_count, state,
-           e->mmc3_a12_high[index], diff);
+          irq_counter, (u32)e->s.p.a12_low_count, state,
+          e->mmc3_a12_high[index], diff);
     if (diff + e->s.p.a12_low_count >= 10) {
       return diff;
     }
@@ -2350,8 +2350,8 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
           trigger_irq = true;
         }
       } else {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u]\n", cy,
-            p->frame, ppu_dot(e), ppu_line(e));
+        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u] (from_cpu=%u)\n", cy,
+            p->frame, ppu_dot(e), ppu_line(e), from_cpu);
         if (--p->a12_irq_counter == 0) {
           trigger_irq = true;
         }
@@ -2359,13 +2359,12 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
 
       if (trigger_irq) {
         if (m->mmc3.irq_enable) {
-          DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u]\n", cy,
-              p->frame, ppu_dot(e), ppu_line(e));
+          DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u] (from_cpu=%u)\n", cy,
+              p->frame, ppu_dot(e), ppu_line(e), from_cpu);
           e->s.c.irq |= IRQ_MAPPER;
-          if (from_cpu && e->s.sc.when[SCHED_MAPPER_IRQ] == ~(u64)0) {
-            e->s.sc.when[SCHED_MAPPER_IRQ] = cy + 1;
+          if (!from_cpu) {
+            sched_occurred(e, SCHED_MAPPER_IRQ, cy);
           }
-          sched_occurred(e, SCHED_MAPPER_IRQ, cy);
           reschedule = true;
         }
       } else if (from_cpu) {
