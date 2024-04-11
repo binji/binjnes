@@ -5810,7 +5810,12 @@ static Result init_mapper(E *e) {
       set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
       set_prg32k_map(e, 0);
     } else {
-      goto unsupported;
+      // Homebrew using mapper34, just support both.
+      e->mapper_write = mapper34_bnrom_write;
+      e->mapper_prg_ram_write = mapper34_nina001_write;
+      set_mirror(e, e->ci.mirror);
+      set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
+      set_prg32k_map(e, 0);
     }
     break;
 
