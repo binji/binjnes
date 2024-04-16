@@ -7,8 +7,8 @@ import sys
 import xml.etree.ElementTree as ET
 
 MAPPERS = set([
-    0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 18, 19, 21, 23, 24, 25, 26, 28, 30,
-    34, 66, 69, 71, 78, 79, 85, 87, 118, 146, 163, 206, 210, 232,
+    0, 1, 2, 3, 4, 5, 7, 9, 10, 11, 16, 18, 19, 21, 23, 24, 25, 26, 28, 30, 34,
+    66, 69, 71, 78, 79, 85, 87, 118, 146, 163, 206, 210, 232,
 ])
 
 class CommentedTreeBuilder(ET.TreeBuilder):
@@ -84,11 +84,19 @@ def main(args):
     cart_crcs[cart].append((name, crc))
     # crcs[crc] = { 'name': name, 'cart': cart }
 
+  def readable_size(size):
+    if size % 1024 == 0:
+      return f'{size//1024}K'
+    else:
+      return f'{size}B'
+
+  def size_name(size):
+    return f'SIZE_{readable_size(size)}'
+
   sizes = sorted(prgrom_s | chrrom_s | prgram_s | chrram_s | prgnvram_s | chrnvram_s)
   print('typedef enum {')
   for size in sizes:
-    assert size % 1024 == 0
-    print(f'  SIZE_{size//1024}K,')
+    print(f'  {size_name(size)},')
   print('} Size;\n')
 
   print('static const u32 s_sizes[] = {')
@@ -113,9 +121,6 @@ def main(args):
     '4': 'MIRROR_FOUR_SCREEN',
   }
 
-  def size(s):
-      return f'SIZE_{s//1024}K'
-
   carts = sorted(carts)
 
   print('static const Cart s_carts[] = {')
@@ -125,17 +130,17 @@ def main(args):
     print(f'.mapper={mapper},', end='')
     if submapper:
       print(f'.submapper={submapper},', end='')
-    print(f'.prgrom={size(prgrom_size)},', end='')
+    print(f'.prgrom={size_name(prgrom_size)},', end='')
     if prgram_size:
-      print(f'.prgram={size(prgram_size)},', end='')
+      print(f'.prgram={size_name(prgram_size)},', end='')
     if prgnvram_size:
-      print(f'.prgnvram={size(prgnvram_size)},', end='')
+      print(f'.prgnvram={size_name(prgnvram_size)},', end='')
     if chrrom_size:
-      print(f'.chrrom={size(chrrom_size)},', end='')
+      print(f'.chrrom={size_name(chrrom_size)},', end='')
     if chrram_size:
-      print(f'.chrram={size(chrram_size)},', end='')
+      print(f'.chrram={size_name(chrram_size)},', end='')
     if chrnvram_size:
-      print(f'.chrnvram={size(chrnvram_size)},', end='')
+      print(f'.chrnvram={size_name(chrnvram_size)},', end='')
     print(f'.mirror={mirror_enum[mirror]},', end='')
     if battery:
       print(f'.battery={battery},', end='')
@@ -151,17 +156,17 @@ def main(args):
     print(f'mapper={mapper} ', end='')
     if submapper:
       print(f'submapper={submapper} ', end='')
-    print(f'prgrom={prgrom_size//1024}K ', end='')
+    print(f'prgrom={readable_size(prgrom_size)} ', end='')
     if prgram_size:
-      print(f'prgram={prgram_size//1024}K ', end='')
+      print(f'prgram={readable_size(prgram_size)} ', end='')
     if prgnvram_size:
-      print(f'prgnvram={prgnvram_size//1024}K ', end='')
+      print(f'prgnvram={readable_size(prgnvram_size)} ', end='')
     if chrrom_size:
-      print(f'chrrom={chrrom_size//1024}K ', end='')
+      print(f'chrrom={readable_size(chrrom_size)} ', end='')
     if chrram_size:
-      print(f'chrram={chrram_size//1024}K ', end='')
+      print(f'chrram={readable_size(chrram_size)} ', end='')
     if chrnvram_size:
-      print(f'chrnvram={chrnvram_size//1024}K ', end='')
+      print(f'chrnvram={readable_size(chrnvram_size)} ', end='')
     print(f'mirror={mirror} ', end='')
     if battery:
       print(f'battery={battery} ', end='')

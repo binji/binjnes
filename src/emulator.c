@@ -2964,6 +2964,188 @@ static void mapper11_write(E *e, u16 addr, u8 val) {
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
 }
 
+static void mapper16_shared_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  DEBUG("mapper16_shared_write(%04x, %02x)\n", addr, val);
+  switch (addr & 0xf) {
+    case 0x0: case 0x1: case 0x2: case 0x3:
+    case 0x4: case 0x5: case 0x6: case 0x7:
+      // CHR ROM bank select
+      m->chr_bank[addr & 7] = val;
+      DEBUG("  chr_bank[%u]=%u\n", addr & 7, val);
+      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                    m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                    m->chr_bank[6], m->chr_bank[7]);
+      break;
+    case 0x8:
+      m->prg_bank[0] = val;
+      DEBUG("  prg_bank[0]=%u\n", val);
+      set_prg16k_map(e, m->prg_bank[0], e->ci.prg16k_banks - 1);
+      break;
+    case 0x9:
+      DEBUG("  mirror=%u\n", (val + 2) & 3);
+      set_mirror(e, (val + 2) & 3);
+      break;
+    case 0xa:
+      m->m16.irq_enable = val & 1;
+      DEBUG("  [%" PRIu64 "]: irq_enable=%u\n", e->s.cy, val & 1);
+      if (m->m16.irq_enable && m->m16.irq_counter == 0) {
+        e->s.c.irq |= IRQ_MAPPER;
+      } else {
+        e->s.c.irq &= ~IRQ_MAPPER;
+      }
+      break;
+    case 0xb:
+      m->m16.irq_counter = (m->m16.irq_counter & 0xff00) | val;
+      DEBUG("  [%" PRIu64 "]: irq_counter=%04x (%u)\n", e->s.cy,
+             m->m16.irq_counter, m->m16.irq_counter);
+      break;
+    case 0xc:
+      m->m16.irq_counter = (m->m16.irq_counter & 0xff) | (val << 8);
+      DEBUG("  [%" PRIu64 "]: irq_counter=%04x (%u)\n", e->s.cy,
+             m->m16.irq_counter, m->m16.irq_counter);
+      break;
+  }
+}
+
+static void mapper16_fcg_write(E *e, u16 addr, u8 val) {
+  if ((addr & 0xe000) == 0x6000) {
+    mapper16_shared_write(e, addr, val);
+  }
+}
+
+static void mapper16_lz93d50_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if ((addr & 0x8000) != 0x8000) return;
+  mapper16_shared_write(e, addr, val);
+  if ((addr & 0x800f) != 0x800d) return;
+
+  u8 diff = m->m16.i2c_control ^ val;
+  m->m16.i2c_control = val;
+  printf(
+      "      EEPROM control (%02x) [SCL=%u SDA=%u Dir=%u] (state=%u "
+      "byte=%02x bits=%u)\n",
+      val, (val >> 5) & 1, (val >> 6) & 1, (val >> 7) & 1, m->m16.i2c_state,
+      m->m16.i2c_byte, m->m16.i2c_bits);
+  if (!(val & 0x80)) {
+    if ((diff & 0x60) == 0x40 && val & 0x20) {  // Start or stop bit.
+      if (val & 0x40) {
+        // Stop bit should only occur after data.
+        switch (m->m16.i2c_state) {
+          case I2C_WRITE_EXPECT_DATA:
+          case I2C_WRITE_EXPECT_DATA_ACK:
+          case I2C_READ_EXPECT_DATA:
+          case I2C_READ_EXPECT_DATA_ACK:
+            printf("  Stop bit\n");
+            m->m16.i2c_state = I2C_INIT;
+            break;
+          default:
+            printf("  Ignoring stop bit\n");
+        }
+      } else {
+        printf("  Start bit\n");
+        m->m16.i2c_state = I2C_EXPECT_CONTROL;
+        m->m16.i2c_byte = 0;
+        m->m16.i2c_bits = 8;
+      }
+    } else if (diff & val & 0x20) { // SCL went high.
+      if (m->m16.i2c_bits > 0) {
+        if (m->m16.i2c_state != I2C_READ_EXPECT_DATA) {
+          printf("  data=%u\n", (val >> 6) & 1);
+          m->m16.i2c_byte = (m->m16.i2c_byte << 1) | ((val >> 6) & 1);
+        }
+        if (--m->m16.i2c_bits == 0) {
+          switch (m->m16.i2c_state) {
+            case I2C_EXPECT_CONTROL:
+              printf("  control = %02x [r/w=%u]\n", m->m16.i2c_byte,
+                     m->m16.i2c_byte & 1);
+              m->m16.i2c_state = I2C_EXPECT_CONTROL_ACK;
+              break;
+            case I2C_WRITE_EXPECT_ADDR:
+              printf("  setting address to %02x\n", m->m16.i2c_byte);
+              m->m16.i2c_addr = m->m16.i2c_byte;
+              m->m16.i2c_state = I2C_WRITE_EXPECT_DATA_ACK;
+              break;
+            case I2C_WRITE_EXPECT_DATA:
+              printf("  writing %02x => %02x\n", m->m16.i2c_byte,
+                     m->m16.i2c_addr);
+              // TODO: Technically write doesn't happen until STOP byte is
+              // written, and only 16 writes can be buffered.
+              e->s.c.prg_ram[m->m16.i2c_addr] = m->m16.i2c_byte;
+              m->m16.i2c_addr =
+                  (m->m16.i2c_addr & 0xf0) | ((m->m16.i2c_addr + 1) & 0xf);
+              break;
+            case I2C_READ_EXPECT_DATA:
+              break;
+            default:
+              break;
+          }
+        }
+      } else {
+        printf("  ignoring data bit %u\n", (val >> 6) & 1);
+      }
+    }
+  }
+}
+
+static u8 mapper16_lz93d50_prg_ram_read(E *e, u16 addr) {
+  M *m = &e->s.m;
+  if ((addr & 0xe000) != 0x6000) return e->s.c.open_bus;
+
+  printf("Read Serial EEPROM (state=%u)\n", m->m16.i2c_state);
+  u8 bit = 0;
+  bool reset = false;
+  switch (m->m16.i2c_state) {
+    case I2C_EXPECT_CONTROL_ACK:
+      if ((m->m16.i2c_byte & 0xfe) != 0b10100000) {
+        printf("  UNEXPECTED control byte!\n");
+      }
+      if (m->m16.i2c_byte & 1) {
+        m->m16.i2c_state = I2C_READ_EXPECT_DATA;
+      } else {
+        m->m16.i2c_state = I2C_WRITE_EXPECT_ADDR;
+      }
+      reset = true;
+      break;
+    case I2C_WRITE_EXPECT_ADDR_ACK:
+      m->m16.i2c_state = I2C_WRITE_EXPECT_DATA;
+      reset = true;
+      break;
+    case I2C_WRITE_EXPECT_DATA_ACK:
+      m->m16.i2c_state = I2C_WRITE_EXPECT_DATA;
+      reset = true;
+      break;
+    case I2C_READ_EXPECT_DATA:
+      printf("  reading %02x:%u\n", m->m16.i2c_addr, m->m16.i2c_bits);
+      bit = (e->s.c.prg_ram[m->m16.i2c_addr] >> m->m16.i2c_bits) & 1;
+      if (m->m16.i2c_bits == 0) {
+        m->m16.i2c_addr++;
+        printf("  incrementing address to %02x\n", m->m16.i2c_addr);
+        reset = true;
+      }
+      break;
+    case I2C_READ_EXPECT_DATA_ACK:
+      m->m16.i2c_state = I2C_READ_EXPECT_DATA;
+      reset = true;
+      break;
+    default:
+      break;
+  }
+  if (reset) {
+    m->m16.i2c_byte = 0;
+    m->m16.i2c_bits = 8;
+  }
+  return e->s.c.open_bus = (e->s.c.open_bus & ~0x10) | (bit << 4);
+}
+
+static void mapper16_cpu_step(E* e) {
+  M* m = &e->s.m;
+  if (m->m16.irq_enable && --m->m16.irq_counter == 0) {
+    DEBUG("[%" PRIu64 "]: irq\n", e->s.cy);
+    e->s.c.irq |= IRQ_MAPPER;
+  }
+}
+
 static void mapper18_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   addr &= 0xf003;
@@ -5448,6 +5630,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     u32 prgram = MAX(cart_db_info.prgram, cart_db_info.prgnvram);
     ci->prgram8k_banks = prgram >> 13;
     ci->prgram512b_banks = prgram >> 9;
+    ci->prgram_bytes = prgram;
     if (cart_db_info.chrrom) {
       ci->chr8k_banks = cart_db_info.chrrom >> 13;
       ci->chr4k_banks = cart_db_info.chrrom >> 12;
@@ -5544,6 +5727,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->chr2k_banks = ci->chr8k_banks * 4;
     ci->chr1k_banks = ci->chr8k_banks * 8;
     ci->prgram512b_banks = ci->prgram8k_banks * 16;
+    ci->prgram_bytes = ci->prgram512b_banks * 512;
 
     CHECK_MSG(file_data->size >= data_size, "file must be >= %d.\n", data_size);
     CHECK_MSG(ci->prgram8k_banks <= 0x2000,
@@ -5568,7 +5752,8 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       ci->mirror);
   printf("prgrom: 32k=%u 16k=%u 8k=%u\n", ci->prg32k_banks, ci->prg16k_banks,
       ci->prg8k_banks);
-  printf("prgram: 8k=%u 512b=%u\n", ci->prgram8k_banks, ci->prgram512b_banks);
+  printf("prgram: 8k=%u 512b=%u b=%u\n", ci->prgram8k_banks,
+         ci->prgram512b_banks, ci->prgram_bytes);
   printf("chrr*m: 8k=%u 4k=%u 2k=%u 1k=%u\n", ci->chr8k_banks, ci->chr4k_banks,
       ci->chr2k_banks, ci->chr1k_banks);
 
@@ -5701,6 +5886,21 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0]);
+    break;
+  case 16:
+    if (e->ci.submapper == 4) {
+      e->mapper_write = mapper0_write;
+      e->mapper_prg_ram_write = mapper16_fcg_write;
+    } else if (e->ci.submapper == 5) {
+      e->mapper_write = mapper16_lz93d50_write;
+      e->mapper_prg_ram_read = mapper16_lz93d50_prg_ram_read;
+    } else {
+      goto unsupported;
+    }
+    e->mapper_cpu_step = mapper16_cpu_step;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
 
   case 18:
@@ -6136,7 +6336,7 @@ bool emulator_was_prg_ram_updated(Emulator* e) {
 }
 
 Result emulator_read_prg_ram(Emulator* e, const FileData* file_data) {
-  const size_t size = e->ci.prgram512b_banks << 9;
+  const size_t size = e->ci.prgram_bytes;
   if (!e->ci.has_bat_ram) return OK;
   CHECK_MSG(file_data->size == size,
             "save file is wrong size: %ld, expected %ld.\n",
@@ -6147,7 +6347,7 @@ Result emulator_read_prg_ram(Emulator* e, const FileData* file_data) {
 }
 
 Result emulator_write_prg_ram(Emulator* e, FileData* file_data) {
-  const size_t size = e->ci.prgram512b_banks << 9;
+  const size_t size = e->ci.prgram_bytes;
   if (!e->ci.has_bat_ram) return OK;
   CHECK(file_data->size >= size);
   memcpy(file_data->data, e->s.c.prg_ram, file_data->size);
@@ -6172,7 +6372,7 @@ Result emulator_write_prg_ram_to_file(Emulator* e, const char* filename) {
   if (!e->ci.has_bat_ram) return OK;
   Result result = ERROR;
   FileData file_data;
-  file_data.size = e->ci.prgram512b_banks << 9;
+  file_data.size = e->ci.prgram_bytes;
   file_data.data = xmalloc(file_data.size);
   CHECK(SUCCESS(emulator_write_prg_ram(e, &file_data)));
   CHECK(SUCCESS(file_write(filename, &file_data)));

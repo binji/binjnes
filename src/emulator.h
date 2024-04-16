@@ -104,6 +104,7 @@ typedef struct {
   bool has_bat_ram;
   bool has_trainer;
   bool is_nes2_0;
+  u32 prgram_bytes;
   u16 prg8k_banks, prg16k_banks, prg32k_banks;
   u16 chr1k_banks, chr2k_banks, chr4k_banks, chr8k_banks;
   u16 prgram512b_banks, prgram8k_banks;
@@ -117,6 +118,18 @@ typedef enum {
   PPU_BANK_EXRAM,     // MMC5, always at bank=2
   PPU_BANK_FILL,      // MMC5, Always at bank=3
 } PPUBankLoc;
+
+typedef enum {
+  I2C_INIT,
+  I2C_EXPECT_CONTROL,
+  I2C_EXPECT_CONTROL_ACK,
+  I2C_WRITE_EXPECT_ADDR,
+  I2C_WRITE_EXPECT_ADDR_ACK,
+  I2C_WRITE_EXPECT_DATA,
+  I2C_WRITE_EXPECT_DATA_ACK,
+  I2C_READ_EXPECT_DATA,
+  I2C_READ_EXPECT_DATA_ACK,
+} I2CState;
 
 typedef struct {
    // Actual mapped bank indexes.
@@ -176,6 +189,13 @@ typedef struct {
       };
       bool update_audio;
     } vrc;
+
+    struct {
+      u16 irq_counter, irq_latch;
+      I2CState i2c_state;
+      u8 i2c_addr, i2c_control, i2c_byte, i2c_bits;
+      bool irq_enable;
+    } m16;
 
     struct {
       u16 irq_latch, irq_counter, irq_counter_mask;
