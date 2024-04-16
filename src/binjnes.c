@@ -84,6 +84,7 @@ static const char *s_save_state_filename;
 static int s_init_frames = 0;
 static bool s_step_frame;
 static bool s_paused;
+static bool s_fast_forward;
 static Ticks s_rewind_start;
 static u32 s_random_seed = 0xcabba6e5;
 static RamInit s_ram_init = RAM_INIT_ZERO;
@@ -713,11 +714,14 @@ static void run_until_ticks(Ticks until_ticks) {
 }
 
 static void rewind_begin(void) {
+  if (s_fast_forward) return;
   s_rewind_state.rewinding = true;
   s_rewind_start = emulator_get_ticks(e);
 }
 
 static void rewind_by(Ticks delta) {
+  if (!s_rewind_state.rewinding) return;
+
   Ticks now = emulator_get_ticks(e);
   Ticks then = now;
   if (now >= delta) {
@@ -763,8 +767,9 @@ error:;
 }
 
 static void rewind_end(void) {
+  if (!s_rewind_state.rewinding) return;
+
   Ticks ticks = emulator_get_ticks(e);
-  assert(s_rewind_state.rewinding);
 
   if (s_rewind_state.result.info) {
     rewind_truncate_to(s_rewind_buffer, e, &s_rewind_state.result);
@@ -807,6 +812,11 @@ static void handle_event(const sapp_event *event) {
         emulator_set_reset(e, true);
         joypad_append_reset(s_joypad, true, emulator_get_ticks(e));
         break;
+      case SAPP_KEYCODE_LEFT_SHIFT:
+        if (!s_rewind_state.rewinding) {
+          s_fast_forward = true;
+        }
+        break;
       default: break;
     }
     goto key;
@@ -817,6 +827,9 @@ static void handle_event(const sapp_event *event) {
       case SAPP_KEYCODE_DELETE:
         emulator_set_reset(e, false);
         joypad_append_reset(s_joypad, false, emulator_get_ticks(e));
+        break;
+      case SAPP_KEYCODE_LEFT_SHIFT:
+        s_fast_forward = false;
         break;
       default: break;
     }
@@ -868,37 +881,46 @@ static int emulator_thread(void *arg) {
   init_emulator();
   set_status_text("Loaded %s", s_rom_filename);
   while (atomic_load(&s_running)) {
-    mtx_lock(&s_frame_begin_mtx);
-    while (!s_frame_begin) {
+    if (!s_paused && s_fast_forward) {
       handle_events();
-      cnd_wait(&s_frame_begin_cnd, &s_frame_begin_mtx);
-    }
-    s_frame_begin = false;
-    f64 delta_sec = s_frame_duration;
-    mtx_unlock(&s_frame_begin_mtx);
-
-    if (s_rewind_state.rewinding) {
-      rewind_by(REWIND_CYCLES_PER_FRAME);
-    } else if (s_paused) {
-      // Clear audio buffer.
-      size_t read_head = atomic_load_size(&s_audio_buffer_read);
-      size_t write_head = atomic_load_size(&s_audio_buffer_write);
-      if (read_head > 0) {
-        if (write_head < read_head) {
-          memset(s_audio_buffer + write_head, 0,
-                 (read_head - write_head - 1) * sizeof(f32));
-        } else {
-          size_t to_end = ARRAY_SIZE(s_audio_buffer) - write_head;
-          memset(s_audio_buffer + write_head, 0, to_end * sizeof(f32));
-          memset(s_audio_buffer, 0, (read_head - 1) * sizeof(f32));
-        }
-        atomic_store_size(&s_audio_buffer_write, read_head - 1);
-      }
-    } else {
+      f64 delta_sec = 1.f / 60.f;
       Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
       Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
       run_until_ticks(until_ticks);
       s_last_ticks = emulator_get_ticks(e);
+    } else {
+      mtx_lock(&s_frame_begin_mtx);
+      while (!s_frame_begin) {
+        handle_events();
+        cnd_wait(&s_frame_begin_cnd, &s_frame_begin_mtx);
+      }
+      s_frame_begin = false;
+      f64 delta_sec = s_frame_duration;
+      mtx_unlock(&s_frame_begin_mtx);
+
+      if (s_rewind_state.rewinding) {
+        rewind_by(REWIND_CYCLES_PER_FRAME);
+      } else if (s_paused) {
+        // Clear audio buffer.
+        size_t read_head = atomic_load_size(&s_audio_buffer_read);
+        size_t write_head = atomic_load_size(&s_audio_buffer_write);
+        if (read_head > 0) {
+          if (write_head < read_head) {
+            memset(s_audio_buffer + write_head, 0,
+                   (read_head - write_head - 1) * sizeof(f32));
+          } else {
+            size_t to_end = ARRAY_SIZE(s_audio_buffer) - write_head;
+            memset(s_audio_buffer + write_head, 0, to_end * sizeof(f32));
+            memset(s_audio_buffer, 0, (read_head - 1) * sizeof(f32));
+          }
+          atomic_store_size(&s_audio_buffer_write, read_head - 1);
+        }
+      } else {
+        Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
+        Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
+        run_until_ticks(until_ticks);
+        s_last_ticks = emulator_get_ticks(e);
+      }
     }
 
     update_overlay();
