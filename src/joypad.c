@@ -615,14 +615,15 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
         playback->current_total_latch);
     assert(playback->movie_buffer->ticks[playback->current_total_latch] == ticks);
   } else if (playback->current_frame < playback->movie_buffer->frame_count &&
-             playback->current_total_latch + 1 <
+             playback->current_total_latch <
                  playback->movie_buffer->tick_count &&
              strobe) {
+    assert(playback->current_frame < playback->movie_buffer->frame_count);
     JoypadMovieFrame* frame =
         &playback->movie_buffer->frames[playback->current_frame];
     LOG("[#%u] (%10" PRIu64
         ") movie playback (%u/%u): latch=>%u (==%u) [total:%u] ",
-        playback->e->s.p.frame, ticks, playback->current_frame,
+        playback->e->s.p.frame, ticks, playback->current_frame + 1,
         playback->movie_buffer->frame_count, playback->current_frame_latch + 1,
         frame->latch, playback->current_total_latch + 1);
     if (++playback->current_total_latch > playback->max_latches) {
