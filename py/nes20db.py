@@ -66,6 +66,8 @@ def main(args):
     prgnvram_size = int(prgnvram.attrib['size']) if prgnvram is not None else 0
     chrnvram = game.find('chrnvram')
     chrnvram_size = int(chrnvram.attrib['size']) if chrnvram is not None else 0
+    console = game.find('console')
+    region = int(console.attrib['region']) if console is not None else 0
 
     prgrom_s.add(prgrom_size)
     prgram_s.add(prgram_size)
@@ -78,7 +80,8 @@ def main(args):
     cart = (
       mapper,submapper,mirror,battery,
       prgrom_size,chrrom_size,prgram_size,
-      chrram_size,prgnvram_size,chrnvram_size
+      chrram_size,prgnvram_size,chrnvram_size,
+      region
     )
     carts.add(cart)
     cart_crcs[cart].append((name, crc))
@@ -109,9 +112,17 @@ def main(args):
   u8 submapper;
   Size prgrom, prgram, prgnvram;
   Size chrrom, chrram, chrnvram;
+  System system;
   Mirror mirror;
   bool battery;
 } Cart;\n''')
+
+  system_enum = {
+    0: 'SYSTEM_NTSC',
+    1: 'SYSTEM_PAL',
+    2: 'SYSTEM_NTSC',  # ???
+    3: 'SYSTEM_NTSC',  # ???
+  }
 
   mirror_enum = {
     'H': 'MIRROR_HORIZONTAL',
@@ -125,7 +136,7 @@ def main(args):
 
   print('static const Cart s_carts[] = {')
   for i, cart in enumerate(carts):
-    mapper, submapper, mirror, battery, prgrom_size, chrrom_size, prgram_size, chrram_size, prgnvram_size, chrnvram_size = cart
+    mapper, submapper, mirror, battery, prgrom_size, chrrom_size, prgram_size, chrram_size, prgnvram_size, chrnvram_size, system = cart
     print(f'  /* {i} */ {{', end='')
     print(f'.mapper={mapper},', end='')
     if submapper:
@@ -144,6 +155,8 @@ def main(args):
     print(f'.mirror={mirror_enum[mirror]},', end='')
     if battery:
       print(f'.battery={battery},', end='')
+    if system:
+      print(f'.system={system_enum[system]},', end='')
     print('},\n', end='')
   print('};\n')
 
@@ -151,7 +164,7 @@ def main(args):
   print('static const u32 s_crcs[] = {')
   for i, cart in enumerate(cart_crc_keys):
     crcs = cart_crcs[cart]
-    mapper, submapper, mirror, battery, prgrom_size, chrrom_size, prgram_size, chrram_size, prgnvram_size, chrnvram_size = cart
+    mapper, submapper, mirror, battery, prgrom_size, chrrom_size, prgram_size, chrram_size, prgnvram_size, chrnvram_size, system = cart
     print(f'/**** {i} ', end='')
     print(f'mapper={mapper} ', end='')
     if submapper:
@@ -170,6 +183,8 @@ def main(args):
     print(f'mirror={mirror} ', end='')
     if battery:
       print(f'battery={battery} ', end='')
+    if system:
+      print(f'system={system_enum[system]} ', end='')
     print('*/')
 
     for j, (name, crc) in enumerate(sorted(crcs)):

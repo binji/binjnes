@@ -9,6 +9,7 @@
 #include "sokol/sokol_gfx.h"
 #include "sokol/sokol_glue.h"
 #include "sokol/sokol_log.h"
+#include "sokol/sokol_time.h"
 
 #include "atomic.h"
 #include "common.h"
@@ -35,7 +36,7 @@
 #define AUDIO_FRAMES 2048 /* ~46ms of latency at 44.1kHz */
 #define REWIND_FRAMES_PER_BASE_STATE 45
 #define REWIND_BUFFER_CAPACITY MEGABYTES(32)
-#define REWIND_CYCLES_PER_FRAME (89432 * 3 / 2) /* Rewind at 1.5x */
+#define REWIND_FACTOR (3 / 2) /* Rewind at 1.5x */
 
 #define KEYCODE_COUNT 400
 #define MOUSEBUTTON_COUNT 3
@@ -110,6 +111,11 @@ static bool s_show_frame_counter;
 static ControllerType s_controller_type[2] = {CONTROLLER_JOYPAD,
                                               CONTROLLER_JOYPAD};
 static bool s_should_lock_mouse = false;
+// FPS timer
+static u64 s_fps_first_frame;
+static u64 s_start_ticks;
+static u64 s_pause_start_ticks;
+static u64 s_paused_ticks;
 
 sg_pass_action s_pass_action;
 sg_pipeline s_pipeline;
@@ -117,6 +123,20 @@ sg_bindings s_bindings[2];
 
 static FileData s_rom;
 static Emulator* e;
+
+static void pause(bool paused) {
+  if (s_paused == paused) return;
+  if (s_paused) {
+    s_paused_ticks += stm_since(s_pause_start_ticks);
+  } else {
+    s_pause_start_ticks = stm_now();
+  }
+  s_paused = paused;
+}
+
+static u64 get_paused_ticks() {
+  return s_paused_ticks + (s_paused ? stm_since(s_pause_start_ticks) : 0);
+}
 
 /* tom-thumb font: https://robey.lag.net/2010/01/23/tiny-monospace-font.html
  * license: CC0
@@ -203,9 +223,11 @@ static void update_overlay(void) {
   clear_overlay();
 
   if (s_show_frame_counter) {
+    f64 fps = (e->s.p.frame + e->s.c.lag_frames + 1 - s_fps_first_frame) /
+              stm_sec(stm_since(s_start_ticks) - get_paused_ticks());
     char buf[128];
-    snprintf(buf, sizeof(buf), "f%u lag:%u", e->s.p.frame + 1,
-             e->s.c.lag_frames);
+    snprintf(buf, sizeof(buf), "f%u lag:%u %.1f fps", e->s.p.frame + 1,
+             e->s.c.lag_frames, fps);
     draw_rect_str(STATUS_TEXT_X, STATUS_TEXT_Y - GLYPH_HEIGHT - 2,
                   MAKE_RGBA(224, 224, 224, 255), STATUS_TEXT_RGBA, buf);
   }
@@ -578,7 +600,7 @@ static void init_emulator(void) {
   emulator_schedule_reset_change(e, joypad_get_next_reset_change(s_joypad));
 
   if (s_init_frames) {
-    Ticks total_ticks = (Ticks)s_init_frames * PPU_FRAME_TICKS;
+    Ticks total_ticks = (Ticks)s_init_frames * e->master_ticks_per_frame;
     Ticks until_ticks = emulator_get_ticks(e) + total_ticks;
     printf("frames = %u total_ticks = %" PRIu64 "\n", s_init_frames,
            total_ticks);
@@ -593,7 +615,7 @@ static void init_emulator(void) {
       }
       if (event & EMULATOR_EVENT_UNTIL_TICKS) {
         finish_at_next_frame = true;
-        until_ticks += PPU_FRAME_TICKS;
+        until_ticks += e->master_ticks_per_frame;
       }
       if (event & EMULATOR_EVENT_RESET_CHANGE) {
         emulator_toggle_reset(e);
@@ -628,6 +650,8 @@ static void init(void) {
   cnd_init(&s_emulator_done_cnd);
   thrd_create(&s_thread, emulator_thread, NULL);
 
+  stm_setup();
+  s_start_ticks = stm_now();
   init_graphics();
   init_audio();
   init_input();
@@ -704,11 +728,11 @@ static void run_until_ticks(Ticks until_ticks) {
 
   if (event & EMULATOR_EVENT_INVALID_OPCODE) {
     // set_status_text("invalid opcode!");
-    s_paused = true;
+    pause(true);
   }
   if (s_step_frame && new_frame) {
     // host_reset_audio(host);
-    s_paused = true;
+    pause(true);
     s_step_frame = false;
   }
 }
@@ -755,7 +779,7 @@ static void rewind_by(Ticks delta) {
   buffer[GLYPHS_PER_LINE] = 0;
 
   u32 day, hr, min, sec, ms;
-  emulator_ticks_to_time(then, &day, &hr, &min, &sec, &ms);
+  emulator_ticks_to_time(e, then, &day, &hr, &min, &sec, &ms);
   char time[64];
   snprintf(time, sizeof(time), "%u:%02u:%02u.%02u", day * 24 + hr, min, sec,
            ms / 10);
@@ -778,6 +802,10 @@ static void rewind_end(void) {
   }
 
   memset(&s_rewind_state, 0, sizeof(s_rewind_state));
+  // Just restart the fps timer
+  s_fps_first_frame = e->s.p.frame;
+  s_start_ticks = stm_now();
+  s_paused_ticks = 0;
 }
 
 static void save_state(void) {
@@ -802,8 +830,8 @@ static void handle_event(const sapp_event *event) {
     switch (event->key_code) {
       case SAPP_KEYCODE_F6: save_state(); break;
       case SAPP_KEYCODE_F9: load_state(); break;
-      case SAPP_KEYCODE_N: s_step_frame = true; s_paused = false; break;
-      case SAPP_KEYCODE_SPACE: s_paused ^= 1; break;
+      case SAPP_KEYCODE_N: s_step_frame = true; pause(false); break;
+      case SAPP_KEYCODE_SPACE: pause(s_paused ^ 1); break;
       case SAPP_KEYCODE_MINUS: inc_audio_volume(-0.05f); break;
       case SAPP_KEYCODE_EQUAL: inc_audio_volume(+0.05f); break;
       case SAPP_KEYCODE_BACKSPACE: rewind_begin(); break;
@@ -884,7 +912,7 @@ static int emulator_thread(void *arg) {
     if (!s_paused && s_fast_forward) {
       handle_events();
       f64 delta_sec = 1.f / 60.f;
-      Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
+      Ticks delta_ticks = (Ticks)(delta_sec * e->master_ticks_per_second);
       Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
       run_until_ticks(until_ticks);
       s_last_ticks = emulator_get_ticks(e);
@@ -899,7 +927,7 @@ static int emulator_thread(void *arg) {
       mtx_unlock(&s_frame_begin_mtx);
 
       if (s_rewind_state.rewinding) {
-        rewind_by(REWIND_CYCLES_PER_FRAME);
+        rewind_by(delta_sec * e->master_ticks_per_frame * REWIND_FACTOR);
       } else if (s_paused) {
         // Clear audio buffer.
         size_t read_head = atomic_load_size(&s_audio_buffer_read);
@@ -916,7 +944,7 @@ static int emulator_thread(void *arg) {
           atomic_store_size(&s_audio_buffer_write, read_head - 1);
         }
       } else {
-        Ticks delta_ticks = (Ticks)(delta_sec * PPU_TICKS_PER_SECOND);
+        Ticks delta_ticks = (Ticks)(delta_sec * e->master_ticks_per_second);
         Ticks until_ticks = emulator_get_ticks(e) + delta_ticks;
         run_until_ticks(until_ticks);
         s_last_ticks = emulator_get_ticks(e);

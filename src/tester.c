@@ -311,7 +311,7 @@ int main(int argc, char** argv) {
               s_output_audio);
   }
 
-  Ticks total_ticks = (Ticks)s_frames * PPU_FRAME_TICKS;
+  Ticks total_ticks = (Ticks)s_frames * e->master_ticks_per_frame;
   Ticks until_ticks = emulator_get_ticks(e) + total_ticks;
   printf("frames = %u total_ticks = %" PRIu64 "\n", s_frames, total_ticks);
   bool finish_at_next_frame = false;
@@ -343,7 +343,7 @@ int main(int argc, char** argv) {
     }
     if (event & EMULATOR_EVENT_UNTIL_TICKS) {
       finish_at_next_frame = true;
-      until_ticks += PPU_FRAME_TICKS;
+      until_ticks += e->master_ticks_per_frame;
     }
     if (event & EMULATOR_EVENT_INVALID_OPCODE) {
       printf("!! hit invalid opcode, pc=");
@@ -357,7 +357,7 @@ int main(int argc, char** argv) {
   }
   f64 host_time = get_time_sec() - start_time;
   Ticks real_total_ticks = emulator_get_ticks(e);
-  f64 nes_time = (f64)real_total_ticks / (CPU_TICKS_PER_SECOND * 3);
+  f64 nes_time = (f64)real_total_ticks / e->master_ticks_per_second;
   printf("time: nes=%.1fs host=%.1fs (%.1fx) (%.1fms/frame)\n", nes_time,
          host_time, nes_time / host_time, host_time * 1000 / s_frames);
 

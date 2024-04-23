@@ -39,6 +39,12 @@ typedef enum {
 } Submapper;
 
 typedef enum {
+  SYSTEM_NTSC,
+  SYSTEM_PAL,
+  SYSTEM_DENDY,
+} System;
+
+typedef enum {
   MIRROR_NONE = 0,
   MIRROR_SINGLE_0 = 0,
   MIRROR_SINGLE_1 = 1,
@@ -57,6 +63,7 @@ typedef struct {
   u32 chrnvram;
   u16 mapper;
   u16 submapper;
+  System system;
   Mirror mirror;
   bool battery;
 } CartDbInfo;

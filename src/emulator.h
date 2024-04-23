@@ -19,10 +19,6 @@ extern "C" {
 
 #define SCREEN_WIDTH 256
 #define SCREEN_HEIGHT 240
-#define PPU_TICKS_PER_SECOND 5369318
-#define CPU_TICKS_PER_SECOND 1789772
-#define APU_TICKS_PER_SECOND 894886
-#define PPU_FRAME_TICKS 89342
 
 #define MAX_CHRRAM_SIZE 0x8000
 #define CHRRAM1K_MASK ((MAX_CHRRAM_SIZE >> 10) - 1)
@@ -50,7 +46,7 @@ typedef struct AudioBuffer {
   alignas(16) f32 buffer[256];  // circular buffer for filter
   int bufferi;      // buffer index
   u32 frequency;    /* Sample frequency, as N samples per second */
-  u32 freq_counter; /* Used for resampling; [0..APU_TICKS_PER_SECOND). */
+  u32 freq_counter; /* Used for resampling; [0..apu_ticks_per_second). */
   u32 divisor;
   u32 frames; /* Number of frames to generate per call to emulator_run. */
   f32* data;   /* f32 1-channel samples @ |frequency| */
@@ -109,6 +105,7 @@ typedef struct {
   u16 chr1k_banks, chr2k_banks, chr4k_banks, chr8k_banks;
   u16 prgram512b_banks, prgram8k_banks;
   u16 mapper, submapper;
+  System system;
 } CartInfo;
 
 typedef enum {
@@ -315,6 +312,7 @@ typedef struct {
 typedef struct {
   u64 when[SCHED_COUNT];
   u64 next;
+  u32 ppu_clk;
 } Sc;
 
 typedef struct {
@@ -349,6 +347,12 @@ typedef struct Emulator {
   FrameBuffer frame_buffer;
   AudioBuffer audio_buffer;
   JoypadCallbackInfo joypad_info;
+  u32 master_ticks_per_second;
+  u32 master_ticks_per_frame;
+  u32 cpu_ticks_per_second;
+  u32 ppu_divider;
+  u32 cpu_divider;
+  u32 apu_divider;
   // Caches.
   PPUStepFunc* ppu_steps;
   u32 mmc3_a12_high[84*241];  // Cache all PPU states where A12 will go high.
@@ -390,8 +394,8 @@ void emulator_set_reset(Emulator*, bool set);
 void emulator_toggle_reset(Emulator*);
 void emulator_schedule_reset_change(Emulator*, Ticks at);
 
-void emulator_ticks_to_time(Ticks, u32* day, u32* hr, u32* min, u32* sec,
-                            u32* ms);
+void emulator_ticks_to_time(Emulator*, Ticks, u32* day, u32* hr, u32* min,
+                            u32* sec, u32* ms);
 
 #ifdef __cplusplus
 }

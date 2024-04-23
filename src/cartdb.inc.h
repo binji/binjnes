@@ -57,6 +57,7 @@ typedef struct {
   u8 submapper;
   Size prgrom, prgram, prgnvram;
   Size chrrom, chrram, chrnvram;
+  System system;
   Mirror mirror;
   bool battery;
 } Cart;
@@ -65,444 +66,580 @@ static const Cart s_carts[] = {
   /* 0 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_2K,.chrrom=SIZE_8K,.mirror=MIRROR_FOUR_SCREEN,.battery=1,},
   /* 1 */ {.mapper=0,.prgrom=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
   /* 2 */ {.mapper=0,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 3 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 4 */ {.mapper=0,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 5 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 6 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 7 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 8 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 9 */ {.mapper=0,.prgrom=SIZE_16K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 10 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 11 */ {.mapper=0,.prgrom=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 12 */ {.mapper=0,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 13 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 14 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 15 */ {.mapper=0,.prgrom=SIZE_16K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 16 */ {.mapper=0,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 17 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 18 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 19 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 20 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 21 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 22 */ {.mapper=0,.prgrom=SIZE_48K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 23 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_2K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 24 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_4K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 25 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 26 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 27 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 28 */ {.mapper=1,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 29 */ {.mapper=1,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 30 */ {.mapper=1,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 31 */ {.mapper=1,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 32 */ {.mapper=1,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 33 */ {.mapper=1,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 34 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 35 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 36 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 37 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 38 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 39 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 40 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 41 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 42 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 43 */ {.mapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 44 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 45 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 46 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 47 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 48 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_72K,.mirror=MIRROR_HORIZONTAL,},
-  /* 49 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 50 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 51 */ {.mapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 52 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 53 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 54 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 55 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 56 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 57 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 58 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 59 */ {.mapper=1,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 60 */ {.mapper=1,.prgrom=SIZE_512K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 61 */ {.mapper=1,.prgrom=SIZE_512K,.prgram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 62 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 63 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 64 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 65 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 66 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 67 */ {.mapper=1,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 68 */ {.mapper=1,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 69 */ {.mapper=1,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 70 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 71 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 72 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 73 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 74 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 75 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 76 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_112K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 77 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 78 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 79 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 80 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 81 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 82 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_48K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 83 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 84 */ {.mapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 85 */ {.mapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 86 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 87 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 88 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,},
-  /* 89 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 90 */ {.mapper=1,.submapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 91 */ {.mapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 92 */ {.mapper=2,.prgrom=SIZE_48K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 93 */ {.mapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 94 */ {.mapper=2,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 95 */ {.mapper=2,.submapper=1,.prgrom=SIZE_1024K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 96 */ {.mapper=2,.submapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 97 */ {.mapper=2,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 98 */ {.mapper=2,.submapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 99 */ {.mapper=2,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 100 */ {.mapper=2,.submapper=1,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 101 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrram=SIZE_8K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 102 */ {.mapper=2,.submapper=2,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 103 */ {.mapper=2,.submapper=2,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 104 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 105 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 106 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 107 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 108 */ {.mapper=2,.submapper=2,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 109 */ {.mapper=2,.submapper=2,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 110 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 111 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 112 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 113 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 114 */ {.mapper=2,.submapper=2,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 115 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 116 */ {.mapper=2,.submapper=2,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 117 */ {.mapper=3,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 118 */ {.mapper=3,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 119 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 120 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 121 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 122 */ {.mapper=3,.submapper=1,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 123 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 124 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 125 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 126 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 127 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 128 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_24K,.mirror=MIRROR_HORIZONTAL,},
-  /* 129 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 130 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 131 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 132 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 133 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 134 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 135 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 136 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 137 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 138 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 139 */ {.mapper=3,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 140 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 141 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 142 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 143 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 144 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 145 */ {.mapper=4,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 146 */ {.mapper=4,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 147 */ {.mapper=4,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 148 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 149 */ {.mapper=4,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 150 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 151 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 152 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,},
-  /* 153 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_56K,.mirror=MIRROR_HORIZONTAL,},
-  /* 154 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 155 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 156 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 157 */ {.mapper=4,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 158 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 159 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 160 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 161 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 162 */ {.mapper=4,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 163 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 164 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 165 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 166 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 167 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 168 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_88K,.mirror=MIRROR_HORIZONTAL,},
-  /* 169 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_96K,.mirror=MIRROR_HORIZONTAL,},
-  /* 170 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 171 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 172 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_232K,.mirror=MIRROR_HORIZONTAL,},
-  /* 173 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 174 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 175 */ {.mapper=4,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 176 */ {.mapper=4,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 177 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 178 */ {.mapper=4,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 179 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 180 */ {.mapper=4,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 181 */ {.mapper=4,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 182 */ {.mapper=4,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 183 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 184 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 185 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 186 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 187 */ {.mapper=4,.prgrom=SIZE_512K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 188 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
-  /* 189 */ {.mapper=4,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 190 */ {.mapper=4,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 191 */ {.mapper=4,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 192 */ {.mapper=4,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 193 */ {.mapper=4,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 194 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 195 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 196 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_16K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 197 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 198 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 199 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 200 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 201 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 202 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 203 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_16K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 204 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 205 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 206 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 207 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 208 */ {.mapper=4,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 209 */ {.mapper=4,.submapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_1K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 210 */ {.mapper=4,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 211 */ {.mapper=4,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 212 */ {.mapper=4,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 213 */ {.mapper=4,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 214 */ {.mapper=4,.submapper=3,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 215 */ {.mapper=4,.submapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 216 */ {.mapper=5,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 217 */ {.mapper=5,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 218 */ {.mapper=5,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 219 */ {.mapper=5,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 220 */ {.mapper=5,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 221 */ {.mapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 222 */ {.mapper=5,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 223 */ {.mapper=5,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 224 */ {.mapper=5,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 225 */ {.mapper=5,.prgrom=SIZE_512K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
-  /* 226 */ {.mapper=5,.prgrom=SIZE_1024K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 227 */ {.mapper=5,.prgrom=SIZE_1024K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
-  /* 228 */ {.mapper=5,.prgrom=SIZE_1024K,.chrrom=SIZE_520K,.mirror=MIRROR_HORIZONTAL,},
-  /* 229 */ {.mapper=5,.prgrom=SIZE_1024K,.prgram=SIZE_8K,.chrrom=SIZE_1024K,.mirror=MIRROR_HORIZONTAL,},
-  /* 230 */ {.mapper=5,.prgrom=SIZE_128K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 231 */ {.mapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 232 */ {.mapper=5,.prgrom=SIZE_256K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 233 */ {.mapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 234 */ {.mapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_32K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 235 */ {.mapper=5,.prgrom=SIZE_512K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 236 */ {.mapper=5,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 237 */ {.mapper=5,.prgrom=SIZE_512K,.prgnvram=SIZE_32K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 238 */ {.mapper=5,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 239 */ {.mapper=5,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 240 */ {.mapper=5,.prgrom=SIZE_1024K,.prgnvram=SIZE_32K,.chrrom=SIZE_1024K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 241 */ {.mapper=7,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 242 */ {.mapper=7,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 243 */ {.mapper=7,.submapper=1,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 244 */ {.mapper=7,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 245 */ {.mapper=7,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 246 */ {.mapper=7,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 247 */ {.mapper=7,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 248 */ {.mapper=7,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 249 */ {.mapper=7,.submapper=2,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 250 */ {.mapper=9,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 251 */ {.mapper=9,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 252 */ {.mapper=10,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 253 */ {.mapper=10,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 254 */ {.mapper=10,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 255 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 256 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 257 */ {.mapper=11,.prgrom=SIZE_128K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 258 */ {.mapper=11,.prgrom=SIZE_512K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 259 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 260 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 261 */ {.mapper=11,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 262 */ {.mapper=11,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 263 */ {.mapper=11,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 264 */ {.mapper=11,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 265 */ {.mapper=11,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 266 */ {.mapper=16,.submapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 267 */ {.mapper=16,.submapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 268 */ {.mapper=16,.submapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 269 */ {.mapper=16,.submapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 270 */ {.mapper=16,.submapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_256B,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 271 */ {.mapper=18,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 272 */ {.mapper=18,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 273 */ {.mapper=18,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 274 */ {.mapper=18,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 275 */ {.mapper=18,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 276 */ {.mapper=19,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 277 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 278 */ {.mapper=19,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 279 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 280 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 281 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 282 */ {.mapper=19,.submapper=2,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 283 */ {.mapper=19,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 284 */ {.mapper=19,.submapper=3,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 285 */ {.mapper=19,.submapper=3,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 286 */ {.mapper=19,.submapper=3,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 287 */ {.mapper=19,.submapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 288 */ {.mapper=19,.submapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 289 */ {.mapper=19,.submapper=5,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 290 */ {.mapper=21,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 291 */ {.mapper=21,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 292 */ {.mapper=23,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,},
-  /* 293 */ {.mapper=23,.submapper=1,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 294 */ {.mapper=23,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
-  /* 295 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 296 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 297 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 298 */ {.mapper=23,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 299 */ {.mapper=23,.submapper=2,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 300 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 301 */ {.mapper=23,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 302 */ {.mapper=23,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 303 */ {.mapper=23,.submapper=3,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 304 */ {.mapper=23,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 305 */ {.mapper=24,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 306 */ {.mapper=24,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 307 */ {.mapper=24,.prgrom=SIZE_128K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 308 */ {.mapper=24,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 309 */ {.mapper=24,.prgrom=SIZE_256K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 310 */ {.mapper=24,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 311 */ {.mapper=24,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 312 */ {.mapper=24,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 313 */ {.mapper=25,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 314 */ {.mapper=25,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 315 */ {.mapper=25,.submapper=1,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 316 */ {.mapper=25,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 317 */ {.mapper=25,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 318 */ {.mapper=25,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 319 */ {.mapper=25,.submapper=3,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 320 */ {.mapper=26,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 321 */ {.mapper=26,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 322 */ {.mapper=28,.prgrom=SIZE_32K,.chrram=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 323 */ {.mapper=28,.prgrom=SIZE_64K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 324 */ {.mapper=28,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 325 */ {.mapper=28,.prgrom=SIZE_1024K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 326 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_SINGLE_1,},
-  /* 327 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_SINGLE_1,.battery=1,},
-  /* 328 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,.battery=1,},
-  /* 329 */ {.mapper=30,.prgrom=SIZE_32K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 330 */ {.mapper=30,.prgrom=SIZE_64K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 331 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 332 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 333 */ {.mapper=30,.prgrom=SIZE_2048K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 334 */ {.mapper=30,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 335 */ {.mapper=30,.prgrom=SIZE_128K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 336 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 337 */ {.mapper=30,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 338 */ {.mapper=30,.prgrom=SIZE_256K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 339 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 340 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 341 */ {.mapper=30,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 342 */ {.mapper=30,.prgrom=SIZE_128K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 343 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 344 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 345 */ {.mapper=30,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 346 */ {.mapper=34,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 347 */ {.mapper=34,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 348 */ {.mapper=34,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 349 */ {.mapper=34,.submapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 350 */ {.mapper=34,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 351 */ {.mapper=34,.submapper=2,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 352 */ {.mapper=34,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 353 */ {.mapper=34,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 354 */ {.mapper=34,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 355 */ {.mapper=34,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 356 */ {.mapper=34,.submapper=2,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 357 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 358 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 359 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 360 */ {.mapper=66,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 361 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 362 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 363 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 364 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 365 */ {.mapper=69,.prgrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 366 */ {.mapper=69,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 367 */ {.mapper=69,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 368 */ {.mapper=69,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 369 */ {.mapper=69,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 370 */ {.mapper=69,.prgrom=SIZE_128K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 371 */ {.mapper=69,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 372 */ {.mapper=69,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 373 */ {.mapper=71,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 374 */ {.mapper=71,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 375 */ {.mapper=71,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 376 */ {.mapper=71,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 377 */ {.mapper=71,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 378 */ {.mapper=78,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 379 */ {.mapper=78,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 380 */ {.mapper=79,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 381 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 382 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 383 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 384 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 385 */ {.mapper=79,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 386 */ {.mapper=79,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 387 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 388 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 389 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 390 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 391 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 392 */ {.mapper=85,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 393 */ {.mapper=85,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 394 */ {.mapper=85,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 395 */ {.mapper=85,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 396 */ {.mapper=85,.submapper=2,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 397 */ {.mapper=87,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 398 */ {.mapper=87,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 399 */ {.mapper=87,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 400 */ {.mapper=87,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 401 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 402 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 403 */ {.mapper=118,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 404 */ {.mapper=118,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 405 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 406 */ {.mapper=163,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 407 */ {.mapper=163,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 408 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 409 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 410 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 411 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 412 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 413 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 414 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 415 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 416 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 417 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 418 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 419 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
-  /* 420 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 421 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 422 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_24K,.mirror=MIRROR_VERTICAL,},
-  /* 423 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 424 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 425 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 426 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 427 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 428 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 429 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 430 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 431 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 432 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 433 */ {.mapper=210,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 434 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 435 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 436 */ {.mapper=210,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 437 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 438 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_VERTICAL,},
-  /* 439 */ {.mapper=232,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 440 */ {.mapper=232,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 3 */ {.mapper=0,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 4 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 5 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 6 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 7 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 8 */ {.mapper=0,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 9 */ {.mapper=0,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 10 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 11 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 12 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 13 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 14 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 15 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 16 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 17 */ {.mapper=0,.prgrom=SIZE_16K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 18 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 19 */ {.mapper=0,.prgrom=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 20 */ {.mapper=0,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 21 */ {.mapper=0,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 22 */ {.mapper=0,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 23 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 24 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 25 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 26 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 27 */ {.mapper=0,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 28 */ {.mapper=0,.prgrom=SIZE_16K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 29 */ {.mapper=0,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 30 */ {.mapper=0,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 31 */ {.mapper=0,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 32 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 33 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 34 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 35 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 36 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 37 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 38 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 39 */ {.mapper=0,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 40 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 41 */ {.mapper=0,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 42 */ {.mapper=0,.prgrom=SIZE_48K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 43 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_2K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 44 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_4K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 45 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 46 */ {.mapper=0,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 47 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 48 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 49 */ {.mapper=1,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 50 */ {.mapper=1,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 51 */ {.mapper=1,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 52 */ {.mapper=1,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 53 */ {.mapper=1,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 54 */ {.mapper=1,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 55 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 56 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 57 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 58 */ {.mapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 59 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 60 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 61 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 62 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 63 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 64 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 65 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 66 */ {.mapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 67 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 68 */ {.mapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 69 */ {.mapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 70 */ {.mapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 71 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 72 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 73 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 74 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 75 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 76 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 77 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 78 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 79 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_72K,.mirror=MIRROR_HORIZONTAL,},
+  /* 80 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 81 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 82 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 83 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 84 */ {.mapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 85 */ {.mapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 86 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 87 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 88 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 89 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 90 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 91 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 92 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 93 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 94 */ {.mapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 95 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 96 */ {.mapper=1,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 97 */ {.mapper=1,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 98 */ {.mapper=1,.prgrom=SIZE_512K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 99 */ {.mapper=1,.prgrom=SIZE_512K,.prgram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 100 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 101 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 102 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 103 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 104 */ {.mapper=1,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 105 */ {.mapper=1,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 106 */ {.mapper=1,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 107 */ {.mapper=1,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 108 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 109 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 110 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 111 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 112 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 113 */ {.mapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 114 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 115 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_112K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 116 */ {.mapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 117 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 118 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 119 */ {.mapper=1,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 120 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 121 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 122 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 123 */ {.mapper=1,.prgrom=SIZE_256K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 124 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_48K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 125 */ {.mapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 126 */ {.mapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 127 */ {.mapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 128 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 129 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 130 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 131 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 132 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,},
+  /* 133 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 134 */ {.mapper=1,.submapper=5,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 135 */ {.mapper=1,.submapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 136 */ {.mapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 137 */ {.mapper=2,.prgrom=SIZE_48K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 138 */ {.mapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 139 */ {.mapper=2,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 140 */ {.mapper=2,.submapper=1,.prgrom=SIZE_1024K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 141 */ {.mapper=2,.submapper=1,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 142 */ {.mapper=2,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 143 */ {.mapper=2,.submapper=1,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 144 */ {.mapper=2,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 145 */ {.mapper=2,.submapper=1,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 146 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrram=SIZE_8K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 147 */ {.mapper=2,.submapper=2,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 148 */ {.mapper=2,.submapper=2,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 149 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 150 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 151 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 152 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 153 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 154 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 155 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 156 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 157 */ {.mapper=2,.submapper=2,.prgrom=SIZE_16K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 158 */ {.mapper=2,.submapper=2,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 159 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 160 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 161 */ {.mapper=2,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 162 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 163 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 164 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 165 */ {.mapper=2,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 166 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 167 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 168 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 169 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 170 */ {.mapper=2,.submapper=2,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 171 */ {.mapper=2,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 172 */ {.mapper=2,.submapper=2,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 173 */ {.mapper=3,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 174 */ {.mapper=3,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 175 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 176 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 177 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 178 */ {.mapper=3,.submapper=1,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 179 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 180 */ {.mapper=3,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 181 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 182 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 183 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 184 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 185 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_24K,.mirror=MIRROR_HORIZONTAL,},
+  /* 186 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 187 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 188 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 189 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 190 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 191 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 192 */ {.mapper=3,.submapper=2,.prgrom=SIZE_16K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 193 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 194 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 195 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 196 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 197 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 198 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 199 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 200 */ {.mapper=3,.submapper=2,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 201 */ {.mapper=3,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 202 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_FOUR_SCREEN,.system=SYSTEM_NTSC,},
+  /* 203 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 204 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 205 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_FOUR_SCREEN,.system=SYSTEM_NTSC,},
+  /* 206 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_FOUR_SCREEN,.system=SYSTEM_NTSC,},
+  /* 207 */ {.mapper=4,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 208 */ {.mapper=4,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 209 */ {.mapper=4,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 210 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 211 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 212 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 213 */ {.mapper=4,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 214 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 215 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 216 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 217 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,},
+  /* 218 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_56K,.mirror=MIRROR_HORIZONTAL,},
+  /* 219 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 220 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 221 */ {.mapper=4,.prgrom=SIZE_32K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 222 */ {.mapper=4,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 223 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 224 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 225 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 226 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 227 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 228 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 229 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 230 */ {.mapper=4,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 231 */ {.mapper=4,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 232 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 233 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 234 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 235 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 236 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 237 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 238 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 239 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 240 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_88K,.mirror=MIRROR_HORIZONTAL,},
+  /* 241 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_96K,.mirror=MIRROR_HORIZONTAL,},
+  /* 242 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 243 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 244 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 245 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 246 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 247 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 248 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 249 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_232K,.mirror=MIRROR_HORIZONTAL,},
+  /* 250 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 251 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 252 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 253 */ {.mapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 254 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 255 */ {.mapper=4,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 256 */ {.mapper=4,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 257 */ {.mapper=4,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 258 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 259 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 260 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 261 */ {.mapper=4,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 262 */ {.mapper=4,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 263 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 264 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 265 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 266 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 267 */ {.mapper=4,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 268 */ {.mapper=4,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 269 */ {.mapper=4,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 270 */ {.mapper=4,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 271 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 272 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 273 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 274 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 275 */ {.mapper=4,.prgrom=SIZE_512K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 276 */ {.mapper=4,.prgrom=SIZE_512K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
+  /* 277 */ {.mapper=4,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 278 */ {.mapper=4,.prgrom=SIZE_32K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 279 */ {.mapper=4,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 280 */ {.mapper=4,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 281 */ {.mapper=4,.prgrom=SIZE_64K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 282 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 283 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 284 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 285 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 286 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 287 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_16K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 288 */ {.mapper=4,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 289 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 290 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 291 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 292 */ {.mapper=4,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 293 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 294 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 295 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 296 */ {.mapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 297 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 298 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 299 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 300 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 301 */ {.mapper=4,.prgrom=SIZE_256K,.prgnvram=SIZE_16K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 302 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 303 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 304 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 305 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 306 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 307 */ {.mapper=4,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 308 */ {.mapper=4,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 309 */ {.mapper=4,.submapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_1K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 310 */ {.mapper=4,.submapper=1,.prgrom=SIZE_256K,.prgnvram=SIZE_1K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 311 */ {.mapper=4,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 312 */ {.mapper=4,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 313 */ {.mapper=4,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 314 */ {.mapper=4,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 315 */ {.mapper=4,.submapper=3,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 316 */ {.mapper=4,.submapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 317 */ {.mapper=5,.prgrom=SIZE_16K,.chrrom=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 318 */ {.mapper=5,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 319 */ {.mapper=5,.prgrom=SIZE_32K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 320 */ {.mapper=5,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 321 */ {.mapper=5,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 322 */ {.mapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 323 */ {.mapper=5,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 324 */ {.mapper=5,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 325 */ {.mapper=5,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 326 */ {.mapper=5,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 327 */ {.mapper=5,.prgrom=SIZE_512K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
+  /* 328 */ {.mapper=5,.prgrom=SIZE_512K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 329 */ {.mapper=5,.prgrom=SIZE_1024K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 330 */ {.mapper=5,.prgrom=SIZE_1024K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
+  /* 331 */ {.mapper=5,.prgrom=SIZE_1024K,.chrrom=SIZE_520K,.mirror=MIRROR_HORIZONTAL,},
+  /* 332 */ {.mapper=5,.prgrom=SIZE_1024K,.prgram=SIZE_8K,.chrrom=SIZE_1024K,.mirror=MIRROR_HORIZONTAL,},
+  /* 333 */ {.mapper=5,.prgrom=SIZE_1024K,.prgram=SIZE_8K,.chrrom=SIZE_1024K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 334 */ {.mapper=5,.prgrom=SIZE_128K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 335 */ {.mapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 336 */ {.mapper=5,.prgrom=SIZE_256K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 337 */ {.mapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 338 */ {.mapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_32K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 339 */ {.mapper=5,.prgrom=SIZE_512K,.prgram=SIZE_8K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 340 */ {.mapper=5,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 341 */ {.mapper=5,.prgrom=SIZE_512K,.prgnvram=SIZE_32K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 342 */ {.mapper=5,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 343 */ {.mapper=5,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 344 */ {.mapper=5,.prgrom=SIZE_1024K,.prgnvram=SIZE_32K,.chrrom=SIZE_1024K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 345 */ {.mapper=7,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 346 */ {.mapper=7,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 347 */ {.mapper=7,.submapper=1,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 348 */ {.mapper=7,.submapper=1,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 349 */ {.mapper=7,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 350 */ {.mapper=7,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 351 */ {.mapper=7,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 352 */ {.mapper=7,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 353 */ {.mapper=7,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 354 */ {.mapper=7,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 355 */ {.mapper=7,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 356 */ {.mapper=7,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 357 */ {.mapper=7,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 358 */ {.mapper=7,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 359 */ {.mapper=7,.submapper=2,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 360 */ {.mapper=9,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 361 */ {.mapper=9,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 362 */ {.mapper=9,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 363 */ {.mapper=10,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 364 */ {.mapper=10,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 365 */ {.mapper=10,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 366 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 367 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 368 */ {.mapper=11,.prgrom=SIZE_128K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 369 */ {.mapper=11,.prgrom=SIZE_512K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 370 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 371 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 372 */ {.mapper=11,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 373 */ {.mapper=11,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 374 */ {.mapper=11,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 375 */ {.mapper=11,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 376 */ {.mapper=11,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 377 */ {.mapper=11,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 378 */ {.mapper=16,.submapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 379 */ {.mapper=16,.submapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 380 */ {.mapper=16,.submapper=4,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 381 */ {.mapper=16,.submapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 382 */ {.mapper=16,.submapper=5,.prgrom=SIZE_256K,.prgnvram=SIZE_256B,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 383 */ {.mapper=18,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 384 */ {.mapper=18,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 385 */ {.mapper=18,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 386 */ {.mapper=18,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 387 */ {.mapper=18,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 388 */ {.mapper=19,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 389 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 390 */ {.mapper=19,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 391 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 392 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 393 */ {.mapper=19,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 394 */ {.mapper=19,.submapper=2,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 395 */ {.mapper=19,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 396 */ {.mapper=19,.submapper=3,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 397 */ {.mapper=19,.submapper=3,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 398 */ {.mapper=19,.submapper=3,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 399 */ {.mapper=19,.submapper=4,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 400 */ {.mapper=19,.submapper=5,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 401 */ {.mapper=19,.submapper=5,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 402 */ {.mapper=21,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 403 */ {.mapper=21,.submapper=2,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 404 */ {.mapper=23,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_40K,.mirror=MIRROR_HORIZONTAL,},
+  /* 405 */ {.mapper=23,.submapper=1,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 406 */ {.mapper=23,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,},
+  /* 407 */ {.mapper=23,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_512K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 408 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 409 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 410 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 411 */ {.mapper=23,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 412 */ {.mapper=23,.submapper=2,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 413 */ {.mapper=23,.submapper=2,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 414 */ {.mapper=23,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 415 */ {.mapper=23,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 416 */ {.mapper=23,.submapper=3,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 417 */ {.mapper=23,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 418 */ {.mapper=24,.prgrom=SIZE_32K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 419 */ {.mapper=24,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 420 */ {.mapper=24,.prgrom=SIZE_128K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 421 */ {.mapper=24,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 422 */ {.mapper=24,.prgrom=SIZE_256K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 423 */ {.mapper=24,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 424 */ {.mapper=24,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 425 */ {.mapper=24,.prgrom=SIZE_256K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 426 */ {.mapper=25,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 427 */ {.mapper=25,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 428 */ {.mapper=25,.submapper=1,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 429 */ {.mapper=25,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 430 */ {.mapper=25,.submapper=2,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 431 */ {.mapper=25,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 432 */ {.mapper=25,.submapper=3,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 433 */ {.mapper=26,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 434 */ {.mapper=26,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 435 */ {.mapper=28,.prgrom=SIZE_32K,.chrram=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 436 */ {.mapper=28,.prgrom=SIZE_64K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 437 */ {.mapper=28,.prgrom=SIZE_64K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 438 */ {.mapper=28,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 439 */ {.mapper=28,.prgrom=SIZE_1024K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 440 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_SINGLE_1,},
+  /* 441 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_SINGLE_1,.system=SYSTEM_NTSC,},
+  /* 442 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_SINGLE_1,.battery=1,.system=SYSTEM_NTSC,},
+  /* 443 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,.battery=1,},
+  /* 444 */ {.mapper=30,.prgrom=SIZE_32K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 445 */ {.mapper=30,.prgrom=SIZE_64K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 446 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 447 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 448 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 449 */ {.mapper=30,.prgrom=SIZE_2048K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 450 */ {.mapper=30,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 451 */ {.mapper=30,.prgrom=SIZE_128K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 452 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 453 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 454 */ {.mapper=30,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 455 */ {.mapper=30,.prgrom=SIZE_256K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 456 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 457 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 458 */ {.mapper=30,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 459 */ {.mapper=30,.prgrom=SIZE_128K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 460 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 461 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 462 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_PAL,},
+  /* 463 */ {.mapper=30,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 464 */ {.mapper=30,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 465 */ {.mapper=34,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 466 */ {.mapper=34,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 467 */ {.mapper=34,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 468 */ {.mapper=34,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 469 */ {.mapper=34,.submapper=1,.prgrom=SIZE_64K,.prgram=SIZE_8K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 470 */ {.mapper=34,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 471 */ {.mapper=34,.submapper=2,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 472 */ {.mapper=34,.submapper=2,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 473 */ {.mapper=34,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 474 */ {.mapper=34,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 475 */ {.mapper=34,.submapper=2,.prgrom=SIZE_128K,.chrram=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 476 */ {.mapper=34,.submapper=2,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 477 */ {.mapper=34,.submapper=2,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 478 */ {.mapper=34,.submapper=2,.prgrom=SIZE_512K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 479 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 480 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 481 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 482 */ {.mapper=66,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 483 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 484 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 485 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 486 */ {.mapper=66,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 487 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 488 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 489 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 490 */ {.mapper=66,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 491 */ {.mapper=69,.prgrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 492 */ {.mapper=69,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 493 */ {.mapper=69,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 494 */ {.mapper=69,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 495 */ {.mapper=69,.prgrom=SIZE_128K,.prgram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 496 */ {.mapper=69,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 497 */ {.mapper=69,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 498 */ {.mapper=69,.prgrom=SIZE_128K,.prgnvram=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 499 */ {.mapper=69,.prgrom=SIZE_128K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 500 */ {.mapper=69,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 501 */ {.mapper=71,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 502 */ {.mapper=71,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 503 */ {.mapper=71,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 504 */ {.mapper=71,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
+  /* 505 */ {.mapper=71,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 506 */ {.mapper=71,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 507 */ {.mapper=71,.submapper=1,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 508 */ {.mapper=78,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 509 */ {.mapper=78,.submapper=3,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 510 */ {.mapper=79,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 511 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 512 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 513 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 514 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 515 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 516 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 517 */ {.mapper=79,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 518 */ {.mapper=79,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 519 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 520 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 521 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_PAL,},
+  /* 522 */ {.mapper=79,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 523 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 524 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 525 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 526 */ {.mapper=79,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 527 */ {.mapper=85,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 528 */ {.mapper=85,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 529 */ {.mapper=85,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 530 */ {.mapper=85,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 531 */ {.mapper=85,.submapper=2,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 532 */ {.mapper=87,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 533 */ {.mapper=87,.prgrom=SIZE_16K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 534 */ {.mapper=87,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,},
+  /* 535 */ {.mapper=87,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 536 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 537 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 538 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 539 */ {.mapper=118,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 540 */ {.mapper=118,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 541 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 542 */ {.mapper=163,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 543 */ {.mapper=163,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 544 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 545 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 546 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 547 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 548 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 549 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 550 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 551 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 552 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 553 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 554 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 555 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 556 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 557 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 558 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_24K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 559 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 560 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 561 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 562 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 563 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 564 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 565 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 566 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 567 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 568 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 569 */ {.mapper=210,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 570 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 571 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 572 */ {.mapper=210,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 573 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 574 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_VERTICAL,},
+  /* 575 */ {.mapper=232,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 576 */ {.mapper=232,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
 };
 
 static const u32 s_crcs[] = {
@@ -512,18 +649,13 @@ static const u32 s_crcs[] = {
     0x084F61CD, //  Licensed Japan\Galaxian (rev0).nes 
     0x76A6A813, //  Licensed Japan\Galaxian (rev1).nes 
 /**** 2 mapper=0 prgrom=16K chrram=8K mirror=H */
-    0xBB1B892A, //  Homebrew\2048.nes 
     0x522EE20F, //  Homebrew\Blastered Cats 1K.nes 
     0x4E2118E4, //  Homebrew\Bomb Array.nes 
     0x0EA5E3FA, //  Homebrew\Box Boy.nes 
     0x8BC43536, //  Homebrew\Color a Deer [pubby].nes 
     0x929790DE, //  Homebrew\Demos\Xmas 2006 [Nerds 'R' Us].nes 
-    0xB8637E90, //  Homebrew\Escape from Pong (rev2).nes 
-    0x24B00036, //  Homebrew\Escape from Pong (rev5, normal controls).nes 
-    0xA3A74BCF, //  Homebrew\Escape from Pong (rev5, reversed controls).nes 
     0x6C251132, //  Homebrew\Flight Minigames.nes 
     0xE43FCC70, //  Homebrew\Function [Red Moon Games].nes 
-    0x3CC9E65A, //  Homebrew\Galaxy Patrol Enhanced.nes 
     0x10650239, //  Homebrew\Memory (Sly Dog Studios).nes 
     0x21BA8CE6, //  Homebrew\Midnight Jogger.nes 
     0xEE31C528, //  Homebrew\Munchie Attack꞉ Fast Food Clone.nes 
@@ -537,14 +669,18 @@ static const u32 s_crcs[] = {
     0xE18120C3, //  Homebrew\Tools\SFX Editor.nes 
     0x9B3B1CF4, //  Homebrew\Whack-A-Mario.nes 
     0xAD1DB0DE, //  Homebrew\Wrecking Balls (NESdev 2016)[Rahsennor].nes 
-/**** 3 mapper=0 prgrom=16K chrrom=8K mirror=H */
-    0x2E4CCF46, //  BIOS\Game Genie.nes 
+/**** 3 mapper=0 prgrom=16K chrram=8K mirror=H system=SYSTEM_NTSC */
+    0xBB1B892A, //  Homebrew\2048.nes 
+    0xB8637E90, //  Homebrew\Escape from Pong (rev2).nes 
+    0x24B00036, //  Homebrew\Escape from Pong (rev5, normal controls).nes 
+    0xA3A74BCF, //  Homebrew\Escape from Pong (rev5, reversed controls).nes 
+    0x3CC9E65A, //  Homebrew\Galaxy Patrol Enhanced.nes 
+/**** 4 mapper=0 prgrom=16K chrrom=8K mirror=H */
     0xD9893080, //  Bad Dumps\Battletank 2000 [bad CHR].nes 
     0xC44D4FAA, //  Bootleg Hacks\Hassle.nes 
     0xD49342CC, //  Bootleg Hacks\Inventor\Sea War 2000.nes 
     0x4E12DA59, //  Bootleg Hacks\Teletubbies.nes 
     0x7ABB83D5, //  Bootleg Hacks\星空飛前 - Night Arrow.nes 
-    0xBA8BDB77, //  Bootleg Singles\Donkey Kong (LA03).nes 
     0x400858B9, //  Bootleg Singles\Galaga (LA25).nes 
     0x31D755B3, //  Bootleg Singles\Ice Climber (LA20).nes 
     0x711CCD04, //  Bootleg Singles\Mario Bros. (LA01).nes 
@@ -553,13 +689,11 @@ static const u32 s_crcs[] = {
     0x63DDD219, //  Bootleg Singles\Popeye (LA02).nes 
     0xB22C41CD, //  Bootleg Singles\Road Fighter (LA42).nes 
     0x38C1CF0D, //  Bootleg Singles\Tennis.nes 
-    0x275E3CFB, //  Bootleg Singles\TouchGamePlayer\Baseball.nes 
     0x9387A2AC, //  Bootleg Singles\TouchGamePlayer\Battle City.nes 
     0x74C0FD0F, //  Bootleg Singles\TouchGamePlayer\Bomb Sweeper.nes 
     0xFAE795F7, //  Bootleg Singles\TouchGamePlayer\Chack 'n Pop.nes 
     0x2B33B9CC, //  Bootleg Singles\TouchGamePlayer\Devil World.nes 
     0xFC70C88A, //  Bootleg Singles\TouchGamePlayer\Dig Dug.nes 
-    0xBCC3EE67, //  Bootleg Singles\TouchGamePlayer\Donkey Kong.nes 
     0x01024AEF, //  Bootleg Singles\TouchGamePlayer\Front Line.nes 
     0x758F6867, //  Bootleg Singles\TouchGamePlayer\Galaga.nes 
     0x9BFCAEE5, //  Bootleg Singles\TouchGamePlayer\Galaxian.nes 
@@ -575,13 +709,8 @@ static const u32 s_crcs[] = {
     0x4AC46E46, //  Compatibility Hacks\小瑪琍 (C&amp;E)[PRG doubled to 16 KiB].nes 
     0xAE0119B3, //  Homebrew\81ex.nes 
     0x9F2B9182, //  Homebrew\Aspect Star N [Nicole Express].nes 
-    0x5AF637A4, //  Homebrew\Basic Championship Wrestling.nes 
     0x6DFB1B97, //  Homebrew\Bomb Sweeper.nes 
-    0x7616AD8B, //  Homebrew\Bsides.nes 
     0x41324F94, //  Homebrew\CYO.nes 
-    0x43ACE5A4, //  Homebrew\Chase (rev0).nes 
-    0x331BCC87, //  Homebrew\Chase (rev1).nes 
-    0x1A757C16, //  Homebrew\Code Master.nes 
     0x8F426CAB, //  Homebrew\Demos\BioForceApe.nes 
     0xEA39CD0F, //  Homebrew\Demos\Ceci n'est pas une NES.nes 
     0xB071B0D4, //  Homebrew\Demos\Danmaku 100 Bullet Demo [pubby].nes 
@@ -594,14 +723,9 @@ static const u32 s_crcs[] = {
     0x85B0336F, //  Homebrew\Demos\Zounds.nes 
     0x95EC8617, //  Homebrew\Double Action Blaster Guys.nes 
     0x1CBD5116, //  Homebrew\FHBG [NovaYoshi].nes 
-    0xBC7ECBB8, //  Homebrew\Falldown.nes 
-    0x760DB6D9, //  Homebrew\Forehead Block Guy (2011-03-27) .nes 
-    0xA84D71F2, //  Homebrew\Forehead Block Guy (2011-04-06) .nes 
-    0x2A86004F, //  Homebrew\Forehead Block Guy (2011-05-26) .nes 
     0x0CBB550D, //  Homebrew\Galaxy Nes.nes 
     0xAA939381, //  Homebrew\Get It! [Gravel Sudios].nes 
     0x7EC289BF, //  Homebrew\Greedy Snake.nes 
-    0xBB8F6776, //  Homebrew\Hacks\Alice de Climber [DASTARD].nes 
     0x5B854ED5, //  Homebrew\Hacks\Alien Pinball [ROMs and Robots].nes 
     0xD5E8D258, //  Homebrew\Hacks\Arctic Tennis.nes 
     0xDCC2F863, //  Homebrew\Hacks\Balloon Fight꞉ Satoru Iwata Edition.nes 
@@ -644,27 +768,20 @@ static const u32 s_crcs[] = {
     0x65A8EC90, //  Homebrew\Hacks\東方乙橙々.nes 
     0x8608B73F, //  Homebrew\HexS.nes 
     0xD4E4B154, //  Homebrew\Light Shields.nes 
-    0x7CCB8D1E, //  Homebrew\Lines.nes 
     0x09475BF9, //  Homebrew\Lj65 [Damian Yerrick].nes 
     0x629EA430, //  Homebrew\Nesglovphone - Power Glove.nes 
     0x0D77A2A4, //  Homebrew\Nintencat꞉ The Parody.nes 
     0xC1739923, //  Homebrew\Paint or Draw (v2).nes 
     0xCEC3E585, //  Homebrew\Ping Pong.nes 
-    0x1A70B79E, //  Homebrew\Pong 198X.nes 
     0xBF044D72, //  Homebrew\Pong+Head Bounce.nes 
-    0x2419483A, //  Homebrew\Ralph 4.nes 
     0x078B3E8E, //  Homebrew\Rock Paper Scissors Lizard Sbock (Build 9b).nes 
     0x019E6C7C, //  Homebrew\Squirrel Domino.nes 
-    0xEE63ACCA, //  Homebrew\Sudoku (NESWORLD Edition).nes 
-    0x2A201CF4, //  Homebrew\Super Tilt Bro. (NESdev v4).nes 
-    0x1BB0E3D5, //  Homebrew\Super Tilt Bro..nes 
     0x457CFF46, //  Homebrew\Tests\NES Paddle Controller Test (v0.02).nes 
     0x57342FED, //  Homebrew\Tests\Pulpers Bgscroll Test.nes 
     0xBCD77B6F, //  Homebrew\Tests\Turbo Controller Checker.nes 
     0x2D83C43C, //  Homebrew\Tests\Unlicensed HVC Controller Test.nes 
     0x482DA740, //  Homebrew\Tetramino.nes 
     0x6AF0708D, //  Homebrew\Tools\Color Bars 2 - Palette Viewing (v2)[Quietust].nes 
-    0x5F3B4C33, //  Homebrew\Tools\The Lunary Year Mascots of China.nes 
     0x36024195, //  Homebrew\Translations\English\Antarctic Adventure (rev0)[DvD Translations].nes 
     0xBC63D3FB, //  Homebrew\Translations\English\Antarctic Adventure (rev0)[Quest Games].nes 
     0x2CAD075E, //  Homebrew\Translations\English\Antarctic Adventure (rev1)[DvD Translations].nes 
@@ -675,7 +792,6 @@ static const u32 s_crcs[] = {
     0xAB3985A0, //  Homebrew\Translations\English\Modern Shogi꞉ Naito 9-Dan Shogi Secret [Psyklax](Roman).nes 
     0xAF73EEE4, //  Homebrew\Translations\English\Ninja Jajamaru in the Castle of Evil [Aishsha].nes 
     0x59446036, //  Homebrew\Translations\English\Ninja Kid's Demon Castle Adventure [Pacnsacdave].nes 
-    0x39328BAA, //  Homebrew\You Are Insignificant.nes 
     0x836C4FA7, //  Licensed Japan\10-Yard Fight (rev0).nes 
     0x44D21F83, //  Licensed Japan\10-Yard Fight (rev1).nes 
     0x163ECCAE, //  Licensed Japan\Antarctic Adventure (rev0).nes 
@@ -686,12 +802,10 @@ static const u32 s_crcs[] = {
     0xF5F435B1, //  Licensed Japan\Binary Land.nes 
     0xCE67507A, //  Licensed Japan\BurgerTime.nes 
     0x622F059D, //  Licensed Japan\Chack 'n Pop.nes 
-    0x48F68D40, //  Licensed Japan\Clu Clu Land.nes 
     0x5FAB6BCE, //  Licensed Japan\Devil World (rev0).nes 
     0x145A9A6C, //  Licensed Japan\Devil World (rev1).nes 
     0xB174B680, //  Licensed Japan\Dig Dug.nes 
     0xF863D5BB, //  Licensed Japan\Donkey Kong (rev0).nes 
-    0x6F97C721, //  Licensed Japan\Donkey Kong (rev1).nes 
     0x50A1B3FE, //  Licensed Japan\Donkey Kong Jr.+Jr. Lesson.nes 
     0x12E6CB79, //  Licensed Japan\Door Door.nes 
     0xBEB30478, //  Licensed Japan\Exerion.nes 
@@ -711,7 +825,6 @@ static const u32 s_crcs[] = {
     0x2C7D68F3, //  Licensed Japan\Pac-Man (rev2).nes 
     0x035DC2E9, //  Licensed Japan\Pinball.nes 
     0x5581E835, //  Licensed Japan\Popeye (rev0).nes 
-    0x70860FCA, //  Licensed Japan\Popeye (rev1).nes 
     0x27738241, //  Licensed Japan\Popeyeの英語遊び.nes 
     0x7EE625EB, //  Licensed Japan\Road Fighter.nes 
     0xE47E9FA7, //  Licensed Japan\Sky Destroyer.nes 
@@ -727,29 +840,16 @@ static const u32 s_crcs[] = {
     0xFC00A282, //  Licensed Japan\忍者くん꞉ 魔城の冒険 (rev1).nes 
     0xFFD9DB04, //  Licensed Japan\本将棋꞉ 内藤九段将棋秘伝.nes 
     0x401349A8, //  Licensed North America\Balloon Fight.nes 
-    0xAFDCBD24, //  Licensed North America\Baseball.nes 
     0xDAF9D7E3, //  Licensed North America\BurgerTime.nes 
     0xE7D2C49D, //  Licensed North America\Golf.nes 
-    0xFB98D46E, //  Licensed North America\Ice Climber.nes 
     0x9E4E9CC2, //  Licensed North America\Pac-Man (Namco).nes 
     0xA9BBF44F, //  Licensed North America\Pac-Man (Tengen).nes 
-    0xE54138A9, //  Licensed PAL\Balloon Fight.nes 
-    0x0C783F0C, //  Licensed PAL\Devil World.nes 
-    0x565B1BDB, //  Licensed PAL\Golf.nes 
-    0x2BF0F9C5, //  Licensed PAL\Mario Bros..nes 
-    0x81210F63, //  Licensed PAL\Pac-Man.nes 
-    0xD6AD4E9D, //  Licensed PAL\Pinball.nes 
-    0x719571B3, //  Licensed PAL\Road Fighter.nes 
-    0x304FA926, //  Licensed PAL\Tennis.nes 
     0x2DBB054D, //  Maintenance\HVC 検査 Cassette꞉ Controller Test.nes 
     0x2E0F51AF, //  Maintenance\NTF2 Test (rev0).nes 
     0x7BCC2E4E, //  Modern\AO (alt).nes 
     0x259D1C0E, //  Modern\AO.nes 
     0xDB8E76C8, //  Modern\Dragon Feet.nes 
-    0xA46ACAA6, //  Modern\GBA e-Reader\Ice Climber.nes 
     0x1FB5C75D, //  Modern\GameCube Edition\Baseball (Japan).nes 
-    0x67861A27, //  Modern\GameCube Edition\Baseball (North America).nes 
-    0xD4CEA9E3, //  Modern\GameCube Edition\Golf (PAL).nes 
     0x8ED5BC84, //  Modern\Hudson Best Collection\Binary Land.nes 
     0x47A633B4, //  Modern\Namco Museum Archives\Battle City.nes 
     0x0D27648F, //  Modern\Namco Museum Archives\Dig Dug.nes 
@@ -758,7 +858,6 @@ static const u32 s_crcs[] = {
     0x43F7CFD5, //  Modern\Namco Museum Archives\Pac-Man.nes 
     0x8457CD0C, //  Modern\Namco Museum Archives\Warpman.nes 
     0x06384200, //  Modern\Virtual Console\Balloon Fight.nes 
-    0xBC3EAD71, //  Modern\Virtual Console\Clu Clu Land.nes 
     0xE1D7B9A1, //  Modern\Virtual Console\Formation Z.nes 
     0x9B080B6E, //  Modern\Virtual Console\Pac-Man.nes 
     0x4CB2A105, //  Modern\じゃじゃ丸 Jr. 伝承記꞉ Jalecoもあり候う\Exerion.nes 
@@ -769,15 +868,56 @@ static const u32 s_crcs[] = {
     0xE8551F28, //  Playchoice\Golf.nes 
     0x04EF48F1, //  Playchoice\Tennis.nes 
     0x2E5768C9, //  Plug-and-Play\extracts\Airial Hero.nes 
-    0x9C4589E3, //  Unlicensed Elsewhere\Othello.nes 
     0x9D38F8F9, //  Unlicensed North America\Pac-Man.nes 
     0x30229527, //  Unlicensed Taiwan&amp;Hong Kong\Othello.nes 
     0x961ADCA7, //  Unlicensed Taiwan&amp;Hong Kong\暗棋 - Gloomy Chess.nes 
     0x24746B0E, //  Unreleased\Millipede.nes 
-/**** 4 mapper=0 prgrom=32K chrram=8K mirror=H */
+/**** 5 mapper=0 prgrom=16K chrrom=8K mirror=H system=SYSTEM_PAL */
+    0x2A201CF4, //  Homebrew\Super Tilt Bro. (NESdev v4).nes 
+    0x1BB0E3D5, //  Homebrew\Super Tilt Bro..nes 
+    0x5F3B4C33, //  Homebrew\Tools\The Lunary Year Mascots of China.nes 
+    0xE54138A9, //  Licensed PAL\Balloon Fight.nes 
+    0x0C783F0C, //  Licensed PAL\Devil World.nes 
+    0x565B1BDB, //  Licensed PAL\Golf.nes 
+    0x2BF0F9C5, //  Licensed PAL\Mario Bros..nes 
+    0x81210F63, //  Licensed PAL\Pac-Man.nes 
+    0xD6AD4E9D, //  Licensed PAL\Pinball.nes 
+    0x719571B3, //  Licensed PAL\Road Fighter.nes 
+    0x304FA926, //  Licensed PAL\Tennis.nes 
+    0xD4CEA9E3, //  Modern\GameCube Edition\Golf (PAL).nes 
+/**** 6 mapper=0 prgrom=16K chrrom=8K mirror=H system=SYSTEM_NTSC */
+    0x2E4CCF46, //  BIOS\Game Genie.nes 
+    0xBA8BDB77, //  Bootleg Singles\Donkey Kong (LA03).nes 
+    0x275E3CFB, //  Bootleg Singles\TouchGamePlayer\Baseball.nes 
+    0xBCC3EE67, //  Bootleg Singles\TouchGamePlayer\Donkey Kong.nes 
+    0x5AF637A4, //  Homebrew\Basic Championship Wrestling.nes 
+    0x7616AD8B, //  Homebrew\Bsides.nes 
+    0x43ACE5A4, //  Homebrew\Chase (rev0).nes 
+    0x331BCC87, //  Homebrew\Chase (rev1).nes 
+    0x1A757C16, //  Homebrew\Code Master.nes 
+    0xBC7ECBB8, //  Homebrew\Falldown.nes 
+    0x760DB6D9, //  Homebrew\Forehead Block Guy (2011-03-27) .nes 
+    0xA84D71F2, //  Homebrew\Forehead Block Guy (2011-04-06) .nes 
+    0x2A86004F, //  Homebrew\Forehead Block Guy (2011-05-26) .nes 
+    0xBB8F6776, //  Homebrew\Hacks\Alice de Climber [DASTARD].nes 
+    0x1A70B79E, //  Homebrew\Pong 198X.nes 
+    0x2419483A, //  Homebrew\Ralph 4.nes 
+    0xEE63ACCA, //  Homebrew\Sudoku (NESWORLD Edition).nes 
+    0x39328BAA, //  Homebrew\You Are Insignificant.nes 
+    0x48F68D40, //  Licensed Japan\Clu Clu Land.nes 
+    0x6F97C721, //  Licensed Japan\Donkey Kong (rev1).nes 
+    0x70860FCA, //  Licensed Japan\Popeye (rev1).nes 
+    0xAFDCBD24, //  Licensed North America\Baseball.nes 
+    0xFB98D46E, //  Licensed North America\Ice Climber.nes 
+    0xA46ACAA6, //  Modern\GBA e-Reader\Ice Climber.nes 
+    0x67861A27, //  Modern\GameCube Edition\Baseball (North America).nes 
+    0xBC3EAD71, //  Modern\Virtual Console\Clu Clu Land.nes 
+    0x9C4589E3, //  Unlicensed Elsewhere\Othello.nes 
+/**** 7 mapper=0 prgrom=16K chrrom=8K mirror=H system=SYSTEM_NTSC */
+    0x7CCB8D1E, //  Homebrew\Lines.nes 
+/**** 8 mapper=0 prgrom=32K chrram=8K mirror=H */
     0x4D2C4C89, //  Educational Computers\extracts\Architect.nes 
     0x8CEFAF82, //  Educational Computers\extracts\Facemaker.nes 
-    0x0021EBA8, //  Homebrew\Demos\Demo Pills for Your Brain 2015 [DSS].nes 
     0xEB756DC7, //  Homebrew\Demos\Stage 7 [Modus Operandi].nes 
     0x8562DFC1, //  Homebrew\Double Action Blaster Guys (Cart Edition).nes 
     0x72F70C23, //  Homebrew\Double Action Blaster Guys (Compo Edition).nes 
@@ -821,15 +961,16 @@ static const u32 s_crcs[] = {
     0x9CB104B0, //  Homebrew\Twinbee Yahho.nes 
     0xD0D0C932, //  Modern\8 Bit Xmas 2011꞉ Fireplace Bash (download).nes 
     0x50EBCEC5, //  Unlicensed South Korea\Beat 'n Box.nes 
-/**** 5 mapper=0 prgrom=32K prgram=8K chrram=8K mirror=H */
+/**** 9 mapper=0 prgrom=32K chrram=8K mirror=H system=SYSTEM_PAL */
+    0x0021EBA8, //  Homebrew\Demos\Demo Pills for Your Brain 2015 [DSS].nes 
+/**** 10 mapper=0 prgrom=32K prgram=8K chrram=8K mirror=H */
     0xF19D0BA8, //  Homebrew\Demos\Rnes Demo.nes 
     0x5A62AFC9, //  Homebrew\Demos\Speech [Memblers].nes 
     0x3271F470, //  Homebrew\NSF Players\Final Fantasy 2.nes 
     0x73484E83, //  Homebrew\NSF Players\Super Mario Bros 3.nes 
-/**** 6 mapper=0 prgrom=32K chrrom=8K mirror=H */
+/**** 11 mapper=0 prgrom=32K chrrom=8K mirror=H */
     0x7BEC1745, //  Bad Dumps\Arkanoid [missing CHR banks][multicart mapper hack].nes 
     0x8BC2AC86, //  Bad Dumps\Balloon Mario [Rinkaku][PRG overdump].nes 
-    0x0C5F3973, //  Bad Dumps\Datel Pro Action Replay (v1.2)[wrong reset vector].nes 
     0x329C0349, //  Bad Dumps\NTF2 Test [PRG overdump].nes 
     0x7F985452, //  Bootleg Hacks\Bomb.nes 
     0xB4BA8EE2, //  Bootleg Hacks\Gobang.nes 
@@ -838,8 +979,6 @@ static const u32 s_crcs[] = {
     0x7ABDA038, //  Bootleg Hacks\Inventor\Combata.nes 
     0x3F3A509E, //  Bootleg Hacks\Inventor\Dada.nes 
     0x9D0E6CD2, //  Bootleg Hacks\Inventor\Tennis.nes 
-    0x4B143FB6, //  Bootleg Hacks\Shoot UFO.nes 
-    0x9EFD9332, //  Bootleg Hacks\South Park.nes 
     0xEB38F8AE, //  Bootleg Hacks\Space War.nes 
     0x78048FC1, //  Bootleg Hacks\Tank 1990.nes 
     0x3126BCFA, //  Bootleg Hacks\X Racing.nes 
@@ -904,7 +1043,6 @@ static const u32 s_crcs[] = {
     0x338B06E7, //  Bootleg Singles\Front Fareast Magic Card\(F1134) Field Combat.nes 
     0xD0FBE94A, //  Bootleg Singles\Front Fareast Magic Card\(F1135) Clu Clu Land.nes 
     0x49AF5921, //  Bootleg Singles\Front Fareast Magic Card\(F1140) Dig Dug.nes 
-    0x543C6EDE, //  Bootleg Singles\Front Fareast Magic Card\(F1157) Duck - 醜小鴨.nes 
     0xA0ECA0F9, //  Bootleg Singles\Front Fareast Magic Card\(F1XX8) Pyramid.nes 
     0x1D3DBEB1, //  Bootleg Singles\TouchGamePlayer\B-Wings.nes 
     0xE1A9734F, //  Bootleg Singles\TouchGamePlayer\Elevator Action.nes 
@@ -917,20 +1055,15 @@ static const u32 s_crcs[] = {
     0x8F75F3B0, //  Homebrew\3-in-1 2P Pak (early build).nes 
     0xEAA51D05, //  Homebrew\Blockage (v0.3.1).nes 
     0xE2825E53, //  Homebrew\Blockage (v0.3.2).nes 
-    0x39C26720, //  Homebrew\Bootèe.nes 
-    0x9498ECF6, //  Homebrew\Cadaverion [Mojon Twins].nes 
     0x2AED0656, //  Homebrew\Candelabra - Estoscerro (April Fool's Version).nes 
     0x0EA56EAD, //  Homebrew\Candelabra - Estoscerro (Demo 1).nes 
-    0x68AAED3D, //  Homebrew\Che-Man [Mojon Twins].nes 
     0xC3652329, //  Homebrew\Cheats\Tank 1990 [invincibility].nes 
-    0x7FEF8A49, //  Homebrew\Cheril Perils Classic [Mojon Twins].nes 
     0x30C7F729, //  Homebrew\Chicken of the Farm.nes 
     0x9DA01E43, //  Homebrew\Chuckout 2.nes 
     0xDFD1A7A0, //  Homebrew\Clarine Test.nes 
     0x5EAACE89, //  Homebrew\Demos\2009 Fireworks.nes 
     0xB352EC45, //  Homebrew\Demos\Candy Shop.nes 
     0xDD7BAD02, //  Homebrew\Demos\Emunespl Famicon Intro.nes 
-    0x292BCE21, //  Homebrew\Demos\FamiTone Audio Library.nes 
     0xE854C385, //  Homebrew\Demos\Flowing Palette Demo [blargg].nes 
     0xC915A79F, //  Homebrew\Demos\Full Palette.nes 
     0xC0BACDD7, //  Homebrew\Demos\Gallerynes [8bitpeoples].nes 
@@ -947,21 +1080,15 @@ static const u32 s_crcs[] = {
     0x215581C3, //  Homebrew\Demos\The Swing of Things [snowbro].nes 
     0xDC4DC667, //  Homebrew\Demos\Vegavox II Music Disc.nes 
     0x8A57208E, //  Homebrew\Demos\Wanna to Be Startin' Something [snowbro].nes 
-    0x69C1AB7F, //  Homebrew\Demos\poNiES [Digital Sounds System].nes 
     0xE87EA65C, //  Homebrew\Dig Deeper (Demo).nes 
     0x2F504958, //  Homebrew\Dragon Leap (Web Version 2 2012).nes 
     0xC3F7C60A, //  Homebrew\Dragon Leap.nes 
-    0xC0A78DB1, //  Homebrew\Draiocht.nes 
-    0xF9BC6AED, //  Homebrew\Dúshlán.nes 
     0xEBFCC1F7, //  Homebrew\Falling.nes 
-    0x7239BF47, //  Homebrew\From Below (v1.0).nes 
-    0xB06A657F, //  Homebrew\GemVenture (Beta)[Tom Livak].nes 
     0x5E38BBFB, //  Homebrew\Gold Guardian Gun Girl [Good Tune].nes 
     0x8A2BA796, //  Homebrew\Grave Digger.nes 
     0xC7086951, //  Homebrew\Hacks\1919 (Hard version).nes 
     0x90963850, //  Homebrew\Hacks\1919 (Normal version).nes 
     0x284BC8E5, //  Homebrew\Hacks\1942꞉ Cold Winter [Guyver].nes 
-    0xD83D8F31, //  Homebrew\Hacks\Apocalyptic Explosion.nes 
     0x64FDF7B5, //  Homebrew\Hacks\Ball Hack (v0.2) [Knoxburry-Aneurysm].nes 
     0xCBD805D3, //  Homebrew\Hacks\Battle City\Battle City꞉ Back From Source.nes 
     0x7A284F08, //  Homebrew\Hacks\Battle City\Binary City [Shedevr].nes 
@@ -974,27 +1101,17 @@ static const u32 s_crcs[] = {
     0x7842B93D, //  Homebrew\Hacks\Pizza Time [dougeff].nes 
     0x79818266, //  Homebrew\Hangman.nes 
     0xB5D98039, //  Homebrew\Inversion (v1.4).nes 
-    0x4B2CA0E8, //  Homebrew\Jet Paco - Space Agent!.nes 
     0x90D2E9F0, //  Homebrew\K.Y.F.F..nes 
     0x536E5200, //  Homebrew\Kitty's Catch.nes 
     0xD46B3C2D, //  Homebrew\Laser Puzzle Game.nes 
     0xA9AE836E, //  Homebrew\Lickshot!.nes 
-    0x15FB4D82, //  Homebrew\Lunar Limit (bug-fixed).nes 
-    0xFAE31288, //  Homebrew\Lunar Limit (original).nes 
-    0xD34D6E33, //  Homebrew\Machine Cave (v1.9).nes 
     0x79B1EBC9, //  Homebrew\Malaria꞉ A Call to Action (Demo).nes 
     0x6E9A0BD0, //  Homebrew\Micro Knight (v1.3).nes 
     0xF9A53E72, //  Homebrew\Mini Brix Battle.nes 
-    0x46BE52E3, //  Homebrew\Mr. Splash (Omake Books).nes 
-    0xEB97DCDC, //  Homebrew\Multidude.nes 
     0xDBD6FBE1, //  Homebrew\NES Virus Cleaner.nes 
     0x9A31304C, //  Homebrew\Pegs (alt).nes 
     0x2D815920, //  Homebrew\Pegs.nes 
-    0xFE731297, //  Homebrew\Robot Finds Kitten.nes 
-    0xBA1BEFD1, //  Homebrew\Sgt. Helmet - Training Day.nes 
     0xC6F5D0C0, //  Homebrew\Shutshimi NES.nes 
-    0x3F6567E2, //  Homebrew\Snakky.nes 
-    0x0E153C87, //  Homebrew\Sting.nes 
     0x6CC687F0, //  Homebrew\Teletime - Music Cart.nes 
     0xD8ABD78E, //  Homebrew\Tests\NMI Music Test.nes 
     0xE0FF82B1, //  Homebrew\Tic-Tac XO.nes 
@@ -1006,11 +1123,7 @@ static const u32 s_crcs[] = {
     0xDA6D73E1, //  Homebrew\Translations\Russian\бомба.nes 
     0x516ED116, //  Homebrew\UXO-Unexploded-Ordnance.nes 
     0x07DE2720, //  Homebrew\Upsad Down (v0.6)[Fadest].nes 
-    0xD195DFDC, //  Homebrew\Yun.nes 
-    0xDD3115DB, //  Homebrew\Zombie Calavera Prologue.nes 
-    0x6AA4574C, //  Homebrew\Zooming Secretary (v1.02).nes 
     0x171251E3, //  Licensed Japan\1942.nes 
-    0xDF67DAA1, //  Licensed Japan\Block Set.nes 
     0xFCDACA80, //  Licensed Japan\Elevator Action (rev0).nes 
     0x7A3A49ED, //  Licensed Japan\Elevator Action (rev1).nes 
     0xC05A365B, //  Licensed Japan\Exed Exes.nes 
@@ -1024,12 +1137,10 @@ static const u32 s_crcs[] = {
     0x08439D55, //  Licensed Japan\Tag Team Pro-Wrestling (Special Version).nes 
     0x32FA246F, //  Licensed Japan\Tag Team Pro-Wrestling.nes 
     0x06F15215, //  Licensed Japan\Thexder.nes 
-    0x9B506A48, //  Licensed Japan\Wrecking Crew.nes 
     0xB3C30BEA, //  Licensed Japan\Xevious (rev0).nes 
     0xA2469526, //  Licensed Japan\Xevious (rev1).nes 
     0x455CA7DE, //  Licensed Japan\囲碁名鑑.nes 
     0xEC0517C4, //  Licensed Japan\頭脳戦艦 Galg.nes 
-    0x3D564757, //  Licensed North America\10-Yard Fight.nes 
     0x2AC87283, //  Licensed North America\Elevator Action.nes 
     0x1DB07C0D, //  Licensed North America\Galaga꞉ Demons of Death.nes 
     0x77BF8B23, //  Licensed North America\Hydlide.nes 
@@ -1037,17 +1148,9 @@ static const u32 s_crcs[] = {
     0x699FA085, //  Licensed North America\Othello.nes 
     0xBF250AF2, //  Licensed North America\Tag Team Wrestling.nes 
     0xDFD70E27, //  Licensed North America\Xevious.nes 
-    0x999584A8, //  Licensed PAL\Galaga꞉ Demons of Death.nes 
-    0xA1C0DA00, //  Licensed PAL\Mario Bros. Classic.nes 
-    0xD745D7CB, //  Licensed PAL\Xevious.nes 
-    0x50D39ABE, //  Modern\Beer Slinger.nes 
-    0x22C94D60, //  Modern\Blow'em Out.nes 
     0xACADEA97, //  Modern\Enigmacore.nes 
     0x9D20AB45, //  Modern\GameCube Edition\Balloon Fight.nes 
-    0xDFEFE8CD, //  Modern\GameCube Edition\Clu Clu Land.nes 
-    0x9D779B08, //  Modern\GameCube Edition\Donkey Kong.nes 
     0x814F7E11, //  Modern\GameCube Edition\Golf (Japan).nes 
-    0x8DB31730, //  Modern\GameCube Edition\Mario Bros..nes 
     0xDE01497A, //  Modern\GameCube Edition\Pinball (rev1).nes 
     0xD6BBD8BA, //  Modern\GameCube Edition\Tennis.nes 
     0x2FD91D7E, //  Modern\GameCube Edition\五目ならべ.nes 
@@ -1056,13 +1159,9 @@ static const u32 s_crcs[] = {
     0xA1CAEE04, //  Modern\NES Virus Cleaner.nes 
     0x6790630B, //  Modern\Namco Museum Archives\Star Luster.nes 
     0xD7EDE073, //  Modern\Namco Museum Archives\Xevious.nes 
-    0x1132AEA9, //  Modern\Perfect Pair.nes 
-    0x6166BB81, //  Modern\Super UWOL!.nes 
     0x52196024, //  Modern\Virtual Console\Elevator Action (Japan).nes 
     0x02EB5B4A, //  Modern\Virtual Console\Elevator Action (North America).nes 
     0x5CDD800F, //  Modern\Virtual Console\Star Luster.nes 
-    0x7E58DF89, //  Multicarts\extracts\Dream Fighter (Asder 20-in-1).nes 
-    0xA9C69118, //  Multicarts\extracts\JP Ronny (Asder 20-in-1).nes 
     0xA1C036FC, //  Multicarts\extracts\Sudo King.nes 
     0x47AB4D52, //  Playchoice\1942.nes 
     0x529CA3C4, //  Plug-and-Play\extracts\Eating.nes 
@@ -1071,56 +1170,95 @@ static const u32 s_crcs[] = {
     0x5096513B, //  Samples\Blazing Rangers.nes 
     0xA1739321, //  Samples\NES Virus Cleaner (Demo).nes 
     0xD3E2C2A0, //  Samples\炎のRangerman.nes 
-    0xFF1CEFAA, //  Unlicensed Elsewhere\Duck - 醜小鴨.nes 
-    0x6200C69D, //  Unlicensed Elsewhere\Склад №18.nes 
-    0xEAD40557, //  Unlicensed Elsewhere\Угадайка.nes 
-    0x61721163, //  Unlicensed Elsewhere\балда - русская народная игра.nes 
     0x43D30C2F, //  Unlicensed North America\Ms. Pac-Man.nes 
-    0xD62BC37E, //  Unlicensed Taiwan&amp;Hong Kong\Dream Fighter.nes 
-    0x0FAFC70B, //  Unlicensed Taiwan&amp;Hong Kong\Duck - 醜小鴨.nes 
-    0x757EFB63, //  Unlicensed Taiwan&amp;Hong Kong\Skate Boy.nes 
     0x52988835, //  Unreleased\Hoppin' Mad (4.0).nes 
     0xB9582F60, //  Unreleased\Mobile Suit Z Gundam꞉ Hot Scramble.nes 
     0xA9068D17, //  Unreleased\Virus (1989).nes 
     0x23F38647, //  Unreleased\頭脳戦艦 Galg.nes 
-/**** 7 mapper=0 prgrom=32K prgram=8K chrrom=8K mirror=H */
+/**** 12 mapper=0 prgrom=32K chrrom=8K mirror=H system=SYSTEM_PAL */
+    0x0C5F3973, //  Bad Dumps\Datel Pro Action Replay (v1.2)[wrong reset vector].nes 
+    0x9EFD9332, //  Bootleg Hacks\South Park.nes 
+    0x69C1AB7F, //  Homebrew\Demos\poNiES [Digital Sounds System].nes 
+    0x46BE52E3, //  Homebrew\Mr. Splash (Omake Books).nes 
+    0x999584A8, //  Licensed PAL\Galaga꞉ Demons of Death.nes 
+    0xA1C0DA00, //  Licensed PAL\Mario Bros. Classic.nes 
+    0xD745D7CB, //  Licensed PAL\Xevious.nes 
+/**** 13 mapper=0 prgrom=32K chrrom=8K mirror=H system=SYSTEM_NTSC */
+    0x4B143FB6, //  Bootleg Hacks\Shoot UFO.nes 
+    0x543C6EDE, //  Bootleg Singles\Front Fareast Magic Card\(F1157) Duck - 醜小鴨.nes 
+    0x39C26720, //  Homebrew\Bootèe.nes 
+    0x9498ECF6, //  Homebrew\Cadaverion [Mojon Twins].nes 
+    0x68AAED3D, //  Homebrew\Che-Man [Mojon Twins].nes 
+    0x7FEF8A49, //  Homebrew\Cheril Perils Classic [Mojon Twins].nes 
+    0x292BCE21, //  Homebrew\Demos\FamiTone Audio Library.nes 
+    0xC0A78DB1, //  Homebrew\Draiocht.nes 
+    0xF9BC6AED, //  Homebrew\Dúshlán.nes 
+    0x7239BF47, //  Homebrew\From Below (v1.0).nes 
+    0xB06A657F, //  Homebrew\GemVenture (Beta)[Tom Livak].nes 
+    0xD83D8F31, //  Homebrew\Hacks\Apocalyptic Explosion.nes 
+    0x4B2CA0E8, //  Homebrew\Jet Paco - Space Agent!.nes 
+    0x15FB4D82, //  Homebrew\Lunar Limit (bug-fixed).nes 
+    0xFAE31288, //  Homebrew\Lunar Limit (original).nes 
+    0xD34D6E33, //  Homebrew\Machine Cave (v1.9).nes 
+    0xEB97DCDC, //  Homebrew\Multidude.nes 
+    0xFE731297, //  Homebrew\Robot Finds Kitten.nes 
+    0xBA1BEFD1, //  Homebrew\Sgt. Helmet - Training Day.nes 
+    0x3F6567E2, //  Homebrew\Snakky.nes 
+    0x0E153C87, //  Homebrew\Sting.nes 
+    0xD195DFDC, //  Homebrew\Yun.nes 
+    0xDD3115DB, //  Homebrew\Zombie Calavera Prologue.nes 
+    0x6AA4574C, //  Homebrew\Zooming Secretary (v1.02).nes 
+    0xDF67DAA1, //  Licensed Japan\Block Set.nes 
+    0x9B506A48, //  Licensed Japan\Wrecking Crew.nes 
+    0x3D564757, //  Licensed North America\10-Yard Fight.nes 
+    0x50D39ABE, //  Modern\Beer Slinger.nes 
+    0x22C94D60, //  Modern\Blow'em Out.nes 
+    0xDFEFE8CD, //  Modern\GameCube Edition\Clu Clu Land.nes 
+    0x9D779B08, //  Modern\GameCube Edition\Donkey Kong.nes 
+    0x8DB31730, //  Modern\GameCube Edition\Mario Bros..nes 
+    0x1132AEA9, //  Modern\Perfect Pair.nes 
+    0x6166BB81, //  Modern\Super UWOL!.nes 
+    0x7E58DF89, //  Multicarts\extracts\Dream Fighter (Asder 20-in-1).nes 
+    0xA9C69118, //  Multicarts\extracts\JP Ronny (Asder 20-in-1).nes 
+    0xFF1CEFAA, //  Unlicensed Elsewhere\Duck - 醜小鴨.nes 
+    0xD62BC37E, //  Unlicensed Taiwan&amp;Hong Kong\Dream Fighter.nes 
+    0x0FAFC70B, //  Unlicensed Taiwan&amp;Hong Kong\Duck - 醜小鴨.nes 
+    0x757EFB63, //  Unlicensed Taiwan&amp;Hong Kong\Skate Boy.nes 
+/**** 14 mapper=0 prgrom=32K chrrom=8K mirror=H system=SYSTEM_NTSC */
+    0x6200C69D, //  Unlicensed Elsewhere\Склад №18.nes 
+    0xEAD40557, //  Unlicensed Elsewhere\Угадайка.nes 
+    0x61721163, //  Unlicensed Elsewhere\балда - русская народная игра.nes 
+/**** 15 mapper=0 prgrom=32K prgram=8K chrrom=8K mirror=H */
     0xF02CF867, //  Homebrew\Demos\Karmic's Music Demo.nes 
     0x68B7AAF2, //  Homebrew\Snake.nes 
-/**** 8 mapper=0 prgrom=32K chrrom=32K mirror=H */
+/**** 16 mapper=0 prgrom=32K chrrom=32K mirror=H */
     0x7B9ED6DC, //  Homebrew\Mr. Splash (Columbia).nes 
     0xD498456A, //  Homebrew\Mr. Splash (Mondo21 Gg).nes 
     0x11ACC41A, //  Homebrew\Mr. Splash (Mondo21 Meteor).nes 
     0x682EB854, //  Homebrew\Mr. Splash (Mondo21).nes 
-/**** 9 mapper=0 prgrom=16K prgnvram=8K chrrom=8K mirror=H battery=1 */
+/**** 17 mapper=0 prgrom=16K prgnvram=8K chrrom=8K mirror=H battery=1 */
     0x47BCE4D9, //  Homebrew\Pac-Man [Kef Schecter](2016-xx-xx).nes 
     0x0B75F4FB, //  Homebrew\Pac-Man [Kef Schecter](2019-03-19).nes 
     0xD889FAA9, //  Homebrew\Pogo Cats.nes 
-/**** 10 mapper=0 prgrom=32K prgnvram=8K chrrom=8K mirror=H battery=1 */
+/**** 18 mapper=0 prgrom=32K prgnvram=8K chrrom=8K mirror=H battery=1 */
     0xE70C90F3, //  Homebrew\Donkey Kong (vertical orientation)[Sumez].nes 
     0xC6515C2E, //  Modern\Virtual Console\Wrecking Crew.nes 
-/**** 11 mapper=0 prgrom=8K chrrom=8K mirror=V */
+/**** 19 mapper=0 prgrom=8K chrrom=8K mirror=V */
     0x752BA39A, //  BIOS\Sharp My Computer TV C1.nes 
     0x46A01115, //  Unlicensed Taiwan&amp;Hong Kong\Magic Jewelry.nes 
     0x71213AA1, //  Unlicensed Taiwan&amp;Hong Kong\小瑪琍 (C&amp;E).nes 
-/**** 12 mapper=0 prgrom=16K chrram=8K mirror=V */
-    0x53A3F6F8, //  Educational Computers\extracts\Calculator 2.nes 
+/**** 20 mapper=0 prgrom=16K chrram=8K mirror=V */
     0xC2B40597, //  Educational Computers\extracts\Painter.nes 
     0xEF6C5FAC, //  Homebrew\!Clik! (rev0).nes 
     0x3E595BD2, //  Homebrew\!Clik! (rev1).nes 
     0x85714D60, //  Homebrew\Ambushed (rev0).nes 
     0x75E7F405, //  Homebrew\Ambushed (rev1).nes 
-    0x6C80EE73, //  Homebrew\Bomber 4K.nes 
     0x28FC0F77, //  Homebrew\Demos\Dma Delay.nes 
     0xE0AB06D8, //  Homebrew\Demos\NES 071910-1.nes 
     0x7904427A, //  Homebrew\Demos\NES 07210-1.nes 
     0x8B241428, //  Homebrew\Demos\Raycaster [Tokumaru].nes 
     0xEF5106EF, //  Homebrew\Demos\The Tarot Membler [Memblers].nes 
-    0xFF033DC2, //  Homebrew\Fizz Buzz.nes 
-    0x8F055EAB, //  Homebrew\Flappy Block (version 1).nes 
     0x456120AC, //  Homebrew\Flappy Block (version 2).nes 
-    0xEA7BA0A9, //  Homebrew\For Points (rev0).nes 
-    0xB7BC47A3, //  Homebrew\For Points (rev1).nes 
-    0x5D25774C, //  Homebrew\Froggy.nes 
     0x0851843D, //  Homebrew\GSM.nes 
     0x926848A1, //  Homebrew\Meteor Guard 2.nes 
     0xE6FADC3F, //  Homebrew\Meteor Guard.nes 
@@ -1131,36 +1269,28 @@ static const u32 s_crcs[] = {
     0x4ACDF560, //  Homebrew\That's Whack.nes 
     0x4477B906, //  Homebrew\The Invasion.nes 
     0x30F7ED38, //  Homebrew\Theremin.nes 
-    0x246C0CA6, //  Homebrew\Tools\Button Logger tool, Musical Controller Toy, and Stuff.nes 
     0x17E013A2, //  Unlicensed Taiwan&amp;Hong Kong\野球拳 - Wild Ball.nes 
-/**** 13 mapper=0 prgrom=16K chrrom=8K mirror=V */
-    0x7BAF8142, //  Bootleg Hacks\Anon Gunman.nes 
-    0xC267D861, //  Bootleg Hacks\Bestiarian.nes 
+/**** 21 mapper=0 prgrom=16K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0x6C80EE73, //  Homebrew\Bomber 4K.nes 
+    0xFF033DC2, //  Homebrew\Fizz Buzz.nes 
+    0x8F055EAB, //  Homebrew\Flappy Block (version 1).nes 
+    0xEA7BA0A9, //  Homebrew\For Points (rev0).nes 
+    0xB7BC47A3, //  Homebrew\For Points (rev1).nes 
+    0x5D25774C, //  Homebrew\Froggy.nes 
+    0x246C0CA6, //  Homebrew\Tools\Button Logger tool, Musical Controller Toy, and Stuff.nes 
+/**** 22 mapper=0 prgrom=16K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0x53A3F6F8, //  Educational Computers\extracts\Calculator 2.nes 
+/**** 23 mapper=0 prgrom=16K chrrom=8K mirror=V */
     0xAE43E9BD, //  Bootleg Hacks\Boat Race.nes 
-    0x283D7727, //  Bootleg Hacks\Cow Boy.nes 
-    0x5E8C77DB, //  Bootleg Hacks\Fast Gunman.nes 
-    0xA39A8063, //  Bootleg Hacks\Forest Guard.nes 
     0x8DDB4A27, //  Bootleg Hacks\Future Tank.nes 
-    0x327DDDEC, //  Bootleg Hacks\Gunfignt.nes 
     0x10522C7B, //  Bootleg Hacks\Inventor\Bitha.nes 
-    0x431A5F59, //  Bootleg Hacks\Inventor\Debar Bomb.nes 
-    0xCFD8D4A5, //  Bootleg Hacks\Inventor\Dinosaur'Bale.nes 
     0x39F6AE18, //  Bootleg Hacks\Inventor\Golgotha.nes 
-    0xFA08CCBF, //  Bootleg Hacks\Inventor\Pop.nes 
-    0xC616BAD5, //  Bootleg Hacks\Inventor\Snowfield Shoot.nes 
-    0xA671DA25, //  Bootleg Hacks\Inventor\Space 2050.nes 
     0xF80B49C7, //  Bootleg Hacks\Inventor\TNT.nes 
-    0xA7C6C842, //  Bootleg Hacks\Rnpid Gunnery.nes 
-    0x44340DA6, //  Bootleg Hacks\Sharp Shooter.nes 
-    0x524BC479, //  Bootleg Hacks\Shooter (v1).nes 
-    0x407449DA, //  Bootleg Hacks\Shooter (v2).nes 
     0x5A59ACFF, //  Bootleg Hacks\Tank 1990 [vertical mirroring, disable menu].nes 
     0xE9530055, //  Bootleg Singles\Donkey Kong 3 (LA05).nes 
     0x11ED6E02, //  Bootleg Singles\Donkey Kong Jr. (LA04).nes 
-    0x3488A174, //  Bootleg Singles\Duck Hunt (LA07).nes 
     0xE46A05C3, //  Bootleg Singles\Excitebike (LA21).nes 
     0x66A71D09, //  Bootleg Singles\F-1 Race (LA16).nes 
-    0x5D4574E0, //  Bootleg Singles\Hogan's Alley (LA06).nes 
     0x59081961, //  Bootleg Singles\Lode Runner (LA59).nes 
     0x656196A6, //  Bootleg Singles\Mappy (LA22).nes 
     0x673241B7, //  Bootleg Singles\Poker 集錦.nes 
@@ -1168,8 +1298,6 @@ static const u32 s_crcs[] = {
     0xA7493D4D, //  Bootleg Singles\TouchGamePlayer\Brush Roller.nes 
     0xADAE3063, //  Bootleg Singles\TouchGamePlayer\Championship Lode Runner.nes 
     0xD4AD48BF, //  Bootleg Singles\TouchGamePlayer\Defender II.nes 
-    0x473160CC, //  Bootleg Singles\TouchGamePlayer\Donkey Kong Jr..nes 
-    0x18D1A0B8, //  Bootleg Singles\TouchGamePlayer\DonkeyKongJrMath.nes 
     0xFFFD46C9, //  Bootleg Singles\TouchGamePlayer\Karateka.nes 
     0x24B81761, //  Bootleg Singles\TouchGamePlayer\Lunar Ball.nes 
     0x1B2395FA, //  Bootleg Singles\TouchGamePlayer\Mappy.nes 
@@ -1177,12 +1305,10 @@ static const u32 s_crcs[] = {
     0xBF384774, //  Bootleg Singles\TouchGamePlayer\Tag Team Match꞉ M.U.S.C.L.E..nes 
     0xF038FE34, //  Bootleg Singles\TouchGamePlayer\いっき.nes 
     0xCF8C0D13, //  Bootleg Singles\TouchGamePlayer\超時空要塞 Macross.nes 
-    0xB4767838, //  Bootleg Singles\Urban Champion (LA17).nes 
     0x91987B41, //  Bootleg Singles\麻雀.nes 
     0xA189843D, //  Compatibility Hacks\Magic Jewelry [PRG doubled to 16 KiB].nes 
     0x834A117D, //  Compatibility Hacks\Magic Jewelry [PRG padded to 16 KiB].nes 
     0x7A3CA5B7, //  Homebrew\8-Bit Hero Trainer [Psych].nes 
-    0xAF950ABC, //  Homebrew\Astroid.nes 
     0x0E598956, //  Homebrew\BallBounce.nes 
     0xACECF26D, //  Homebrew\Battleball Udapong.nes 
     0x7967E98C, //  Homebrew\Beat'em &amp; Eat'em (beta without music).nes 
@@ -1190,8 +1316,6 @@ static const u32 s_crcs[] = {
     0xA91E5266, //  Homebrew\Big City Sliding Blaster.nes 
     0x6D6FF82E, //  Homebrew\Block Dude (NESdev 2018).nes 
     0x33839BC0, //  Homebrew\Block Dude.nes 
-    0xDC621DD1, //  Homebrew\Bugfixes, Improvements\Склад №18 [remove unused PRG space].nes 
-    0xEC45682C, //  Homebrew\Chopper.nes 
     0x4214AB84, //  Homebrew\Concentration Room꞉ Accident at Hombon Lab (v0.01)[Damian Yerrick].nes 
     0x356D5AB2, //  Homebrew\Concentration Room꞉ Accident at Hombon Lab (v0.02 alt)[Damian Yerrick].nes 
     0xD8EA7672, //  Homebrew\Concentration Room꞉ Accident at Hombon Lab (v0.02)[Damian Yerrick].nes 
@@ -1211,11 +1335,8 @@ static const u32 s_crcs[] = {
     0x3FBF0480, //  Homebrew\Demos\Wall.nes 
     0x48721074, //  Homebrew\Demos\Wideboy 2 [Chris Covell].nes 
     0xC7DF2515, //  Homebrew\Demos\Xmas 2001 [Chris Covell].nes 
-    0x3D2E6A7B, //  Homebrew\Eat Fish.nes 
-    0x43CFE6AB, //  Homebrew\Fighter F-8000.nes 
     0x544E4FB2, //  Homebrew\Flappy Bird (easy difficulty).nes 
     0xB3D917B2, //  Homebrew\Flappy Bird (normal difficulty).nes 
-    0x5A2248D0, //  Homebrew\Game of Life.nes 
     0x924B1C86, //  Homebrew\Go [Zero Soul].nes 
     0x01D19D35, //  Homebrew\Hacks\Battle City\Penguin Shoot [Mitz].nes 
     0x5D6F1964, //  Homebrew\Hacks\Bomber Pacman.nes 
@@ -1229,17 +1350,12 @@ static const u32 s_crcs[] = {
     0x27744873, //  Homebrew\Hacks\Marippy [DASTARD].nes 
     0xCEB4E5B4, //  Homebrew\Hacks\Pooyan - Lomax Edition.nes 
     0x13E8F24A, //  Homebrew\Itscores.nes 
-    0xDD518261, //  Homebrew\Jupiter Scope 2.nes 
     0x6C9AD9E5, //  Homebrew\Kaboom 3.nes 
     0xC1925634, //  Homebrew\Kaboom Controller Pad.nes 
-    0x3CC4AB3C, //  Homebrew\Lawn Mower (NesDev 2011).nes 
-    0x4C1E44B0, //  Homebrew\Lawn Mower.nes 
     0xCA6571EC, //  Homebrew\Manhole.nes 
     0x07C98AB5, //  Homebrew\MashyMashy.nes 
-    0xE0BA29E8, //  Homebrew\Mineshaft.nes 
     0xB5165FE2, //  Homebrew\Mouser II.nes 
     0x0B0C4573, //  Homebrew\NES 15 (NTSC).nes 
-    0x0C548E97, //  Homebrew\NES 15 (PAL).nes 
     0x0F877A8C, //  Homebrew\Paddleboth.nes 
     0x254CC196, //  Homebrew\Paddleneat.nes 
     0x37313A4B, //  Homebrew\Particle Src.nes 
@@ -1251,14 +1367,12 @@ static const u32 s_crcs[] = {
     0x97D83366, //  Homebrew\Score.nes 
     0xC86FE729, //  Homebrew\Serve.nes 
     0x1542D79B, //  Homebrew\Shut Fly.nes 
-    0x1F3C61BA, //  Homebrew\Simplistic.nes 
     0x1FF449DB, //  Homebrew\Slappin' Bitches.nes 
     0x64C2913F, //  Homebrew\Snake Off.nes 
     0x4C2BA67C, //  Homebrew\Sound.nes 
     0xB331CF68, //  Homebrew\Space Fighter.nes 
     0x5EA4DFE9, //  Homebrew\Spacy Shooty.nes 
     0xC077E346, //  Homebrew\Split Second.nes 
-    0xE334716F, //  Homebrew\Super Floofy Sheepie.nes 
     0x37FD1FD5, //  Homebrew\Tests\Colorwin Window.nes 
     0x3D0337BA, //  Homebrew\Tests\NES Overclock Test (r1a).nes 
     0x032AE256, //  Homebrew\Tests\Password Save Demo꞉ Generate.nes 
@@ -1279,14 +1393,10 @@ static const u32 s_crcs[] = {
     0xF2FC8212, //  Licensed Japan\Bomberman.nes 
     0xADB5D0B3, //  Licensed Japan\Championship Lode Runner.nes 
     0xB87AB35A, //  Licensed Japan\Circus Charlie.nes 
-    0xB3D74C0D, //  Licensed Japan\Donkey Kong 3.nes 
     0xE211B93A, //  Licensed Japan\Donkey Kong Jr. (rev0).nes 
-    0x4864C304, //  Licensed Japan\Donkey Kong Jr. (rev1).nes 
     0x63AEA200, //  Licensed Japan\Donkey Kong Jr. の算数遊び.nes 
-    0x24598791, //  Licensed Japan\Duck Hunt.nes 
     0x49AEB3A6, //  Licensed Japan\Excitebike.nes 
     0xE0604F76, //  Licensed Japan\F-1 Race.nes 
-    0xFF24D794, //  Licensed Japan\Hogan's Alley.nes 
     0x980BE936, //  Licensed Japan\Hyper Olympic.nes 
     0x915A53A7, //  Licensed Japan\Hyper Sports (rev0).nes 
     0x6AE762AE, //  Licensed Japan\Hyper Sports (rev1).nes 
@@ -1299,9 +1409,7 @@ static const u32 s_crcs[] = {
     0xA547A6EC, //  Licensed Japan\Raid on Bungeling Bay (rev1).nes 
     0xC67865A2, //  Licensed Japan\Star Force.nes 
     0x493BD2FF, //  Licensed Japan\Star Gate.nes 
-    0x656D4265, //  Licensed Japan\Urban Champion.nes 
     0xB8B9ACA3, //  Licensed Japan\Wild Gunman (rev0).nes 
-    0x5112DC21, //  Licensed Japan\Wild Gunman (rev1).nes 
     0x821FEB7A, //  Licensed Japan\いっき.nes 
     0xA08B4701, //  Licensed Japan\キン肉マン꞉ Muscle Tag Match (rev0).nes 
     0xA07C1F81, //  Licensed Japan\キン肉マン꞉ Muscle Tag Match (rev1).nes 
@@ -1311,17 +1419,13 @@ static const u32 s_crcs[] = {
     0x23D91BC6, //  Licensed Japan\麻雀 (rev2).nes 
     0xDB9DCF89, //  Licensed North America\Bomberman.nes 
     0xA2AF25D0, //  Licensed North America\Defender II.nes 
-    0x0504B007, //  Licensed North America\Donkey Kong Jr. Math.nes 
     0xAF5676DE, //  Licensed North America\Lode Runner.nes 
     0x988B446D, //  Licensed North America\Lunar Pool.nes 
     0xAE52DECE, //  Licensed North America\Millipede.nes 
     0xD308D52C, //  Licensed North America\Raid on Bungeling Bay.nes 
     0x8FF31896, //  Licensed North America\Tag Team Match꞉ M.U.S.C.L.E..nes 
-    0x8A0C7337, //  Licensed PAL\Excitebike.nes 
-    0xFCEBCC5F, //  Licensed PAL\M82 Game Selectable Working Product Display.nes 
     0xCD883CDC, //  Maintenance\NTF2 Joystick Test.nes 
     0x77D59400, //  Maintenance\Power Pad Test.nes 
-    0x3F23C194, //  Modern\GBA e-Reader\Donkey Kong Jr..nes 
     0xD1FC0ED6, //  Modern\GBA e-Reader\Excitebike.nes 
     0x662B8C9C, //  Modern\GameCube Edition\Excitebike.nes 
     0xE8000BF7, //  Modern\GameCube Edition\Pinball (rev0).nes 
@@ -1344,9 +1448,6 @@ static const u32 s_crcs[] = {
     0x8A7D9467, //  Samples\Russian Roulette (v0.01)[Damian Yerrick].nes 
     0xF4E7A58C, //  Samples\Russian Roulette (v0.02)[Damian Yerrick].nes 
     0x9C4B07D9, //  Unlicensed China\中国麻將.nes 
-    0xEFB2B7E8, //  Unlicensed Elsewhere\Arctic Adventure꞉ The Penguin &amp; Seal.nes 
-    0xBC06543C, //  Unlicensed Elsewhere\Bookyman.nes 
-    0x2472C3EB, //  Unlicensed North America\Pyramid (rev1).nes 
     0x721961A4, //  Unlicensed South Korea\Block Puzzle.nes 
     0xF6B67BE1, //  Unlicensed Taiwan&amp;Hong Kong\Bookyman.nes 
     0xAC92E9E0, //  Unlicensed Taiwan&amp;Hong Kong\Brush Roller.nes 
@@ -1356,42 +1457,88 @@ static const u32 s_crcs[] = {
     0xE9EDBA24, //  Unreleased\Karateka.nes 
     0xF5B9EE9D, //  Unreleased\Tetris꞉ The Soviet Mind Game (build #1).nes 
     0x51754C3C, //  Unreleased\Tetris꞉ The Soviet Mind Game (build #3).nes 
-/**** 14 mapper=0 prgrom=16K chrrom=8K chrram=8K mirror=V */
+/**** 24 mapper=0 prgrom=16K chrrom=8K mirror=V system=SYSTEM_PAL */
+    0x43CFE6AB, //  Homebrew\Fighter F-8000.nes 
+    0x0C548E97, //  Homebrew\NES 15 (PAL).nes 
+    0x8A0C7337, //  Licensed PAL\Excitebike.nes 
+/**** 25 mapper=0 prgrom=16K chrrom=8K mirror=V system=SYSTEM_NTSC */
+    0x7BAF8142, //  Bootleg Hacks\Anon Gunman.nes 
+    0xC267D861, //  Bootleg Hacks\Bestiarian.nes 
+    0x283D7727, //  Bootleg Hacks\Cow Boy.nes 
+    0x5E8C77DB, //  Bootleg Hacks\Fast Gunman.nes 
+    0xA39A8063, //  Bootleg Hacks\Forest Guard.nes 
+    0x327DDDEC, //  Bootleg Hacks\Gunfignt.nes 
+    0x431A5F59, //  Bootleg Hacks\Inventor\Debar Bomb.nes 
+    0xCFD8D4A5, //  Bootleg Hacks\Inventor\Dinosaur'Bale.nes 
+    0xFA08CCBF, //  Bootleg Hacks\Inventor\Pop.nes 
+    0xC616BAD5, //  Bootleg Hacks\Inventor\Snowfield Shoot.nes 
+    0xA671DA25, //  Bootleg Hacks\Inventor\Space 2050.nes 
+    0xA7C6C842, //  Bootleg Hacks\Rnpid Gunnery.nes 
+    0x44340DA6, //  Bootleg Hacks\Sharp Shooter.nes 
+    0x524BC479, //  Bootleg Hacks\Shooter (v1).nes 
+    0x407449DA, //  Bootleg Hacks\Shooter (v2).nes 
+    0x3488A174, //  Bootleg Singles\Duck Hunt (LA07).nes 
+    0x5D4574E0, //  Bootleg Singles\Hogan's Alley (LA06).nes 
+    0x473160CC, //  Bootleg Singles\TouchGamePlayer\Donkey Kong Jr..nes 
+    0x18D1A0B8, //  Bootleg Singles\TouchGamePlayer\DonkeyKongJrMath.nes 
+    0xAF950ABC, //  Homebrew\Astroid.nes 
+    0xEC45682C, //  Homebrew\Chopper.nes 
+    0x3D2E6A7B, //  Homebrew\Eat Fish.nes 
+    0x5A2248D0, //  Homebrew\Game of Life.nes 
+    0xDD518261, //  Homebrew\Jupiter Scope 2.nes 
+    0x3CC4AB3C, //  Homebrew\Lawn Mower (NesDev 2011).nes 
+    0x4C1E44B0, //  Homebrew\Lawn Mower.nes 
+    0xE0BA29E8, //  Homebrew\Mineshaft.nes 
+    0x1F3C61BA, //  Homebrew\Simplistic.nes 
+    0xE334716F, //  Homebrew\Super Floofy Sheepie.nes 
+    0xB3D74C0D, //  Licensed Japan\Donkey Kong 3.nes 
+    0x4864C304, //  Licensed Japan\Donkey Kong Jr. (rev1).nes 
+    0x24598791, //  Licensed Japan\Duck Hunt.nes 
+    0xFF24D794, //  Licensed Japan\Hogan's Alley.nes 
+    0x656D4265, //  Licensed Japan\Urban Champion.nes 
+    0x5112DC21, //  Licensed Japan\Wild Gunman (rev1).nes 
+    0x0504B007, //  Licensed North America\Donkey Kong Jr. Math.nes 
+    0xFCEBCC5F, //  Licensed PAL\M82 Game Selectable Working Product Display.nes 
+    0x3F23C194, //  Modern\GBA e-Reader\Donkey Kong Jr..nes 
+    0xEFB2B7E8, //  Unlicensed Elsewhere\Arctic Adventure꞉ The Penguin &amp; Seal.nes 
+    0xBC06543C, //  Unlicensed Elsewhere\Bookyman.nes 
+    0x2472C3EB, //  Unlicensed North America\Pyramid (rev1).nes 
+/**** 26 mapper=0 prgrom=16K chrrom=8K mirror=V system=SYSTEM_NTSC */
+    0xB4767838, //  Bootleg Singles\Urban Champion (LA17).nes 
+    0xDC621DD1, //  Homebrew\Bugfixes, Improvements\Склад №18 [remove unused PRG space].nes 
+/**** 27 mapper=0 prgrom=16K chrrom=8K chrram=8K mirror=V */
     0x4233B70E, //  Bad Dumps\野球拳 - Wild Ball [CHR-ROM on CHR-RAM game].nes 
-/**** 15 mapper=0 prgrom=16K prgram=8K chrrom=8K mirror=V */
+/**** 28 mapper=0 prgrom=16K prgram=8K chrrom=8K mirror=V */
     0x15DE054B, //  Homebrew\Demos\NES BG Scaling-Rotation Demo [Bregalad].nes 
-/**** 16 mapper=0 prgrom=32K chrram=8K mirror=V */
-    0xD308E347, //  Educational Computers\extracts\Solitaire.nes 
+/**** 29 mapper=0 prgrom=32K chrram=8K mirror=V */
     0x35063511, //  Homebrew\Blob Quest [Tom Livak].nes 
     0xEC50DA84, //  Homebrew\Demos\Music.nes 
-    0x06F3CA14, //  Homebrew\I Wanna Flip the Sky.nes 
     0x58994EEB, //  Homebrew\Love Story.nes 
-    0xBEDECC17, //  Homebrew\Memory (Squirrel's Kitchen).nes 
-    0x2EAADD18, //  Homebrew\NESert Golfing (alt).nes 
-    0x3EC19565, //  Homebrew\NESert Golfing - Tournament Edition.nes 
-    0x7B26BEA4, //  Homebrew\NESert Golfing.nes 
     0x3F7977D5, //  Homebrew\NSF Players\Super Shinobi Music.nes 
     0xB2E67A9F, //  Homebrew\Soko Man.nes 
-    0x6339ABE6, //  Homebrew\Tools\Allpads Controller Test (v9)[Damian Yerrick].nes 
     0x32E02CB8, //  Maintenance\Port Test Cartridge.nes 
     0x851CEA10, //  Modern\8 Bit Xmas 2009꞉ Snowball Fight (download).nes 
     0xA6E02975, //  Modern\8 Bit Xmas 2010꞉ Jolly Joyriding (download).nes 
     0xB655C53A, //  Multicarts\extracts\Block Force (Tetris Family 9-in-1).nes 
     0x71CAF097, //  Unlicensed Taiwan&amp;Hong Kong\3D Block (RCM).nes 
-/**** 17 mapper=0 prgrom=32K prgram=8K chrram=8K mirror=V */
+/**** 30 mapper=0 prgrom=32K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0x06F3CA14, //  Homebrew\I Wanna Flip the Sky.nes 
+    0xBEDECC17, //  Homebrew\Memory (Squirrel's Kitchen).nes 
+    0x2EAADD18, //  Homebrew\NESert Golfing (alt).nes 
+    0x3EC19565, //  Homebrew\NESert Golfing - Tournament Edition.nes 
+    0x7B26BEA4, //  Homebrew\NESert Golfing.nes 
+    0x6339ABE6, //  Homebrew\Tools\Allpads Controller Test (v9)[Damian Yerrick].nes 
+/**** 31 mapper=0 prgrom=32K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0xD308E347, //  Educational Computers\extracts\Solitaire.nes 
+/**** 32 mapper=0 prgrom=32K prgram=8K chrram=8K mirror=V */
     0xA15609EB, //  Homebrew\Demos\Nestronome.nes 
     0xA1F87DC0, //  Homebrew\Invaders Must Die!.nes 
-/**** 18 mapper=0 prgrom=32K chrrom=8K mirror=V */
-    0x178DBA78, //  BIOS\Datel Pro Action Replay (v1.0).nes 
-    0x4D7D896C, //  Bad Dumps\Datel Pro Action Replay (v1.2)[no reset vector].nes 
+/**** 33 mapper=0 prgrom=32K chrrom=8K mirror=V */
     0x40498C2C, //  Bad Dumps\Fancy Bros [reset vector returns to multicart menu].nes 
     0xC1DF7A99, //  Bad Dumps\Magic Jewelry [PRG overdump].nes 
     0x950A326F, //  Bootleg Hacks\Air Umbrella.nes 
     0xC88B205B, //  Bootleg Hacks\Bicycle Race.nes 
-    0xFCA9BA6D, //  Bootleg Hacks\Frog Prince.nes 
     0x43F730E3, //  Bootleg Hacks\Goodhand.nes 
-    0x7A018E1F, //  Bootleg Hacks\Hunt.nes 
-    0x6519CB3B, //  Bootleg Hacks\Invader.nes 
     0x1BB9F39E, //  Bootleg Hacks\Inventor\Billiard 2008.nes 
     0x9A135E82, //  Bootleg Hacks\Inventor\Bounce.nes 
     0x8CC9CB95, //  Bootleg Hacks\Inventor\Cobra of the Sky.nes 
@@ -1399,23 +1546,12 @@ static const u32 s_crcs[] = {
     0xF6D845BB, //  Bootleg Hacks\Inventor\Football.nes 
     0xAE498559, //  Bootleg Hacks\Inventor\Ladangel.nes 
     0xBA8C3B55, //  Bootleg Hacks\Inventor\Penguin.nes 
-    0xE18CD9AA, //  Bootleg Hacks\Inventor\Shoot Out.nes 
-    0x7CDF51D5, //  Bootleg Hacks\Inventor\Super Shoot.nes 
-    0x4D3982BC, //  Bootleg Hacks\Inventor\Surprise.nes 
     0xA69A0B02, //  Bootleg Hacks\Inventor\Tiny Toon.nes 
     0x1C201099, //  Bootleg Hacks\Mushroom.nes 
-    0x69D88990, //  Bootleg Hacks\Pandamar.nes 
-    0xE953A676, //  Bootleg Hacks\Pocket Maero.nes 
     0xFEA85A4A, //  Bootleg Hacks\Risker.nes 
     0x3BF08F1B, //  Bootleg Hacks\Shift.nes 
-    0x7A1C19FF, //  Bootleg Hacks\Super Boy.nes 
-    0x5AF2334D, //  Bootleg Hacks\Super Kid.nes 
-    0x940C4B07, //  Bootleg Hacks\Super Shrek Brothers.nes 
-    0x906C65B8, //  Bootleg Hacks\Super Simpsons.nes 
     0x1185215B, //  Bootleg Hacks\Super Tetris II.nes 
-    0x8922F79F, //  Bootleg Hacks\van der Merwe en Boetie.nes 
     0x40C0815B, //  Bootleg Hacks\方塊.nes 
-    0x728E7F04, //  Bootleg Hacks\수퍼마리오.nes 
     0x1BA44397, //  Bootleg Singles\Bung Game Doctor\(B002) Super Arabian.nes 
     0x8FA53D20, //  Bootleg Singles\Bung Game Doctor\(B003) Donkey Kong Jr. Math.nes 
     0x2721E7B3, //  Bootleg Singles\Bung Game Doctor\(B005) Balloon Fight.nes 
@@ -1544,7 +1680,6 @@ static const u32 s_crcs[] = {
     0x61309551, //  Compatibility Hacks\VT01\Porter (VT01).nes 
     0x966730CF, //  Compatibility Hacks\動動腦 1 [m000].nes 
     0xCF3C1F9D, //  Educational Computers\extracts\Mine.nes 
-    0x46E9CACD, //  Homebrew\!.nes 
     0x56BC90E7, //  Homebrew\8bitpeoples After Dark.nes 
     0xB84035A7, //  Homebrew\Alter Ego (NROM-256).nes 
     0xC05A972B, //  Homebrew\Altercation (v0.1)[Scott Lowe].nes 
@@ -1554,15 +1689,9 @@ static const u32 s_crcs[] = {
     0x54C02733, //  Homebrew\Beat'em &amp; Eat'em (beta with music).nes 
     0xF66542BA, //  Homebrew\Beat'em &amp; Eat'em (v1.0).nes 
     0xDB275231, //  Homebrew\Bloodfall.nes 
-    0xA2680634, //  Homebrew\Bugfixes, Improvements\Super Mario Bros. [Spiny Egg trajectory].nes 
-    0xFFC055A7, //  Homebrew\Cat Killer.nes 
-    0x484D149F, //  Homebrew\Columns.nes 
     0xFE8CFC22, //  Homebrew\Copyright Restorations\Porter.nes 
     0x82FD0204, //  Homebrew\Decursus.nes 
-    0xE97F2F5D, //  Homebrew\Demos\Battle of the Bits Winter Chip 4.nes 
-    0xB4EFC8CC, //  Homebrew\Demos\Battle of the Bits Winter Chip V.nes 
     0x3C0C7FFD, //  Homebrew\Demos\Chip Addiction.nes 
-    0xF7C88C35, //  Homebrew\Demos\DCEvo Dream Emulation Project.nes 
     0x2A5312D6, //  Homebrew\Demos\Eternal GladNES [Psych].nes 
     0x99432855, //  Homebrew\Demos\Happy Birthday Famicom - GreyBox (alt).nes 
     0x0ED27E38, //  Homebrew\Demos\Happy Birthday Famicom - GreyBox.nes 
@@ -1577,14 +1706,8 @@ static const u32 s_crcs[] = {
     0x4BAB6CB4, //  Homebrew\Demos\TB5.nes 
     0xDADB8A8F, //  Homebrew\Demos\Turquoise Palace [MorphCat].nes 
     0x33878F0B, //  Homebrew\Demos\Wavetable.nes 
-    0xE2F5FBFA, //  Homebrew\Dick Drawing Simulator.nes 
     0xF905F8CC, //  Homebrew\Eskimo Bob, Starring Alfonzo (Demo)[Spoony Bard].nes 
-    0x48B8E5CC, //  Homebrew\Euchre.nes 
-    0xD0FBE052, //  Homebrew\Falling Tiles (revA).nes 
-    0xBCFDD7DE, //  Homebrew\Falling Tiles (revB).nes 
-    0xDD512607, //  Homebrew\Fire and Rescue (v1.1)[Skyboy Games].nes 
     0x938533F4, //  Homebrew\Flappy Jack.nes 
-    0x65C2E22A, //  Homebrew\Frenzy A7800 [Bob Decrescenzo].nes 
     0xD3CDD97A, //  Homebrew\Geminim (v0.990)[Sivak].nes 
     0xC9D47DBF, //  Homebrew\Gruniozerca [Lukasz Kur].nes 
     0x4F42DB87, //  Homebrew\Hacks\Blob Buster [RuSteD Hacks].nes 
@@ -1595,6 +1718,166 @@ static const u32 s_crcs[] = {
     0xE67E5A01, //  Homebrew\Hacks\Mario Bros.꞉ The Revenge [Morgan Johansson].nes 
     0x90E477DD, //  Homebrew\Hacks\Mario Spy vs. Spy.nes 
     0x09172016, //  Homebrew\Hacks\Pac-Man Xtreme [KaBooM!].nes 
+    0x91F7582A, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (LB35)[Water Level].nes 
+    0x22D8129D, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Instant Death Spike (v0.95)[79].nes 
+    0x49023CEA, //  Homebrew\Hacks\Super Star Wars 2 [Romhackers Inc.].nes 
+    0x8E4695B5, //  Homebrew\Hacks\ドラえBomb [Rinkaku].nes 
+    0xA0025AA1, //  Homebrew\Karate Kick.nes 
+    0x5F559737, //  Homebrew\LAN Master.nes 
+    0xC388DDD4, //  Homebrew\Lake Fever.nes 
+    0x3A0031A1, //  Homebrew\Melo Jellos 2.nes 
+    0xDEB21C9E, //  Homebrew\Mouser.nes 
+    0xFC2FB9D0, //  Homebrew\NES Speech Synthesizer.nes 
+    0x96314622, //  Homebrew\NESnake 2 (v1.2 NTSC).nes 
+    0x0E88C118, //  Homebrew\NESnake 2 (v1.3).nes 
+    0xDB22DCD8, //  Homebrew\Ninja Slapper.nes 
+    0x416EEAB6, //  Homebrew\Nintencat꞉ The Parody (2017 version).nes 
+    0x5F3E5011, //  Homebrew\NintendoAge Halloween.nes 
+    0x550DE399, //  Homebrew\Rock Paper Scissors Lizard Sbock.nes 
+    0xEF318802, //  Homebrew\Rock Paper Scissors.nes 
+    0x5A2A1A0D, //  Homebrew\Save the Kuin.nes 
+    0xABDE0FC7, //  Homebrew\Siamond.nes 
+    0x86A8DA8B, //  Homebrew\Snail Maze.nes 
+    0x659BAC67, //  Homebrew\Sokoban.nes 
+    0x9AEA064B, //  Homebrew\Spacey McRacey.nes 
+    0x48F2DCF5, //  Homebrew\Star Evil (NESdev 2017).nes 
+    0x1CA6D4C2, //  Homebrew\Star Evil.nes 
+    0x65622692, //  Homebrew\Sweetie and the Carnage.nes 
+    0x6D4D0DDD, //  Homebrew\TGUN (Web Version).nes 
+    0x9A167849, //  Homebrew\Tesla vs. Edison.nes 
+    0xD9B885FC, //  Homebrew\Tests\Controller Queue.nes 
+    0x8539196C, //  Homebrew\Tests\Ui Test.nes 
+    0xD78C3026, //  Homebrew\The Mad Wizard꞉ A Candelabra Chronicle (download).nes 
+    0x7E750B3A, //  Homebrew\The Paths of Bridewell.nes 
+    0xE4C37A04, //  Homebrew\The Rise of Amondus (Demo).nes 
+    0x730E70AC, //  Homebrew\The Wit.nes.nes 
+    0x03E9C033, //  Homebrew\Translations\English\4 Player Strike Mahjong [GAFF Translations].nes 
+    0xE1DB5CB1, //  Homebrew\Translations\English\BugTris [Green Jerry v1.0].nes 
+    0x69F389DD, //  Homebrew\Translations\English\Dog Town [Pacnsacdave].nes 
+    0x604E6EA6, //  Homebrew\Translations\English\Little Ninja Hattori [Pacnsacdave].nes 
+    0xA25E634B, //  Homebrew\Translations\English\Q-Tarō the Ghost [Pacnsacdave].nes 
+    0x5FB1ECF5, //  Homebrew\Translations\English\Sqoon [Stardust Crusaders].nes 
+    0xAB7DD6E8, //  Homebrew\Turquoise Palace.nes 
+    0x2DC05A6F, //  Licensed Japan\Astro Robo Sasa.nes 
+    0x1F2D9DB7, //  Licensed Japan\Baltron.nes 
+    0xFE18E6B6, //  Licensed Japan\Bokosuka Wars.nes 
+    0x73418721, //  Licensed Japan\Challenger.nes 
+    0x2BE254E9, //  Licensed Japan\Dig Dug II.nes 
+    0xF760F1CB, //  Licensed Japan\Dough Boy.nes 
+    0x1DBD1D2B, //  Licensed Japan\Geimos.nes 
+    0x29E173FF, //  Licensed Japan\Gyrodine.nes 
+    0x8575A0CB, //  Licensed Japan\Hydlide Special.nes 
+    0x59977A46, //  Licensed Japan\Mach Rider (rev0).nes 
+    0x38810A91, //  Licensed Japan\Mach Rider (rev1).nes 
+    0x89D42098, //  Licensed Japan\Pac-Land.nes 
+    0x7C596E45, //  Licensed Japan\Portopia 連続殺人事件.nes 
+    0x657F7875, //  Licensed Japan\Soccer.nes 
+    0x10BAEEF3, //  Licensed Japan\Son Son.nes 
+    0x6058C65D, //  Licensed Japan\Spartan X.nes 
+    0x636923BB, //  Licensed Japan\Spelunker.nes 
+    0x4DFD949E, //  Licensed Japan\Sqoon (rev0).nes 
+    0x73D5F7D3, //  Licensed Japan\Sqoon (rev1).nes 
+    0xEB764567, //  Licensed Japan\The Tower of Druaga.nes 
+    0xFDE14CCE, //  Licensed Japan\Volguard II.nes 
+    0x270EAED5, //  Licensed Japan\おにゃんこ Town.nes 
+    0x330DE468, //  Licensed Japan\オバケのＱ太郎꞉ ワンワン Panic.nes 
+    0x89550500, //  Licensed Japan\囲碁指南.nes 
+    0x55761931, //  Licensed Japan\忍者ハットリ君꞉ 忍者は修行でござるの巻.nes 
+    0x77833016, //  Licensed North America\Chubby Cherub.nes 
+    0xDBB06A25, //  Licensed North America\Dig Dug II꞉ Trouble in Paradise.nes 
+    0xAE64CA77, //  Licensed North America\Ice Hockey.nes 
+    0xD5C64257, //  Licensed North America\Kung Fu.nes 
+    0xB6D2D300, //  Licensed North America\Ms. Pac-Man.nes 
+    0x27AA3933, //  Licensed North America\Seicross.nes 
+    0x86670C93, //  Licensed North America\Slalom.nes 
+    0x99D15A91, //  Licensed North America\Spelunker.nes 
+    0xC4A02712, //  Licensed North America\Spy vs. Spy.nes 
+    0x44F34172, //  Licensed North America\Sqoon.nes 
+    0x3747CD0B, //  Maintenance\NES Test.nes 
+    0xEE7E61DE, //  Maintenance\U-Force Test.nes 
+    0xF3670FE3, //  Modern\Eyra, The Crow Maiden (alt).nes 
+    0x074CB327, //  Modern\Eyra, The Crow Maiden.nes 
+    0x5A378EDC, //  Modern\Family Picross.nes 
+    0x022032B3, //  Modern\GameCube Edition\Donkey Kong Jr. の算数遊び.nes 
+    0x781901F4, //  Modern\GameCube Edition\麻雀.nes 
+    0x73275797, //  Modern\Hackmatch (NTSC).nes 
+    0x53C19218, //  Modern\Hudson Best Collection\Challenger.nes 
+    0xF7466450, //  Modern\Namco Museum Archives\Dig Dug II.nes 
+    0x70CCA102, //  Modern\Namco Museum Archives\Pac-Land.nes 
+    0xC8DF8CBE, //  Modern\Namco Museum Archives\The Tower of Druaga.nes 
+    0xC8EB5A7D, //  Modern\Rollie.nes 
+    0xA80290A6, //  Modern\Super Mario Bros. (25th Anniversary NTSC).nes 
+    0x77EAD911, //  Modern\Virtual Console\Dig Dug II꞉ Trouble in Paradise.nes 
+    0x5B1EB1F7, //  Modern\Virtual Console\Lode Runner (Japan).nes 
+    0x48591193, //  Modern\Virtual Console\Spelunker (Japan).nes 
+    0xFABA94E6, //  Modern\Virtual Console\Spelunker (World).nes 
+    0x70A192C5, //  Modern\Virtual Console\Volleyball.nes 
+    0x8D9F4989, //  Playchoice\Kung Fu.nes 
+    0xB99F6CD0, //  Playchoice\Super Mario Bros..nes 
+    0x6A519A5E, //  Playchoice\Volleyball.nes 
+    0xAF69375E, //  Plug-and-Play\extracts\100m Hurdles.nes 
+    0x4F33DF4D, //  Plug-and-Play\extracts\Boxworld.nes 
+    0x8A38AE20, //  Plug-and-Play\extracts\Caper Alone.nes 
+    0x6DC4121F, //  Plug-and-Play\extracts\Diamond (Nice Code).nes 
+    0xE2B19CCB, //  Plug-and-Play\extracts\Dringle.nes 
+    0xC1711414, //  Plug-and-Play\extracts\Hit-Mousee.nes 
+    0x19158CDD, //  Plug-and-Play\extracts\Hurry Burry.nes 
+    0x1088D198, //  Plug-and-Play\extracts\Twin Cards.nes 
+    0x21684965, //  Samples\Nebs 'n Debs.nes 
+    0x1918F689, //  Unlicensed Japan\Super Maruo.nes 
+    0x2E6F1A75, //  Unlicensed South Korea\BugTris.nes 
+    0xB69F7C0F, //  Unlicensed Taiwan&amp;Hong Kong\Fire Dragon.nes 
+    0xE8A11BD7, //  Unlicensed Taiwan&amp;Hong Kong\Porter.nes 
+    0x207DD1C4, //  Unlicensed Taiwan&amp;Hong Kong\Tank.nes 
+    0x0C1FE23D, //  Unlicensed Taiwan&amp;Hong Kong\小紅帽 - Little Red Hood.nes 
+    0x1E407387, //  Unreleased\Baltron.nes 
+    0x90600B85, //  Unreleased\Seicross.nes 
+    0x0D9AE579, //  Unreleased\Tetris꞉ The Soviet Mind Game (build #2).nes 
+    0xFA12003D, //  Unreleased\忍者ハットリ君꞉ 忍者は修行でござるの巻.nes 
+/**** 34 mapper=0 prgrom=32K chrrom=8K mirror=V system=SYSTEM_PAL */
+    0x178DBA78, //  BIOS\Datel Pro Action Replay (v1.0).nes 
+    0x4D7D896C, //  Bad Dumps\Datel Pro Action Replay (v1.2)[no reset vector].nes 
+    0x940C4B07, //  Bootleg Hacks\Super Shrek Brothers.nes 
+    0x7F8C7E03, //  Homebrew\Hacks\Super Mario Bros. series\Super Bernie Bros. (v04)[Trumptendo].nes 
+    0x4D4AA705, //  Homebrew\Hacks\Super Mario Bros. series\Super Mikey Erg [Punktendo].nes 
+    0xF49A1856, //  Homebrew\NESnake 2 (v1.2 PAL).nes 
+    0x92924548, //  Licensed PAL\Ice Hockey.nes 
+    0x464A67AB, //  Licensed PAL\Kung Fu.nes 
+    0xC3A0A3E0, //  Licensed PAL\Lunar Pool.nes 
+    0xE57E5384, //  Licensed PAL\Mach Rider.nes 
+    0xC30848D3, //  Licensed PAL\Slalom.nes 
+    0x972D2784, //  Licensed PAL\Soccer.nes 
+    0xC1E91D3F, //  Licensed PAL\Spy vs. Spy.nes 
+    0x9A2DB086, //  Licensed PAL\Super Mario Bros. (rev1).nes 
+    0xFB2594DC, //  Modern\Hackmatch (PAL).nes 
+    0xE66AD6B8, //  Modern\Super Mario Bros. (25th Anniversary PAL).nes 
+    0x19CE7F12, //  Unlicensed Elsewhere\Magic Mathematic.nes 
+/**** 35 mapper=0 prgrom=32K chrrom=8K mirror=V system=SYSTEM_NTSC */
+    0xFCA9BA6D, //  Bootleg Hacks\Frog Prince.nes 
+    0x7A018E1F, //  Bootleg Hacks\Hunt.nes 
+    0x6519CB3B, //  Bootleg Hacks\Invader.nes 
+    0xE18CD9AA, //  Bootleg Hacks\Inventor\Shoot Out.nes 
+    0x7CDF51D5, //  Bootleg Hacks\Inventor\Super Shoot.nes 
+    0x4D3982BC, //  Bootleg Hacks\Inventor\Surprise.nes 
+    0x69D88990, //  Bootleg Hacks\Pandamar.nes 
+    0xE953A676, //  Bootleg Hacks\Pocket Maero.nes 
+    0x7A1C19FF, //  Bootleg Hacks\Super Boy.nes 
+    0x5AF2334D, //  Bootleg Hacks\Super Kid.nes 
+    0x906C65B8, //  Bootleg Hacks\Super Simpsons.nes 
+    0x8922F79F, //  Bootleg Hacks\van der Merwe en Boetie.nes 
+    0x728E7F04, //  Bootleg Hacks\수퍼마리오.nes 
+    0x46E9CACD, //  Homebrew\!.nes 
+    0xA2680634, //  Homebrew\Bugfixes, Improvements\Super Mario Bros. [Spiny Egg trajectory].nes 
+    0xFFC055A7, //  Homebrew\Cat Killer.nes 
+    0x484D149F, //  Homebrew\Columns.nes 
+    0xE97F2F5D, //  Homebrew\Demos\Battle of the Bits Winter Chip 4.nes 
+    0xB4EFC8CC, //  Homebrew\Demos\Battle of the Bits Winter Chip V.nes 
+    0xE2F5FBFA, //  Homebrew\Dick Drawing Simulator.nes 
+    0x48B8E5CC, //  Homebrew\Euchre.nes 
+    0xD0FBE052, //  Homebrew\Falling Tiles (revA).nes 
+    0xBCFDD7DE, //  Homebrew\Falling Tiles (revB).nes 
+    0xDD512607, //  Homebrew\Fire and Rescue (v1.1)[Skyboy Games].nes 
+    0x65C2E22A, //  Homebrew\Frenzy A7800 [Bob Decrescenzo].nes 
     0x2F06FDD7, //  Homebrew\Hacks\Super Mario Bros. series\Adventures of Ice Mario [pacnsacdave].nes 
     0x891B3FFC, //  Homebrew\Hacks\Super Mario Bros. series\After World 8 (v1.1)[Insectduel's Domain].nes 
     0xE52C9CD2, //  Homebrew\Hacks\Super Mario Bros. series\All Night Nippon 2 Super Mario Bros. [teeporage777].nes 
@@ -1653,7 +1936,6 @@ static const u32 s_crcs[] = {
     0xC5E352DE, //  Homebrew\Hacks\Super Mario Bros. series\Super 2600 Bros. [Grimlick].nes 
     0x376605B6, //  Homebrew\Hacks\Super Mario Bros. series\Super ASCII Brothers [sl1me].nes 
     0xE3620259, //  Homebrew\Hacks\Super Mario Bros. series\Super Acid Bros..nes 
-    0x7F8C7E03, //  Homebrew\Hacks\Super Mario Bros. series\Super Bernie Bros. (v04)[Trumptendo].nes 
     0x1E307415, //  Homebrew\Hacks\Super Mario Bros. series\Super Flappy Bird Nightmare [Guyver].nes 
     0xC3D4BF28, //  Homebrew\Hacks\Super Mario Bros. series\Super Koopa Bros. [Hejmstel].nes 
     0x722FEB8E, //  Homebrew\Hacks\Super Mario Bros. series\Super Luigi Bros. [TheNintendude64].nes 
@@ -1668,7 +1950,6 @@ static const u32 s_crcs[] = {
     0x482D45CD, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (Gameboy Bros.)[teeporage777].nes 
     0x5CCA5D96, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (Goombas don't fall off edges)[teeporage777].nes 
     0xD141DE0D, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (Impossibros.).nes 
-    0x91F7582A, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (LB35)[Water Level].nes 
     0x1EE57B0E, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (Luigi Game v0.8)[YY].nes 
     0x01A2A609, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (Mushroom Kingdom Chaos)[L. Soft].nes 
     0x13E2DA4F, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (Super Link Bros.).nes 
@@ -1703,7 +1984,6 @@ static const u32 s_crcs[] = {
     0x6B94FF3B, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Cozy with Death [EBS].nes 
     0xA8DBB450, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Final Quest.nes 
     0x5F51FCBF, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Gold Edition [szemigi].nes 
-    0x22D8129D, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Instant Death Spike (v0.95)[79].nes 
     0x5B13E270, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Luigi [Mikachu].nes 
     0xEFB4344B, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Mario Misadventures [Guzmeme].nes 
     0x97B66BC0, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Mario in Zebes.nes 
@@ -1715,7 +1995,6 @@ static const u32 s_crcs[] = {
     0xB2B87669, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ feat. Mega Man [WillJ168].nes 
     0x089E97B2, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Brothers DX '05 [FlamePanther].nes 
     0xCF6CD965, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Brothers Desert Land [Luan Silva].nes 
-    0x4D4AA705, //  Homebrew\Hacks\Super Mario Bros. series\Super Mikey Erg [Punktendo].nes 
     0x04B7CAAF, //  Homebrew\Hacks\Super Mario Bros. series\Super One Up! [Salmonhead].nes 
     0x850B64B0, //  Homebrew\Hacks\Super Mario Bros. series\Super Royal Pals. [QUXNLADY].nes 
     0x91322665, //  Homebrew\Hacks\Super Mario Bros. series\Super Smashing Pumpkins Bros (v2)[Steven &amp; David Pukin].nes 
@@ -1740,245 +2019,128 @@ static const u32 s_crcs[] = {
     0x780BC432, //  Homebrew\Hacks\Super Mario Bros. series\Yoshi's Spring Adventure [teeporage777].nes 
     0x137EB720, //  Homebrew\Hacks\Super Mario Bros. series\ßex.nes 
     0x8FDE3846, //  Homebrew\Hacks\Super Mario Bros. series\β Mario Final.nes 
-    0x49023CEA, //  Homebrew\Hacks\Super Star Wars 2 [Romhackers Inc.].nes 
-    0x8E4695B5, //  Homebrew\Hacks\ドラえBomb [Rinkaku].nes 
-    0x592329EA, //  Homebrew\Hot Dance 2020.nes 
-    0xA0025AA1, //  Homebrew\Karate Kick.nes 
-    0x5F559737, //  Homebrew\LAN Master.nes 
-    0xC388DDD4, //  Homebrew\Lake Fever.nes 
-    0x3A0031A1, //  Homebrew\Melo Jellos 2.nes 
-    0xFAAD108A, //  Homebrew\Morskoy Boy.nes 
-    0xDEB21C9E, //  Homebrew\Mouser.nes 
-    0xFC2FB9D0, //  Homebrew\NES Speech Synthesizer.nes 
-    0x96314622, //  Homebrew\NESnake 2 (v1.2 NTSC).nes 
-    0xF49A1856, //  Homebrew\NESnake 2 (v1.2 PAL).nes 
-    0x0E88C118, //  Homebrew\NESnake 2 (v1.3).nes 
     0x077B7DE8, //  Homebrew\Nim &amp; Nom (v1.2)[metakrill].nes 
-    0xDB22DCD8, //  Homebrew\Ninja Slapper.nes 
-    0x416EEAB6, //  Homebrew\Nintencat꞉ The Parody (2017 version).nes 
-    0x5F3E5011, //  Homebrew\NintendoAge Halloween.nes 
-    0x550DE399, //  Homebrew\Rock Paper Scissors Lizard Sbock.nes 
-    0xEF318802, //  Homebrew\Rock Paper Scissors.nes 
-    0x5A2A1A0D, //  Homebrew\Save the Kuin.nes 
-    0xABDE0FC7, //  Homebrew\Siamond.nes 
     0xD1AAD0F5, //  Homebrew\Sir Ababol (Remastered Edition).nes 
     0xB90C56BE, //  Homebrew\Sir Ababol.nes 
-    0x86A8DA8B, //  Homebrew\Snail Maze.nes 
-    0x659BAC67, //  Homebrew\Sokoban.nes 
-    0x9AEA064B, //  Homebrew\Spacey McRacey.nes 
-    0x48F2DCF5, //  Homebrew\Star Evil (NESdev 2017).nes 
-    0x1CA6D4C2, //  Homebrew\Star Evil.nes 
     0xBA3A28AC, //  Homebrew\Super Painter.nes 
-    0x65622692, //  Homebrew\Sweetie and the Carnage.nes 
-    0x6D4D0DDD, //  Homebrew\TGUN (Web Version).nes 
-    0x9A167849, //  Homebrew\Tesla vs. Edison.nes 
-    0xD9B885FC, //  Homebrew\Tests\Controller Queue.nes 
-    0x8539196C, //  Homebrew\Tests\Ui Test.nes 
-    0xD78C3026, //  Homebrew\The Mad Wizard꞉ A Candelabra Chronicle (download).nes 
-    0x7E750B3A, //  Homebrew\The Paths of Bridewell.nes 
-    0xE4C37A04, //  Homebrew\The Rise of Amondus (Demo).nes 
-    0x730E70AC, //  Homebrew\The Wit.nes.nes 
     0x83C8EDF7, //  Homebrew\Tiger Jenny.nes 
-    0x03E9C033, //  Homebrew\Translations\English\4 Player Strike Mahjong [GAFF Translations].nes 
-    0xE1DB5CB1, //  Homebrew\Translations\English\BugTris [Green Jerry v1.0].nes 
-    0x69F389DD, //  Homebrew\Translations\English\Dog Town [Pacnsacdave].nes 
-    0x604E6EA6, //  Homebrew\Translations\English\Little Ninja Hattori [Pacnsacdave].nes 
-    0xA25E634B, //  Homebrew\Translations\English\Q-Tarō the Ghost [Pacnsacdave].nes 
-    0x5FB1ECF5, //  Homebrew\Translations\English\Sqoon [Stardust Crusaders].nes 
-    0xADB9C470, //  Homebrew\Translations\English\Storehouse No. 18 [Gil Galad].nes 
-    0xAB7DD6E8, //  Homebrew\Turquoise Palace.nes 
     0x1F589DF1, //  Homebrew\我想尿尿 (NESdev 2016).nes 
     0x97116D42, //  Homebrew\我想尿尿 (v1.3e).nes 
     0xDF8441F3, //  Homebrew\硝煙の騎士 Durandal [Karu Gamo].nes 
-    0x2DC05A6F, //  Licensed Japan\Astro Robo Sasa.nes 
-    0x1F2D9DB7, //  Licensed Japan\Baltron.nes 
-    0xFE18E6B6, //  Licensed Japan\Bokosuka Wars.nes 
-    0x73418721, //  Licensed Japan\Challenger.nes 
-    0x2BE254E9, //  Licensed Japan\Dig Dug II.nes 
-    0xF760F1CB, //  Licensed Japan\Dough Boy.nes 
-    0x1DBD1D2B, //  Licensed Japan\Geimos.nes 
     0x023A5A32, //  Licensed Japan\Gyro Set.nes 
-    0x29E173FF, //  Licensed Japan\Gyrodine.nes 
-    0x8575A0CB, //  Licensed Japan\Hydlide Special.nes 
-    0x59977A46, //  Licensed Japan\Mach Rider (rev0).nes 
-    0x38810A91, //  Licensed Japan\Mach Rider (rev1).nes 
-    0x89D42098, //  Licensed Japan\Pac-Land.nes 
-    0x7C596E45, //  Licensed Japan\Portopia 連続殺人事件.nes 
-    0x657F7875, //  Licensed Japan\Soccer.nes 
-    0x10BAEEF3, //  Licensed Japan\Son Son.nes 
-    0x6058C65D, //  Licensed Japan\Spartan X.nes 
-    0x636923BB, //  Licensed Japan\Spelunker.nes 
-    0x4DFD949E, //  Licensed Japan\Sqoon (rev0).nes 
-    0x73D5F7D3, //  Licensed Japan\Sqoon (rev1).nes 
     0xD445F698, //  Licensed Japan\Super Mario Bros..nes 
-    0xEB764567, //  Licensed Japan\The Tower of Druaga.nes 
-    0xFDE14CCE, //  Licensed Japan\Volguard II.nes 
-    0x270EAED5, //  Licensed Japan\おにゃんこ Town.nes 
-    0x330DE468, //  Licensed Japan\オバケのＱ太郎꞉ ワンワン Panic.nes 
-    0x89550500, //  Licensed Japan\囲碁指南.nes 
-    0x55761931, //  Licensed Japan\忍者ハットリ君꞉ 忍者は修行でござるの巻.nes 
-    0x77833016, //  Licensed North America\Chubby Cherub.nes 
-    0xDBB06A25, //  Licensed North America\Dig Dug II꞉ Trouble in Paradise.nes 
-    0xAE64CA77, //  Licensed North America\Ice Hockey.nes 
-    0xD5C64257, //  Licensed North America\Kung Fu.nes 
-    0xB6D2D300, //  Licensed North America\Ms. Pac-Man.nes 
-    0x27AA3933, //  Licensed North America\Seicross.nes 
-    0x86670C93, //  Licensed North America\Slalom.nes 
-    0x99D15A91, //  Licensed North America\Spelunker.nes 
-    0xC4A02712, //  Licensed North America\Spy vs. Spy.nes 
-    0x44F34172, //  Licensed North America\Sqoon.nes 
     0x27777635, //  Licensed North America\Volleyball.nes 
-    0x92924548, //  Licensed PAL\Ice Hockey.nes 
-    0x464A67AB, //  Licensed PAL\Kung Fu.nes 
-    0xC3A0A3E0, //  Licensed PAL\Lunar Pool.nes 
-    0xE57E5384, //  Licensed PAL\Mach Rider.nes 
-    0xC30848D3, //  Licensed PAL\Slalom.nes 
-    0x972D2784, //  Licensed PAL\Soccer.nes 
-    0xC1E91D3F, //  Licensed PAL\Spy vs. Spy.nes 
-    0x9A2DB086, //  Licensed PAL\Super Mario Bros. (rev1).nes 
-    0x3747CD0B, //  Maintenance\NES Test.nes 
     0x2F4FBBB3, //  Maintenance\NTF2 Test (rev1).nes 
-    0xEE7E61DE, //  Maintenance\U-Force Test.nes 
     0xC3F3A4A0, //  Modern\City Trouble.nes 
-    0xF3670FE3, //  Modern\Eyra, The Crow Maiden (alt).nes 
-    0x074CB327, //  Modern\Eyra, The Crow Maiden.nes 
-    0x5A378EDC, //  Modern\Family Picross.nes 
     0xAAC10C16, //  Modern\GameCube Edition\Donkey Kong 3.nes 
-    0x022032B3, //  Modern\GameCube Edition\Donkey Kong Jr. の算数遊び.nes 
     0xA69A1F2A, //  Modern\GameCube Edition\Donkey Kong Jr..nes 
-    0x781901F4, //  Modern\GameCube Edition\麻雀.nes 
-    0x73275797, //  Modern\Hackmatch (NTSC).nes 
-    0xFB2594DC, //  Modern\Hackmatch (PAL).nes 
-    0x53C19218, //  Modern\Hudson Best Collection\Challenger.nes 
-    0xF7466450, //  Modern\Namco Museum Archives\Dig Dug II.nes 
-    0x70CCA102, //  Modern\Namco Museum Archives\Pac-Land.nes 
-    0xC8DF8CBE, //  Modern\Namco Museum Archives\The Tower of Druaga.nes 
     0xB0719977, //  Modern\Nebs 'n Debs.nes 
     0x0F6EA0FF, //  Modern\Quest Forge.nes 
-    0xC8EB5A7D, //  Modern\Rollie.nes 
-    0xA80290A6, //  Modern\Super Mario Bros. (25th Anniversary NTSC).nes 
-    0xE66AD6B8, //  Modern\Super Mario Bros. (25th Anniversary PAL).nes 
-    0x77EAD911, //  Modern\Virtual Console\Dig Dug II꞉ Trouble in Paradise.nes 
-    0x8C36176E, //  Modern\Virtual Console\Ice Hockey.nes 
-    0x5B1EB1F7, //  Modern\Virtual Console\Lode Runner (Japan).nes 
     0xFE7704BA, //  Modern\Virtual Console\Lode Runner (World).nes 
-    0x48591193, //  Modern\Virtual Console\Spelunker (Japan).nes 
-    0xFABA94E6, //  Modern\Virtual Console\Spelunker (World).nes 
-    0x70A192C5, //  Modern\Virtual Console\Volleyball.nes 
     0xF0666B3C, //  Multicarts\extracts\Tank (Asder 20-in-1).nes 
-    0x8D9F4989, //  Playchoice\Kung Fu.nes 
-    0xB99F6CD0, //  Playchoice\Super Mario Bros..nes 
-    0x6A519A5E, //  Playchoice\Volleyball.nes 
-    0xAF69375E, //  Plug-and-Play\extracts\100m Hurdles.nes 
     0x27ACE333, //  Plug-and-Play\extracts\Anti-Terror Action.nes 
-    0x4F33DF4D, //  Plug-and-Play\extracts\Boxworld.nes 
-    0x8A38AE20, //  Plug-and-Play\extracts\Caper Alone.nes 
-    0x6DC4121F, //  Plug-and-Play\extracts\Diamond (Nice Code).nes 
-    0xE2B19CCB, //  Plug-and-Play\extracts\Dringle.nes 
-    0xC1711414, //  Plug-and-Play\extracts\Hit-Mousee.nes 
-    0x19158CDD, //  Plug-and-Play\extracts\Hurry Burry.nes 
-    0x1088D198, //  Plug-and-Play\extracts\Twin Cards.nes 
     0xB5D28D3F, //  Samples\Eskimo Bob Starring Alfonzo.nes 
-    0x21684965, //  Samples\Nebs 'n Debs.nes 
     0x905B93F6, //  Unlicensed Elsewhere\Balloon Monster (rev1).nes 
     0x71C01B19, //  Unlicensed Elsewhere\Little Red Hood.nes 
-    0x19CE7F12, //  Unlicensed Elsewhere\Magic Mathematic.nes 
     0xB4BADF56, //  Unlicensed Elsewhere\Tank.nes 
-    0x1918F689, //  Unlicensed Japan\Super Maruo.nes 
-    0x2E6F1A75, //  Unlicensed South Korea\BugTris.nes 
     0x0B3513A0, //  Unlicensed Taiwan&amp;Hong Kong\Balloon Monster.nes 
-    0xB69F7C0F, //  Unlicensed Taiwan&amp;Hong Kong\Fire Dragon.nes 
     0x7CF6B30A, //  Unlicensed Taiwan&amp;Hong Kong\Locksmith.nes 
-    0xE8A11BD7, //  Unlicensed Taiwan&amp;Hong Kong\Porter.nes 
-    0x207DD1C4, //  Unlicensed Taiwan&amp;Hong Kong\Tank.nes 
-    0x0C1FE23D, //  Unlicensed Taiwan&amp;Hong Kong\小紅帽 - Little Red Hood.nes 
-    0x1E407387, //  Unreleased\Baltron.nes 
-    0x90600B85, //  Unreleased\Seicross.nes 
-    0x0D9AE579, //  Unreleased\Tetris꞉ The Soviet Mind Game (build #2).nes 
-    0xFA12003D, //  Unreleased\忍者ハットリ君꞉ 忍者は修行でござるの巻.nes 
-/**** 19 mapper=0 prgrom=32K prgram=8K chrrom=8K mirror=V */
+/**** 36 mapper=0 prgrom=32K chrrom=8K mirror=V system=SYSTEM_NTSC */
+    0xF7C88C35, //  Homebrew\Demos\DCEvo Dream Emulation Project.nes 
+    0x592329EA, //  Homebrew\Hot Dance 2020.nes 
+    0xFAAD108A, //  Homebrew\Morskoy Boy.nes 
+    0xADB9C470, //  Homebrew\Translations\English\Storehouse No. 18 [Gil Galad].nes 
+    0x8C36176E, //  Modern\Virtual Console\Ice Hockey.nes 
+/**** 37 mapper=0 prgrom=32K prgram=8K chrrom=8K mirror=V */
     0xE87E182E, //  Bootleg Singles\Front Fareast Magic Card\(F1087) Super Mario Bros..nes 
     0x69759626, //  Bootleg Singles\Front Fareast Magic Card\(F1154) Family BASIC.nes 
-    0x84D59A58, //  Educational Computers\Education Computer 7-in-1.nes 
-    0x8F7B1669, //  Educational Computers\FP-BASIC (v3.3).nes 
+/**** 38 mapper=0 prgrom=32K prgram=8K chrrom=8K mirror=V system=SYSTEM_NTSC */
     0xFCD7A58F, //  Homebrew\Hacks\Super Mario Bros. series\Peach's Nightmare [Elishasoft].nes 
     0xC60E44B5, //  Homebrew\Hacks\Super Mario Bros. series\Snipe &amp; Dash Hammer Bros. [BlckMage86].nes 
     0x460710FA, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Mushroom Dreams [Rage Games].nes 
     0x72751BA0, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ Made with MI41.nes 
     0xD3D34C85, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ TKB Vol. 2 [TKB].nes 
     0x13AAD777, //  Homebrew\Hacks\Super Mario Bros. series\Yoshi's Quest.nes 
-/**** 20 mapper=0 prgrom=32K chrrom=16K mirror=V */
+/**** 39 mapper=0 prgrom=32K prgram=8K chrrom=8K mirror=V system=SYSTEM_NTSC */
+    0x84D59A58, //  Educational Computers\Education Computer 7-in-1.nes 
+    0x8F7B1669, //  Educational Computers\FP-BASIC (v3.3).nes 
+/**** 40 mapper=0 prgrom=32K chrrom=16K mirror=V */
     0x02BC030E, //  Bad Dumps\Police vs. Thief꞉ Violent Chasing [CHR overdump].nes 
     0xAD1381DF, //  Plug-and-Play\extracts\Bomberman 2002.nes 
     0x9334DE5B, //  Plug-and-Play\extracts\Fish Story.nes 
     0xD1B91F24, //  Plug-and-Play\extracts\Goblet Tower.nes 
-/**** 21 mapper=0 prgrom=32K chrrom=32K mirror=V */
+/**** 41 mapper=0 prgrom=32K chrrom=32K mirror=V */
     0x18922271, //  Bad Dumps\Magic Bubble [CHR overdump].nes 
-/**** 22 mapper=0 prgrom=48K chrrom=8K mirror=V */
+/**** 42 mapper=0 prgrom=48K chrrom=8K mirror=V */
     0x83428A58, //  Homebrew\Alter Ego (NROM-368).nes 
-/**** 23 mapper=0 prgrom=32K prgnvram=2K chrrom=8K mirror=V battery=1 */
+/**** 43 mapper=0 prgrom=32K prgnvram=2K chrrom=8K mirror=V battery=1 */
     0xF8BBC22C, //  Educational Computers\家庭电脑教学键盘 - Family Competer Keyboard.nes 
     0xF7DB8B5C, //  Licensed Japan\Family BASIC (v1.0).nes 
     0xF7606810, //  Licensed Japan\Family BASIC (v2.0).nes 
     0x895037BC, //  Licensed Japan\Family BASIC (v2.1).nes 
     0xACB8FE86, //  Licensed Japan\Playbox BASIC.nes 
     0x912989DC, //  Unreleased\Playbox BASIC.nes 
-/**** 24 mapper=0 prgrom=32K prgnvram=4K chrrom=8K mirror=V battery=1 */
+/**** 44 mapper=0 prgrom=32K prgnvram=4K chrrom=8K mirror=V battery=1 */
     0xB2530AFC, //  Licensed Japan\Family BASIC (v3.0).nes 
-/**** 25 mapper=0 prgrom=32K prgnvram=8K chrrom=8K mirror=V battery=1 */
+/**** 45 mapper=0 prgrom=32K prgnvram=8K chrrom=8K mirror=V battery=1 */
     0x3B833CCA, //  Modern\Classic Edition\Excitebike.nes 
     0xB7CB1734, //  Modern\Virtual Console\Excitebike (NTSC).nes 
-    0x3BC0ADE6, //  Modern\Virtual Console\Excitebike (PAL).nes 
     0xB08D0374, //  Modern\Virtual Console\Mach Rider (PAL).nes 
     0xF8D564F9, //  Modern\Virtual Console\Mach Rider (World rev0).nes 
     0x99C3142E, //  Modern\Virtual Console\Mach Rider (World rev1).nes 
-/**** 26 mapper=1 prgrom=32K chrrom=16K mirror=4 */
+/**** 46 mapper=0 prgrom=32K prgnvram=8K chrrom=8K mirror=V battery=1 system=SYSTEM_PAL */
+    0x3BC0ADE6, //  Modern\Virtual Console\Excitebike (PAL).nes 
+/**** 47 mapper=1 prgrom=32K chrrom=16K mirror=4 */
     0x7D01D4E0, //  Compatibility Hacks\Vs. Hogan's Alley [home console v1.0b1].nes 
-/**** 27 mapper=1 prgrom=64K prgram=2K chrrom=32K mirror=4 */
+/**** 48 mapper=1 prgrom=64K prgram=2K chrrom=32K mirror=4 */
     0x2B85420E, //  Vs. System\Dr. Mario.nes 
-/**** 28 mapper=1 prgrom=16K chrram=8K mirror=H */
+/**** 49 mapper=1 prgrom=16K chrram=8K mirror=H */
     0xC596AD7B, //  BIOS\WideBoy.nes 
-/**** 29 mapper=1 prgrom=16K chrrom=8K mirror=H */
+/**** 50 mapper=1 prgrom=16K chrrom=8K mirror=H */
     0x4CAF31FA, //  Homebrew\Move 31.nes 
-/**** 30 mapper=1 prgrom=16K chrrom=32K mirror=H */
+/**** 51 mapper=1 prgrom=16K chrrom=32K mirror=H */
     0x988AF9F1, //  Homebrew\Demos\Splash Rightnut.nes 
-/**** 31 mapper=1 prgrom=32K chrram=8K mirror=H */
+/**** 52 mapper=1 prgrom=32K chrram=8K mirror=H */
     0x7CA7586A, //  Homebrew\Demos\Deadline Console Invitro [8bitpeoples].nes 
-/**** 32 mapper=1 prgrom=32K prgram=8K chrram=8K mirror=H */
+/**** 53 mapper=1 prgrom=32K prgram=8K chrram=8K mirror=H */
     0x2C19B3C1, //  Homebrew\Tests\MW4 Test.nes 
-/**** 33 mapper=1 prgrom=32K prgram=8K chrrom=8K mirror=H */
+/**** 54 mapper=1 prgrom=32K prgram=8K chrrom=8K mirror=H system=SYSTEM_NTSC */
     0x61286D57, //  Homebrew\Ball 'n Flag (Neo Coding Compo).nes 
     0x4032FA0C, //  Homebrew\Ball 'n Flag.nes 
-/**** 34 mapper=1 prgrom=32K chrrom=16K mirror=H */
+/**** 55 mapper=1 prgrom=32K chrrom=16K mirror=H */
     0xAEC82F8A, //  Homebrew\Betelgeuse.nes 
+/**** 56 mapper=1 prgrom=32K chrrom=16K mirror=H system=SYSTEM_NTSC */
     0xBF4277F4, //  Homebrew\Nalle Land (v0.4.0).nes 
-/**** 35 mapper=1 prgrom=32K chrrom=32K mirror=H */
+/**** 57 mapper=1 prgrom=32K chrrom=32K mirror=H */
     0x21763B95, //  Bad Dumps\Virus (1990-03)[missing PROM].nes 
     0x131E67E7, //  Homebrew\Hacks\Adventures of Lala [Zynk Oxhyde].nes 
     0x7BFCC141, //  Homebrew\Hacks\Adventures of Lolo꞉ Mystical Forest.nes 
     0xE147F61C, //  Homebrew\Hacks\R.C. Pro-Am (Mario Kart Edition).nes 
     0xA8787D92, //  Homebrew\Translations\English\Hirake! Ponkikki [Gil Galad v1.01].nes 
     0x8EB8CE9B, //  Homebrew\Translations\English\Open! Ponkikki [Open! Ponkikki].nes 
-    0x8416A0D7, //  Modern\Virtual Console\Adventures of Lolo (PAL).nes 
     0xF9BACC95, //  Unreleased\Virus (1990-03).nes 
-/**** 36 mapper=1 prgrom=64K prgram=8K chrram=8K mirror=H */
+/**** 58 mapper=1 prgrom=32K chrrom=32K mirror=H system=SYSTEM_PAL */
+    0x8416A0D7, //  Modern\Virtual Console\Adventures of Lolo (PAL).nes 
+/**** 59 mapper=1 prgrom=64K prgram=8K chrram=8K mirror=H system=SYSTEM_PAL */
     0x573DFDFA, //  Homebrew\Demos\Years Behind [Retrocoders].nes 
-/**** 37 mapper=1 prgrom=64K prgram=8K chrrom=8K mirror=H */
-    0x8BB93AF8, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Special (unknown version)[Karatorian].nes 
+/**** 60 mapper=1 prgrom=64K prgram=8K chrrom=8K mirror=H */
     0xB25C00AB, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Special (v1.0rc1)[Karatorian].nes 
+/**** 61 mapper=1 prgrom=64K prgram=8K chrrom=8K mirror=H system=SYSTEM_NTSC */
+    0x8BB93AF8, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Special (unknown version)[Karatorian].nes 
     0x1D6805CC, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Remix꞉ The Toad Bros Tale.nes 
-/**** 38 mapper=1 prgrom=64K chrrom=16K mirror=H */
-    0xEBE3DCB4, //  Homebrew\Dizzy Sheep Disaster (BitBitJam #4).nes 
+/**** 62 mapper=1 prgrom=64K chrrom=16K mirror=H */
     0x2C40B09B, //  Homebrew\Fluffy Space Escape [Ludum Dare 40].nes 
-/**** 39 mapper=1 prgrom=64K prgram=8K chrrom=16K mirror=H */
+/**** 63 mapper=1 prgrom=64K chrrom=16K mirror=H system=SYSTEM_NTSC */
+    0xEBE3DCB4, //  Homebrew\Dizzy Sheep Disaster (BitBitJam #4).nes 
+/**** 64 mapper=1 prgrom=64K prgram=8K chrrom=16K mirror=H */
     0x26A2D515, //  Compatibility Hacks\Vs. Ice Climber [home console v2.0b].nes 
-/**** 40 mapper=1 prgrom=64K chrrom=32K mirror=H */
+/**** 65 mapper=1 prgrom=64K chrrom=32K mirror=H */
     0x9E382EBF, //  Licensed North America\Dance Aerobics.nes 
     0x6435C095, //  Licensed North America\Short Order+Eggsplode.nes 
     0xE50A9130, //  Licensed North America\The Bugs Bunny Crazy Castle.nes 
-/**** 41 mapper=1 prgrom=64K prgram=8K chrrom=32K mirror=H */
+/**** 66 mapper=1 prgrom=64K prgram=8K chrrom=32K mirror=H */
     0xBB0F2A16, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Special X1 [Messatu].nes 
-/**** 42 mapper=1 prgrom=64K chrrom=128K mirror=H */
+/**** 67 mapper=1 prgrom=64K chrrom=128K mirror=H */
     0x66F4D9F5, //  Licensed Japan\Knight Rider.nes 
     0x4318A2F8, //  Licensed North America\Barker Bill's Trick Shooting.nes 
     0xEBCFE7C5, //  Licensed North America\Knight Rider.nes 
@@ -1986,10 +2148,10 @@ static const u32 s_crcs[] = {
     0x5EE6008E, //  Licensed North America\Mechanized Attack.nes 
     0x958E4BAE, //  Licensed North America\Orb 3-D.nes 
     0x9FFE2F55, //  Licensed North America\Sky Shark.nes 
+/**** 68 mapper=1 prgrom=64K chrrom=128K mirror=H system=SYSTEM_PAL */
     0x1F6660E6, //  Licensed PAL\Barker Bill's Trick Shooting.nes 
     0x280AD3C5, //  Licensed PAL\Knight Rider.nes 
-/**** 43 mapper=1 prgrom=128K chrram=8K mirror=H */
-    0x9AC644F4, //  Homebrew\Driar.nes 
+/**** 69 mapper=1 prgrom=128K chrram=8K mirror=H */
     0x12B8CA7D, //  Homebrew\Translations\English\Dragon Slayer Jr.꞉ Romancia (revA)[DvD Translations].nes 
     0xDAE24036, //  Homebrew\Translations\English\紫禁城 [Suicidal Translations].nes 
     0x74EE0FFC, //  Licensed Japan\Bridgestone Cycle꞉ Radac Tailor-Made (rev0).nes 
@@ -2016,18 +2178,17 @@ static const u32 s_crcs[] = {
     0x6B53006A, //  Licensed North America\The Battle of Olympus.nes 
     0xF74DFC91, //  Licensed North America\Win, Lose or Draw.nes 
     0x52880295, //  Licensed North America\Winter Games (rev0).nes 
-    0x654F4E90, //  Licensed PAL\Rad Racer.nes 
-    0xA97567A4, //  Licensed PAL\The Battle of Olympus.nes 
     0x44B05F06, //  Playchoice\Rad Racer.nes 
     0x3F57E040, //  Samples\Square Deal.nes 
     0xE14F0A3F, //  Unreleased\Super Pinball.nes 
     0x9568EB74, //  Unreleased\目指せパチPro꞉ パチ夫くん.nes 
-/**** 44 mapper=1 prgrom=128K prgram=8K chrram=8K mirror=H */
+/**** 70 mapper=1 prgrom=128K chrram=8K mirror=H system=SYSTEM_PAL */
+    0x9AC644F4, //  Homebrew\Driar.nes 
+    0x654F4E90, //  Licensed PAL\Rad Racer.nes 
+    0xA97567A4, //  Licensed PAL\The Battle of Olympus.nes 
+/**** 71 mapper=1 prgrom=128K prgram=8K chrram=8K mirror=H */
     0x773D24F9, //  Homebrew\Bugfixes, Improvements\Metroid (NTSC)[corrected RNG][drk421].nes 
-    0x70647464, //  Homebrew\Bugfixes, Improvements\Metroid (PAL)[corrected RNG][drk421].nes 
     0xCF26363D, //  Homebrew\Demos\Specus.nes 
-    0xE917380B, //  Homebrew\Hacks\Kid Icarus Remix [Clomax Dominion].nes 
-    0xD29EAF12, //  Homebrew\Hacks\Kid Icarus Zz.nes 
     0x96B726FC, //  Homebrew\Hacks\Metroid 99꞉ Maximumpotion Kzk.nes 
     0x9E6DA943, //  Homebrew\Hacks\Metroid꞉ Samus' Dream (bad CHR)[Ryu654].nes 
     0x75547617, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. 2 Beta Into Doki Doki Panic.nes 
@@ -2041,22 +2202,27 @@ static const u32 s_crcs[] = {
     0x75901B18, //  Licensed Japan\Titan.nes 
     0x1EBB5B42, //  Licensed North America\Bomberman II.nes 
     0x841B69B6, //  Licensed North America\Hatris.nes 
-    0xD9F0749F, //  Licensed North America\Kid Icarus (rev0).nes 
-    0xD67FD6A6, //  Licensed North America\Kid Icarus (rev1).nes 
     0x0939852F, //  Licensed North America\M.U.L.E..nes 
     0x70080810, //  Licensed North America\Metroid.nes 
     0x95E4E594, //  Licensed North America\Qix.nes 
     0xCFAE9DFA, //  Licensed North America\Spot.nes 
-    0x34BB757B, //  Licensed PAL\Dynablaster.nes 
-    0x7751588D, //  Licensed PAL\Metroid.nes 
     0x08598049, //  Modern\Hudson Best Collection\Bomberman II.nes 
-    0x654EC7C0, //  Modern\Virtual Console\Kid Icarus.nes 
     0xD59ADB3F, //  Modern\Virtual Console\Metroid (NTSC).nes 
-    0x07E8D0CF, //  Modern\Virtual Console\Metroid (PAL).nes 
     0x6CF3116A, //  Playchoice\Metroid.nes 
     0x6ED31CCD, //  Unreleased\Chip's Challenge.nes 
     0x52387646, //  Unreleased\Super Mario Bros. 2.nes 
-/**** 45 mapper=1 prgrom=128K chrrom=32K mirror=H */
+/**** 72 mapper=1 prgrom=128K prgram=8K chrram=8K mirror=H system=SYSTEM_PAL */
+    0x70647464, //  Homebrew\Bugfixes, Improvements\Metroid (PAL)[corrected RNG][drk421].nes 
+    0x34BB757B, //  Licensed PAL\Dynablaster.nes 
+    0x7751588D, //  Licensed PAL\Metroid.nes 
+    0x07E8D0CF, //  Modern\Virtual Console\Metroid (PAL).nes 
+/**** 73 mapper=1 prgrom=128K prgram=8K chrram=8K mirror=H system=SYSTEM_NTSC */
+    0xE917380B, //  Homebrew\Hacks\Kid Icarus Remix [Clomax Dominion].nes 
+    0xD29EAF12, //  Homebrew\Hacks\Kid Icarus Zz.nes 
+    0xD9F0749F, //  Licensed North America\Kid Icarus (rev0).nes 
+    0xD67FD6A6, //  Licensed North America\Kid Icarus (rev1).nes 
+    0x654EC7C0, //  Modern\Virtual Console\Kid Icarus.nes 
+/**** 74 mapper=1 prgrom=128K chrrom=32K mirror=H */
     0x265B230E, //  Homebrew\Hacks\Hyper Bobble [Cool Nestea].nes 
     0x9B7BD576, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Unlimited (v0.997)[Frantik].nes 
     0x17348D62, //  Homebrew\Translations\English\Eggerland꞉ Revival of the Labyrinth (v1.0)[Kapow](English password).nes 
@@ -2084,28 +2250,30 @@ static const u32 s_crcs[] = {
     0xEA4EB69E, //  Licensed North America\Touchdown Fever.nes 
     0x711896B8, //  Licensed North America\Xenophobe.nes 
     0xE7EAD93B, //  Licensed North America\Yoshi.nes 
+    0x5723D797, //  Modern\Virtual Console\Bubble Bobble (NTSC).nes 
+    0xFB77099E, //  Samples\Garfield꞉ A Week of Garfield.nes 
+    0xF110BE46, //  Unreleased\Garfield꞉ A Week of Garfield (Prototype).nes 
+/**** 75 mapper=1 prgrom=128K chrrom=32K mirror=H system=SYSTEM_PAL */
     0xC99B690A, //  Licensed PAL\Bubble Bobble.nes 
     0x836685C4, //  Licensed PAL\Mario &amp; Yoshi.nes 
     0xA99016C6, //  Licensed PAL\Rollerball.nes 
-    0x5723D797, //  Modern\Virtual Console\Bubble Bobble (NTSC).nes 
     0x101A76A0, //  Modern\Virtual Console\Bubble Bobble (PAL).nes 
-    0xFB77099E, //  Samples\Garfield꞉ A Week of Garfield.nes 
-    0xF110BE46, //  Unreleased\Garfield꞉ A Week of Garfield (Prototype).nes 
-/**** 46 mapper=1 prgrom=128K prgram=8K chrrom=32K mirror=H */
+/**** 76 mapper=1 prgrom=128K prgram=8K chrrom=32K mirror=H */
     0x630FDB8F, //  Homebrew\Hacks\Phantasy Star꞉ The Hopeless.nes 
     0x35C41CD4, //  Licensed North America\Air Fortress.nes 
     0xD7F6320C, //  Licensed North America\The Chessmaster (rev0).nes 
     0x19F4CA6B, //  Licensed North America\The Chessmaster (rev1).nes 
+/**** 77 mapper=1 prgrom=128K prgram=8K chrrom=32K mirror=H system=SYSTEM_PAL */
     0xA1F90826, //  Licensed PAL\Air Fortress.nes 
     0xE3027EBE, //  Licensed PAL\The Chessmaster.nes 
-/**** 47 mapper=1 prgrom=128K chrrom=64K mirror=H */
+/**** 78 mapper=1 prgrom=128K chrrom=64K mirror=H */
     0xDE17A5CF, //  Homebrew\Hacks\Castlevania series\Super! Castlevania II꞉ Simon's Quest (v0.9)[JimW].nes 
     0x529B621F, //  Licensed North America\NES Power Set (rev0).nes 
     0x60E63537, //  Licensed North America\NES Power Set (rev1).nes 
     0x20353E63, //  Licensed North America\Peter Pan &amp; The Pirates.nes 
-/**** 48 mapper=1 prgrom=128K chrrom=72K mirror=H */
+/**** 79 mapper=1 prgrom=128K chrrom=72K mirror=H */
     0x3FF04490, //  Homebrew\PlayPower Games.nes 
-/**** 49 mapper=1 prgrom=128K chrrom=128K mirror=H */
+/**** 80 mapper=1 prgrom=128K chrrom=128K mirror=H */
     0x4AF742FA, //  Bad Dumps\Sky Shark [overdump].nes 
     0x6E4697BF, //  Bad Dumps\The Untouchables.nes 
     0x4989D551, //  Bootleg Hacks\Back Go to Future 4.nes 
@@ -2145,7 +2313,6 @@ static const u32 s_crcs[] = {
     0x083AEA82, //  Homebrew\Hacks\Propeller Master.nes 
     0x06FBE365, //  Homebrew\Hacks\Tecmo Bowl series\Tecmo Bowl - 2007-2008 [kefkaroth].nes 
     0x4EC87E00, //  Homebrew\Hacks\Tecmo Bowl series\Tecmo Bowl NFL 2007 Playoffs.nes 
-    0xE7882A07, //  Homebrew\Journey.nes 
     0x2BF07493, //  Homebrew\Original Mapper Restorations\Bolide.nes 
     0xF1E4CEAF, //  Homebrew\Translations\English\A Taxing Woman [M-Tee].nes 
     0xB30BCE64, //  Homebrew\Translations\English\Airwolf [Vice Translations].nes 
@@ -2168,7 +2335,6 @@ static const u32 s_crcs[] = {
     0xD35D2149, //  Homebrew\Translations\English\Holy Diver [Monaco, MottZilla R1].nes 
     0xE68F5C57, //  Homebrew\Translations\English\Kero Kero Keroppi's Great Big Adventure 2꞉ Trouble in Donut Pond [The Spoony Bard].nes 
     0xC129B2AF, //  Homebrew\Translations\English\Kiteretsu Encyclopedia [Zynk Oxhyde].nes 
-    0xC5CEF2C4, //  Homebrew\Translations\English\Knights of the Zodiac꞉ Legend of the Golden Armor [The Rosetta Group].nes 
     0x2B6E1DA8, //  Homebrew\Translations\English\Little Ghosts [KingMike].nes 
     0x3F8BB92D, //  Homebrew\Translations\English\Mad City [Stardust Crusaders].nes 
     0x5150BC1D, //  Homebrew\Translations\English\Masked Ninja Hanamaru [Pacnsacdave v1.1].nes 
@@ -2186,7 +2352,6 @@ static const u32 s_crcs[] = {
     0x7E36C98B, //  Homebrew\Translations\English\The 100 World Story꞉ The Tales on a Watery Wilderness [AlanMidas BS.VQt].nes 
     0x40DF6A65, //  Homebrew\Translations\English\The Golf '92 [Zynk Oxhyde].nes 
     0x02AA1E43, //  Homebrew\Translations\English\The Great Maze꞉ Master of the Maze [Filler, KingMike's Translations].nes 
-    0x64A7FC0E, //  Homebrew\Translations\English\The Knights of the Zodiac꞉ The Legend of the Gold (France) [KingMike's Translations v1.0].nes 
     0x89F8EBDA, //  Homebrew\Translations\English\The Venus Wars꞉ Back to the City ''Io'' [J2e Translations v2.0].nes 
     0xB1A84413, //  Homebrew\Translations\English\WRC FIA World Rally꞉ World Rally Championship [Klepto Software].nes 
     0x0F08DF85, //  Homebrew\Translations\English\熱血高校 Dodgeball 部 [Generica Online v0.9].nes 
@@ -2422,6 +2587,77 @@ static const u32 s_crcs[] = {
     0x3A8723B9, //  Licensed North America\Wrath of the Black Manta (rev1).nes 
     0xB1612FE6, //  Licensed North America\Xexyz.nes 
     0x50D141FC, //  Licensed North America\Yo! Noid.nes 
+    0x3D16979B, //  Modern\Castlevania II꞉ Simon's Quest (Castlevania Anniversary Collection).nes 
+    0x709B54B2, //  Modern\Castlevania II꞉ Simon's Quest (Konami Collector's Series).nes 
+    0x9E8A45B7, //  Modern\Chip 'n Dale꞉ Rescue Rangers (The Disney Afternoon Collection).nes 
+    0xC56084D7, //  Modern\Chip 'n Dale꞉ Rescue Rangers 2 (The Disney Afternoon Collection).nes 
+    0xA3759CB3, //  Modern\Classic Edition\Tecmo Bowl.nes 
+    0xEDC7E8C6, //  Modern\Darkwing Duck (The Disney Afternoon Collection).nes 
+    0x1CB7CE42, //  Modern\Great Tank (SNK 40th Anniversary Collection).nes 
+    0x08529D4A, //  Modern\Little Lancelot.nes 
+    0xA97ECE5B, //  Modern\TaleSpin (The Disney Afternoon Collection).nes 
+    0xE59C4A99, //  Modern\Virtual Console\Blaster Master.nes 
+    0x7F6D08A8, //  Modern\Virtual Console\Flying Warriors.nes 
+    0x1BFE42AB, //  Modern\Virtual Console\Mad City.nes 
+    0x2FE4B645, //  Modern\Virtual Console\Ninja Gaiden.nes 
+    0x2790ED68, //  Modern\Virtual Console\S.C.A.T. - Special Cybernetic Attack Team.nes 
+    0xBEBB4E01, //  Modern\Virtual Console\Super Dodge Ball.nes 
+    0xDC4DB09A, //  Modern\Virtual Console\Teenage Mutant Ninja Turtles.nes 
+    0x8373021E, //  Modern\Virtual Console\The Adventures of Bayou Billy.nes 
+    0x00EBEB79, //  Modern\Virtual Console\忍者龍剣伝 (alt).nes 
+    0x7FBFD559, //  Modern\Virtual Console\忍者龍剣伝.nes 
+    0xCF78BA06, //  Modern\Virtual Console\探偵神宮寺三郎꞉ 横浜港連続殺人事件.nes 
+    0xAAE9E72F, //  Modern\Virtual Console\激亀忍者伝.nes 
+    0xAED38D5A, //  Modern\Virtual Console\熱血高校 Dodgeball 部.nes 
+    0x4676CED3, //  Modern\Virtual Console\超惑星戦記 MetaFight.nes 
+    0xC3A8B1ED, //  Modern\Virtual Console\飛龍の拳 II꞉ Dragonの翼.nes 
+    0x88C369B6, //  Modern\くにおくん熱血 Collection\熱血高校 Dodgeball 部.nes 
+    0x5C16DC2F, //  Playchoice\Chip 'n Dale꞉ Rescue Rangers.nes 
+    0x0E004847, //  Playchoice\Double Dragon.nes 
+    0x806E5CD7, //  Playchoice\Fester's Quest.nes 
+    0xA2E64E5E, //  Playchoice\Ninja Gaiden.nes 
+    0x802671E0, //  Playchoice\Tecmo Bowl.nes 
+    0xB04C53F1, //  Playchoice\Teenage Mutant Ninja Turtles.nes 
+    0x17EA92A8, //  Playchoice\Yo! Noid.nes 
+    0x4FBBE319, //  Unreleased\Adventures in the Magic Kingdom (Beta 1).nes 
+    0x3CF749DE, //  Unreleased\Adventures in the Magic Kingdom (Beta 2).nes 
+    0xADA40FB2, //  Unreleased\Arcadia VI.nes 
+    0x7C7A0A73, //  Unreleased\Bashi Bazook꞉ Morphoid Masher.nes 
+    0xB683A856, //  Unreleased\Blaster Master.nes 
+    0xCC6CA4DC, //  Unreleased\Chip 'n Dale꞉ Rescue Rangers 2.nes 
+    0x24C5EF30, //  Unreleased\Chip 'n Dale꞉ Rescue Rangers.nes 
+    0x8DB43824, //  Unreleased\Darkwing Duck.nes 
+    0x6EB336F9, //  Unreleased\Days of Thunder (Compiled PRG+CHR).nes 
+    0x064505AE, //  Unreleased\Days of Thunder (Prebuilt PRG+CHR Patched).nes 
+    0x7BDA85C2, //  Unreleased\Days of Thunder (Prebuilt PRG+CHR).nes 
+    0x41462D21, //  Unreleased\Double Dragon.nes 
+    0x4232C609, //  Unreleased\Drac's Night Out.nes 
+    0x92DD67EA, //  Unreleased\Flying Warriors.nes 
+    0x73CCDAE0, //  Unreleased\Freedom Force.nes 
+    0x0E0060C8, //  Unreleased\Happily Ever After.nes 
+    0x9D9A89C4, //  Unreleased\Hook.nes 
+    0x9768AE75, //  Unreleased\Mike Ditka's Big Play Football.nes 
+    0x5ABBF861, //  Unreleased\New Ghostbusters II.nes 
+    0x6EEA1B10, //  Unreleased\Ninja Gaiden.nes 
+    0x21E28F50, //  Unreleased\Parody World꞉ Monster Party.nes 
+    0xF6CC7A99, //  Unreleased\Quarter Back Scramble.nes 
+    0xF6AB12A2, //  Unreleased\Rescue꞉ The Embassy Mission.nes 
+    0x78C72C75, //  Unreleased\S.C.A.T. - Special Cybernetic Attack Team.nes 
+    0xD31EB7BB, //  Unreleased\Star Trek V꞉ The Final Frontier.nes 
+    0xDE84354A, //  Unreleased\Superman (Kemco).nes 
+    0xE5EA0EBE, //  Unreleased\Tecmo Bowl.nes 
+    0x1FF251AE, //  Unreleased\Teenage Mutant Ninja Turtles.nes 
+    0xF471827D, //  Unreleased\The Addams Family꞉ Fester's Quest.nes 
+    0xAE97627C, //  Unreleased\The Bugs Bunny Fun House.nes 
+    0x1C9EA55C, //  Unreleased\The Three Stooges.nes 
+    0xB0874760, //  Unreleased\USA Bowling.nes 
+    0x6A6FC14C, //  Unreleased\Yo! Noid.nes 
+    0x7C108923, //  Unreleased\聖闘士星矢꞉ 黄金伝説 完結編.nes 
+    0x0C462638, //  Unreleased\電撃 Big Bang!.nes 
+    0x14374128, //  Unreleased\飛龍の拳 Special꞉ Fighting Wars.nes 
+/**** 81 mapper=1 prgrom=128K chrrom=128K mirror=H system=SYSTEM_PAL */
+    0xC5CEF2C4, //  Homebrew\Translations\English\Knights of the Zodiac꞉ Legend of the Golden Armor [The Rosetta Group].nes 
+    0x64A7FC0E, //  Homebrew\Translations\English\The Knights of the Zodiac꞉ The Legend of the Gold (France) [KingMike's Translations v1.0].nes 
     0xAB2AC325, //  Licensed PAL\A Boy and His Blob꞉ Trouble on Blobolonia (rev0).nes 
     0x8ECBC577, //  Licensed PAL\A Boy and His Blob꞉ Trouble on Blobolonia (rev1).nes 
     0x3AC0830A, //  Licensed PAL\Action in New York.nes 
@@ -2496,80 +2732,14 @@ static const u32 s_crcs[] = {
     0xC53CF1D0, //  Licensed PAL\Track &amp; Field II.nes 
     0xD9323EE6, //  Licensed PAL\Willow.nes 
     0x06689AA4, //  Licensed PAL\Wrath of the Black Manta.nes 
-    0x3D16979B, //  Modern\Castlevania II꞉ Simon's Quest (Castlevania Anniversary Collection).nes 
-    0x709B54B2, //  Modern\Castlevania II꞉ Simon's Quest (Konami Collector's Series).nes 
-    0x9E8A45B7, //  Modern\Chip 'n Dale꞉ Rescue Rangers (The Disney Afternoon Collection).nes 
-    0xC56084D7, //  Modern\Chip 'n Dale꞉ Rescue Rangers 2 (The Disney Afternoon Collection).nes 
-    0xA3759CB3, //  Modern\Classic Edition\Tecmo Bowl.nes 
-    0xEDC7E8C6, //  Modern\Darkwing Duck (The Disney Afternoon Collection).nes 
-    0x1CB7CE42, //  Modern\Great Tank (SNK 40th Anniversary Collection).nes 
-    0x08529D4A, //  Modern\Little Lancelot.nes 
-    0xA97ECE5B, //  Modern\TaleSpin (The Disney Afternoon Collection).nes 
-    0xE59C4A99, //  Modern\Virtual Console\Blaster Master.nes 
-    0x6F7649BD, //  Modern\Virtual Console\Double Dragon.nes 
-    0x7F6D08A8, //  Modern\Virtual Console\Flying Warriors.nes 
-    0x1BFE42AB, //  Modern\Virtual Console\Mad City.nes 
-    0x2FE4B645, //  Modern\Virtual Console\Ninja Gaiden.nes 
-    0x2790ED68, //  Modern\Virtual Console\S.C.A.T. - Special Cybernetic Attack Team.nes 
-    0xBEBB4E01, //  Modern\Virtual Console\Super Dodge Ball.nes 
     0x80107F84, //  Modern\Virtual Console\Teenage Mutant Hero Turtles.nes 
-    0xDC4DB09A, //  Modern\Virtual Console\Teenage Mutant Ninja Turtles.nes 
-    0x8373021E, //  Modern\Virtual Console\The Adventures of Bayou Billy.nes 
-    0x00EBEB79, //  Modern\Virtual Console\忍者龍剣伝 (alt).nes 
-    0x7FBFD559, //  Modern\Virtual Console\忍者龍剣伝.nes 
-    0xCF78BA06, //  Modern\Virtual Console\探偵神宮寺三郎꞉ 横浜港連続殺人事件.nes 
-    0xAAE9E72F, //  Modern\Virtual Console\激亀忍者伝.nes 
-    0xAED38D5A, //  Modern\Virtual Console\熱血高校 Dodgeball 部.nes 
-    0x4676CED3, //  Modern\Virtual Console\超惑星戦記 MetaFight.nes 
-    0xC3A8B1ED, //  Modern\Virtual Console\飛龍の拳 II꞉ Dragonの翼.nes 
-    0x88C369B6, //  Modern\くにおくん熱血 Collection\熱血高校 Dodgeball 部.nes 
-    0x5C16DC2F, //  Playchoice\Chip 'n Dale꞉ Rescue Rangers.nes 
-    0x0E004847, //  Playchoice\Double Dragon.nes 
-    0x806E5CD7, //  Playchoice\Fester's Quest.nes 
-    0xA2E64E5E, //  Playchoice\Ninja Gaiden.nes 
-    0x802671E0, //  Playchoice\Tecmo Bowl.nes 
-    0xB04C53F1, //  Playchoice\Teenage Mutant Ninja Turtles.nes 
-    0x17EA92A8, //  Playchoice\Yo! Noid.nes 
-    0x4FBBE319, //  Unreleased\Adventures in the Magic Kingdom (Beta 1).nes 
-    0x3CF749DE, //  Unreleased\Adventures in the Magic Kingdom (Beta 2).nes 
-    0xADA40FB2, //  Unreleased\Arcadia VI.nes 
-    0x7C7A0A73, //  Unreleased\Bashi Bazook꞉ Morphoid Masher.nes 
-    0xB683A856, //  Unreleased\Blaster Master.nes 
-    0xCC6CA4DC, //  Unreleased\Chip 'n Dale꞉ Rescue Rangers 2.nes 
-    0x24C5EF30, //  Unreleased\Chip 'n Dale꞉ Rescue Rangers.nes 
-    0x8DB43824, //  Unreleased\Darkwing Duck.nes 
-    0x6EB336F9, //  Unreleased\Days of Thunder (Compiled PRG+CHR).nes 
-    0x064505AE, //  Unreleased\Days of Thunder (Prebuilt PRG+CHR Patched).nes 
-    0x7BDA85C2, //  Unreleased\Days of Thunder (Prebuilt PRG+CHR).nes 
-    0x41462D21, //  Unreleased\Double Dragon.nes 
-    0x4232C609, //  Unreleased\Drac's Night Out.nes 
-    0x92DD67EA, //  Unreleased\Flying Warriors.nes 
-    0x73CCDAE0, //  Unreleased\Freedom Force.nes 
-    0x0E0060C8, //  Unreleased\Happily Ever After.nes 
-    0x9D9A89C4, //  Unreleased\Hook.nes 
     0x99C88648, //  Unreleased\International Cricket.nes 
-    0x9768AE75, //  Unreleased\Mike Ditka's Big Play Football.nes 
-    0x5ABBF861, //  Unreleased\New Ghostbusters II.nes 
-    0x6EEA1B10, //  Unreleased\Ninja Gaiden.nes 
     0x23BEFF5E, //  Unreleased\Parasol Stars꞉ The Story of Bubble Bobble 3.nes 
-    0x21E28F50, //  Unreleased\Parody World꞉ Monster Party.nes 
-    0xF6CC7A99, //  Unreleased\Quarter Back Scramble.nes 
-    0xF6AB12A2, //  Unreleased\Rescue꞉ The Embassy Mission.nes 
-    0x78C72C75, //  Unreleased\S.C.A.T. - Special Cybernetic Attack Team.nes 
-    0xD31EB7BB, //  Unreleased\Star Trek V꞉ The Final Frontier.nes 
-    0xDE84354A, //  Unreleased\Superman (Kemco).nes 
-    0xE5EA0EBE, //  Unreleased\Tecmo Bowl.nes 
-    0x1FF251AE, //  Unreleased\Teenage Mutant Ninja Turtles.nes 
-    0xF471827D, //  Unreleased\The Addams Family꞉ Fester's Quest.nes 
     0xC8F203F9, //  Unreleased\The Addams Family꞉ Pugsley's Scavenger Hunt.nes 
-    0xAE97627C, //  Unreleased\The Bugs Bunny Fun House.nes 
-    0x1C9EA55C, //  Unreleased\The Three Stooges.nes 
-    0xB0874760, //  Unreleased\USA Bowling.nes 
-    0x6A6FC14C, //  Unreleased\Yo! Noid.nes 
-    0x7C108923, //  Unreleased\聖闘士星矢꞉ 黄金伝説 完結編.nes 
-    0x0C462638, //  Unreleased\電撃 Big Bang!.nes 
-    0x14374128, //  Unreleased\飛龍の拳 Special꞉ Fighting Wars.nes 
-/**** 50 mapper=1 prgrom=128K prgram=8K chrrom=128K mirror=H */
+/**** 82 mapper=1 prgrom=128K chrrom=128K mirror=H system=SYSTEM_NTSC */
+    0xE7882A07, //  Homebrew\Journey.nes 
+    0x6F7649BD, //  Modern\Virtual Console\Double Dragon.nes 
+/**** 83 mapper=1 prgrom=128K prgram=8K chrrom=128K mirror=H */
     0x491EE6E7, //  Compatibility Hacks\闘将!! 拉麺男꞉ 炸裂超人102芸 [m001].nes 
     0x14A8E405, //  Homebrew\Translations\English\Battle Storm [MrRichard999].nes 
     0x8E373118, //  Licensed Japan\Battle Storm.nes 
@@ -2585,7 +2755,7 @@ static const u32 s_crcs[] = {
     0xD624E908, //  Playchoice\Baseball Stars.nes 
     0x6866A989, //  Samples\Scarabeus.nes 
     0x2C5FAC1C, //  Unreleased\Famicom 将棋꞉ 竜王戦.nes 
-/**** 51 mapper=1 prgrom=256K chrram=8K mirror=H */
+/**** 84 mapper=1 prgrom=256K chrram=8K mirror=H */
     0xBACE1014, //  Bad Dumps\Rockman Peercast 2.nes 
     0x9CCBEC9F, //  Homebrew\Hacks\Bionic Commando - Winter Edition (v0.1)[Matrixz].nes 
     0x6D10930F, //  Homebrew\Hacks\Bionic Commando 99 [Chris Covell].nes 
@@ -2672,6 +2842,17 @@ static const u32 s_crcs[] = {
     0x02EE3706, //  Licensed North America\Strider Hiryu.nes 
     0x1D6DECCC, //  Licensed North America\The Rocketeer.nes 
     0x50D296B3, //  Licensed North America\Tombs and Treasure.nes 
+    0x5EC886A4, //  Modern\Capcom Classics꞉ Mini Mix\Strider 飛竜.nes 
+    0xE91ECC29, //  Modern\Hudson Best Collection\Saladの国のTomato姫.nes 
+    0xCF5DE2BC, //  Modern\Mega Man II (Mega Man Legacy Collection).nes 
+    0xE2287991, //  Modern\Virtual Console\Mega Man II (NTSC).nes 
+    0x8C3022E4, //  Modern\Virtual Console\Princess Tomato in Salad Kingdom.nes 
+    0xFBCF0690, //  Modern\Virtual Console\Rockman 2꞉ Dr. Wilyの謎.nes 
+    0x663476B9, //  Modern\Virtual Console\Saladの国のTomato姫.nes 
+    0x11C9AC37, //  Unreleased\Princess Tomato in Salad Kingdom.nes 
+    0x153BA1BC, //  Unreleased\Robin Hood꞉ Prince of Thieves.nes 
+    0x367566CE, //  Unreleased\Strider 飛竜.nes 
+/**** 85 mapper=1 prgrom=256K chrram=8K mirror=H system=SYSTEM_PAL */
     0xFA7EE642, //  Licensed PAL\Bionic Commando.nes 
     0x68F9B5F5, //  Licensed PAL\Defender of the Crown (English).nes 
     0x2FD2E632, //  Licensed PAL\Defender of the Crown (French).nes 
@@ -2680,18 +2861,8 @@ static const u32 s_crcs[] = {
     0xB67D16F6, //  Licensed PAL\Robin Hood꞉ Prince of Thieves (English).nes 
     0xD49DCA84, //  Licensed PAL\Robin Hood꞉ Prince of Thieves (German).nes 
     0xFD21F54D, //  Licensed PAL\Robin Hood꞉ Prince of Thieves (Spanish).nes 
-    0x5EC886A4, //  Modern\Capcom Classics꞉ Mini Mix\Strider 飛竜.nes 
-    0xE91ECC29, //  Modern\Hudson Best Collection\Saladの国のTomato姫.nes 
-    0xCF5DE2BC, //  Modern\Mega Man II (Mega Man Legacy Collection).nes 
-    0xE2287991, //  Modern\Virtual Console\Mega Man II (NTSC).nes 
     0x0150E2EF, //  Modern\Virtual Console\Mega Man II (PAL).nes 
-    0x8C3022E4, //  Modern\Virtual Console\Princess Tomato in Salad Kingdom.nes 
-    0xFBCF0690, //  Modern\Virtual Console\Rockman 2꞉ Dr. Wilyの謎.nes 
-    0x663476B9, //  Modern\Virtual Console\Saladの国のTomato姫.nes 
-    0x11C9AC37, //  Unreleased\Princess Tomato in Salad Kingdom.nes 
-    0x153BA1BC, //  Unreleased\Robin Hood꞉ Prince of Thieves.nes 
-    0x367566CE, //  Unreleased\Strider 飛竜.nes 
-/**** 52 mapper=1 prgrom=256K prgram=8K chrram=8K mirror=H */
+/**** 86 mapper=1 prgrom=256K prgram=8K chrram=8K mirror=H */
     0x091A6A4C, //  Bad Dumps\Mario's Open Golf [missing PROM].nes 
     0xD769973B, //  Homebrew\Demos\Shortnes(e) [Edison].nes 
     0xFD60875D, //  Homebrew\Translations\English\Bionic Commando꞉ Return of Hitler [Stardust Crusaders v1.03].nes 
@@ -2703,24 +2874,26 @@ static const u32 s_crcs[] = {
     0x3125DB22, //  Playchoice\Mario's Open Golf.nes 
     0x10C06E27, //  Unreleased\Chuck Yeager's Fighter Combat.nes 
     0x01F63D1A, //  Unreleased\Top Secret꞉ Hitlerの復活.nes 
-/**** 53 mapper=1 prgrom=256K chrrom=8K mirror=H */
-    0x860D29DF, //  Homebrew\Demos\Mom, My Ears are Bleeding!.nes 
+/**** 87 mapper=1 prgrom=256K chrrom=8K mirror=H */
     0xD73F6974, //  Homebrew\Nm vs. Ji (Demo).nes 
     0x63EE59F8, //  Homebrew\Nm vs. Ji (WIP).nes 
-/**** 54 mapper=1 prgrom=256K chrrom=16K mirror=H */
+/**** 88 mapper=1 prgrom=256K chrrom=8K mirror=H system=SYSTEM_PAL */
+    0x860D29DF, //  Homebrew\Demos\Mom, My Ears are Bleeding!.nes 
+/**** 89 mapper=1 prgrom=256K chrrom=16K mirror=H system=SYSTEM_NTSC */
     0xC1EEA751, //  Homebrew\Dizzy Sheep Disaster.nes 
     0x33F84EB9, //  Homebrew\Missing Lands.nes 
-/**** 55 mapper=1 prgrom=256K chrrom=64K mirror=H */
+/**** 90 mapper=1 prgrom=256K chrrom=64K mirror=H */
     0xD28BEE7F, //  Homebrew\Hacks\Bases Loaded꞉ Nippon Pro Baseball 2007.nes 
     0xB4241FCC, //  Licensed North America\Bases Loaded (rev0).nes 
     0xDAEE19F2, //  Licensed North America\Bases Loaded (rev1).nes 
     0x6ABAD366, //  Licensed North America\Bases Loaded (rev2).nes 
     0xF6A889D6, //  Playchoice\Bases Loaded.nes 
-/**** 56 mapper=1 prgrom=256K prgram=8K chrrom=64K mirror=H */
+/**** 91 mapper=1 prgrom=256K prgram=8K chrrom=64K mirror=H */
     0x92C138E4, //  Licensed North America\The Miracle Piano Teaching System.nes 
+/**** 92 mapper=1 prgrom=256K prgram=8K chrrom=64K mirror=H system=SYSTEM_PAL */
     0x9DF58E80, //  Licensed PAL\The Miracle Piano Teaching System (French).nes 
     0xB3974D6C, //  Licensed PAL\The Miracle Piano Teaching System (German).nes 
-/**** 57 mapper=1 prgrom=256K chrrom=128K mirror=H */
+/**** 93 mapper=1 prgrom=256K chrrom=128K mirror=H */
     0x2E50EE0E, //  Homebrew\Translations\English\Final Mission [Stardust Crusaders v1.01].nes 
     0x7E59DC0E, //  Homebrew\Translations\English\Grand Master [Aishsha, Stardust Crusaders v1.01].nes 
     0xF3ED81EB, //  Homebrew\Translations\English\Idol Hakkenden [Ccmar].nes 
@@ -2732,51 +2905,52 @@ static const u32 s_crcs[] = {
     0xECCD4089, //  Licensed North America\Racket Attack.nes 
     0xFDE1C7ED, //  Licensed North America\Sesame Street꞉ Big Bird's Hide &amp; Speak.nes 
     0x06961BE4, //  Licensed North America\Skate or Die 2꞉ The Search for Double Trouble.nes 
+/**** 94 mapper=1 prgrom=256K chrrom=128K mirror=H system=SYSTEM_PAL */
     0xC0103592, //  Licensed PAL\Goal!.nes 
     0xD72560E1, //  Licensed PAL\Racket Attack.nes 
-/**** 58 mapper=1 prgrom=256K prgram=8K chrrom=128K mirror=H */
+/**** 95 mapper=1 prgrom=256K prgram=8K chrrom=128K mirror=H */
     0x34B5723A, //  Homebrew\Translations\English\Tank Commander꞉ Desert Fox [Stardust Crusaders].nes 
     0xDF1A5080, //  Modern\Pyramids of Ra.nes 
-/**** 59 mapper=1 prgrom=512K chrram=8K mirror=H */
+/**** 96 mapper=1 prgrom=512K chrram=8K mirror=H */
     0x821A98F4, //  Homebrew\Multicarts\MottZilla 11-in-1 Version 1.nes 
     0x00763EF6, //  Homebrew\Multicarts\MottZilla 11-in-1 Version 2.nes 
     0x27F01BF2, //  Homebrew\Tools\MottZilla 11-in-1.nes 
     0xC89258B0, //  Homebrew\Translations\English\Jesus꞉ Tale of the Dreadful Bio-Monster [Stardust Crusaders 3 Days Later Edition Rev 2].nes 
     0xD379050A, //  Homebrew\Translations\English\Princess Tomato in the Salad Kingdom [Stardust Crusaders v1.02].nes 
     0xFD7BB2FF, //  Homebrew\Translations\English\The Legend of Peach Boy [KingMike's Translations].nes 
+/**** 97 mapper=1 prgrom=512K chrram=8K mirror=H system=SYSTEM_NTSC */
     0x8C0B332C, //  Homebrew\What Remains.nes 
     0xC19DA17F, //  Modern\What Remains.nes 
-/**** 60 mapper=1 prgrom=512K prgram=8K chrram=8K mirror=H */
+/**** 98 mapper=1 prgrom=512K prgram=8K chrram=8K mirror=H */
     0xD40CC6F5, //  Homebrew\Multicarts\MottZilla 11-in-1 with Guns.nes 
-/**** 61 mapper=1 prgrom=512K prgram=32K chrram=8K mirror=H */
+/**** 99 mapper=1 prgrom=512K prgram=32K chrram=8K mirror=H */
     0x696712F9, //  BIOS\Famicom Titler.nes 
-/**** 62 mapper=1 prgrom=32K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 100 mapper=1 prgrom=32K prgnvram=8K chrram=8K mirror=H battery=1 */
     0x0D5CCE53, //  Homebrew\Tools\Graphics Editor for NES.nes 
-/**** 63 mapper=1 prgrom=32K prgnvram=8K chrrom=8K mirror=H battery=1 */
+/**** 101 mapper=1 prgrom=32K prgnvram=8K chrrom=8K mirror=H battery=1 */
     0xB4E6DD24, //  Homebrew\Tools\Drum Edit.nes 
-/**** 64 mapper=1 prgrom=32K prgnvram=8K chrrom=16K mirror=H battery=1 */
+/**** 102 mapper=1 prgrom=32K prgnvram=8K chrrom=16K mirror=H battery=1 */
     0x8B7DA8B8, //  Compatibility Hacks\Vs. Duck Hunt [home console v2.1].nes 
     0x8BBDFB16, //  Homebrew\Pitfall! The Unofficial Adventure (v0.83.0).nes 
     0x9B208AB1, //  Licensed Japan\囲碁꞉ 九路盤対局.nes 
-/**** 65 mapper=1 prgrom=32K prgnvram=8K chrrom=32K mirror=H battery=1 */
+/**** 103 mapper=1 prgrom=32K prgnvram=8K chrrom=32K mirror=H battery=1 */
     0x7F8C8232, //  Compatibility Hacks\Vs. Super Mario Bros. [home console v1.0].nes 
     0x1D664A65, //  Compatibility Hacks\Vs. Super Mario Bros. [home console v1.1].nes 
     0xB3EEC419, //  Homebrew\Translations\English\Go 9 Row Boardgame [Helly, MrRichard999, Proveaux v1.0].nes 
-/**** 66 mapper=1 prgrom=32K prgnvram=8K chrrom=64K mirror=H battery=1 */
+/**** 104 mapper=1 prgrom=32K prgnvram=8K chrrom=64K mirror=H battery=1 */
     0xE149E0B2, //  Maintenance\NTF2 System.nes 
-/**** 67 mapper=1 prgrom=64K prgnvram=8K chrrom=8K mirror=H battery=1 */
+/**** 105 mapper=1 prgrom=64K prgnvram=8K chrrom=8K mirror=H battery=1 */
     0x5DF5AB57, //  Homebrew\Pitfall! The Unofficial Adventure (v0.92.3).nes 
-/**** 68 mapper=1 prgrom=64K prgnvram=8K chrrom=16K mirror=H battery=1 */
+/**** 106 mapper=1 prgrom=64K prgnvram=8K chrrom=16K mirror=H battery=1 */
     0xD6FF1625, //  Homebrew\Hacks\Mario Warrior.nes 
     0xFB3C0671, //  Homebrew\Hacks\S.M. Remix II꞉ Bowser Has Kinopio!! [Omniverse].nes 
     0x5184A320, //  Homebrew\Pitfall! The Unofficial Adventure (v0.93.0).nes 
     0x3B3F88F0, //  Licensed North America\Dragon Warrior (rev0).nes 
     0x2545214C, //  Licensed North America\Dragon Warrior (rev1).nes 
-/**** 69 mapper=1 prgrom=64K prgnvram=8K chrrom=32K mirror=H battery=1 */
+/**** 107 mapper=1 prgrom=64K prgnvram=8K chrrom=32K mirror=H battery=1 */
     0x8828B2E0, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Special (New Color Palette+Highscore Save).nes 
     0xA471C585, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Special (Old Color Palette+Highscore Save).nes 
-/**** 70 mapper=1 prgrom=128K prgnvram=8K chrram=8K mirror=H battery=1 */
-    0xBC7485B5, //  Compatibility Hacks\Elite [iNES emulator].nes 
+/**** 108 mapper=1 prgrom=128K prgnvram=8K chrram=8K mirror=H battery=1 */
     0xB53EB795, //  Homebrew\Hacks\The Battle of Olympus (SRAM+Rebalanced) [8-bit fan].nes 
     0x8FDA652A, //  Homebrew\Hacks\Zelda series\Blink 4꞉ Escape from Nintendoland [ROMs and Robots].nes 
     0x5A6E8F21, //  Homebrew\Hacks\Zelda series\Fall of the Moon [Imperial].nes 
@@ -2796,30 +2970,32 @@ static const u32 s_crcs[] = {
     0x9B821A83, //  Licensed North America\The Bard's Tale꞉ Tales of the Unknown.nes 
     0x3FE272FB, //  Licensed North America\The Legend of Zelda (rev0).nes 
     0xEAF7ED72, //  Licensed North America\The Legend of Zelda (rev1).nes 
-    0xA4BDCC1D, //  Licensed PAL\Elite.nes 
-    0xED7F5555, //  Licensed PAL\The Legend of Zelda (rev0).nes 
-    0xD44B412E, //  Licensed PAL\The Legend of Zelda (rev1).nes 
     0x46E0D37D, //  Modern\GameCube Edition\The Legend of Zelda (rev0).nes 
     0x34540318, //  Modern\GameCube Edition\The Legend of Zelda (rev1).nes 
     0xE50CC16A, //  Modern\Virtual Console\The Legend of Zelda (NTSC).nes 
-    0x6A74FF62, //  Modern\Virtual Console\The Legend of Zelda (PAL).nes 
     0xCEB4D8FF, //  Modern\Virtual Console\半熟英雄.nes 
     0x4ED5AA56, //  Unreleased\The Bard's Tale꞉ Tales of the Unknown (North America Beta 1).nes 
     0xFA434E09, //  Unreleased\The Bard's Tale꞉ Tales of the Unknown (North America Beta 2).nes 
-/**** 71 mapper=1 prgrom=128K prgnvram=32K chrram=8K mirror=H battery=1 */
+/**** 109 mapper=1 prgrom=128K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_PAL */
+    0xBC7485B5, //  Compatibility Hacks\Elite [iNES emulator].nes 
+    0xA4BDCC1D, //  Licensed PAL\Elite.nes 
+    0xED7F5555, //  Licensed PAL\The Legend of Zelda (rev0).nes 
+    0xD44B412E, //  Licensed PAL\The Legend of Zelda (rev1).nes 
+    0x6A74FF62, //  Modern\Virtual Console\The Legend of Zelda (PAL).nes 
+/**** 110 mapper=1 prgrom=128K prgnvram=32K chrram=8K mirror=H battery=1 */
     0x8185FFD0, //  Homebrew\Demos\Pulsar.nes 
     0x7CF5EFA9, //  Homebrew\Tools\Pr8 Nes Drum Synth.nes 
     0x70636601, //  Homebrew\Translations\English\Dezaemon [Aeon Genesis v1.1].nes 
     0xD1E50064, //  Licensed Japan\Game Designer 養成 Soft꞉ 絵描衛門.nes 
-/**** 72 mapper=1 prgrom=128K prgnvram=8K chrrom=8K mirror=H battery=1 */
+/**** 111 mapper=1 prgrom=128K prgnvram=8K chrrom=8K mirror=H battery=1 */
     0x9E356267, //  Licensed Japan\森田和郎の将棋.nes 
-/**** 73 mapper=1 prgrom=128K prgnvram=8K chrrom=16K mirror=H battery=1 */
+/**** 112 mapper=1 prgrom=128K prgnvram=8K chrrom=16K mirror=H battery=1 */
     0x77917127, //  Compatibility Hacks\Rainbow Brite꞉ Journey to Rainbow Land (cartridge)[m001 extract].nes 
     0xC88CDDCD, //  Compatibility Hacks\Rainbow Brite꞉ Journey to Rainbow Land (mini-arcade)[m001 extract].nes 
-/**** 74 mapper=1 prgrom=128K prgram=8K prgnvram=8K chrrom=16K mirror=H battery=1 */
+/**** 113 mapper=1 prgrom=128K prgram=8K prgnvram=8K chrrom=16K mirror=H battery=1 */
     0xC6F25A20, //  Homebrew\Translations\English\A-Train [MrRichard999, Proveaux, AgentOrange, Jink640, Rotwang v0.99].nes 
     0x6377CB75, //  Licensed Japan\A列車で行こう.nes 
-/**** 75 mapper=1 prgrom=128K prgnvram=8K chrrom=32K mirror=H battery=1 */
+/**** 114 mapper=1 prgrom=128K prgnvram=8K chrrom=32K mirror=H battery=1 */
     0x6E6993BF, //  Compatibility Hacks\The Money Game [m001].nes 
     0xF5C90AAC, //  Homebrew\Brony Blaster (2015).nes 
     0x5EB8029C, //  Homebrew\Translations\English\Artelius [MageCraft Translations].nes 
@@ -2830,14 +3006,14 @@ static const u32 s_crcs[] = {
     0x2470402B, //  Licensed Japan\Famicom 囲碁入門꞉ 日本棋院推篇.nes 
     0x8DCD9486, //  Licensed Japan\Jumbo 尾崎のHole-in-One Professional.nes 
     0x5A5A0CD9, //  Licensed Japan\大戦略.nes 
-/**** 76 mapper=1 prgrom=128K prgnvram=8K chrrom=112K mirror=H battery=1 */
+/**** 115 mapper=1 prgrom=128K prgnvram=8K chrrom=112K mirror=H battery=1 */
     0x5EEA106C, //  Homebrew\Hacks\Zelda series\Evil Dead [K. Voorhees].nes 
     0x895821C5, //  Homebrew\Hacks\Zelda series\Zelda III꞉ The Adventure of Link [Nulear Sonar].nes 
     0xE074FB3E, //  Homebrew\Hacks\Zelda series\Zelda II꞉ The Adventure of Link 1999 [Imperial].nes 
-/**** 77 mapper=1 prgrom=128K chrrom=128K mirror=H battery=1 */
+/**** 116 mapper=1 prgrom=128K chrrom=128K mirror=H battery=1 system=SYSTEM_NTSC */
     0x94DF7AA3, //  Modern\Alfonzo's Arctic Adventure.nes 
     0x15DBF7C8, //  Samples\Alfonzo's Arctic Adventure.nes 
-/**** 78 mapper=1 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 117 mapper=1 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xE0D26D8C, //  Homebrew\Hacks\Baseball Stars 2002.nes 
     0xE56693DA, //  Homebrew\Hacks\Zelda series\The Legend of Zelda꞉ Leaf of Inertia (easy with jump)[Ice Penguin].nes 
     0x238C5D7A, //  Homebrew\Hacks\Zelda series\The Legend of Zelda꞉ Leaf of Inertia (easy)[Ice Penguin].nes 
@@ -2920,21 +3096,23 @@ static const u32 s_crcs[] = {
     0x3D0996B2, //  Licensed North America\Sid Meier's Pirates!.nes 
     0xD9BB572C, //  Licensed North America\Wizardry꞉ Proving Grounds of the Mad Overlord.nes 
     0xBA322865, //  Licensed North America\Zelda II꞉ The Adventure of Link.nes 
+    0x262F31AC, //  Modern\GameCube Edition\Zelda II꞉ The Adventure of Link.nes 
+    0x93468390, //  Modern\Virtual Console\Baseball Simulator 1.000 (USA) (Virtual Console).nes 
+    0xD25FC226, //  Modern\Virtual Console\Zelda II꞉ The Adventure of Link (NTSC).nes 
+    0x607FD2AE, //  Modern\Virtual Console\超人꞉ Ultra Baseball.nes 
+    0xC22F3E9F, //  Unreleased\Advanced Dungeons &amp; Dragons꞉ Heroes of the Lance.nes 
+    0xA058219D, //  Unreleased\Taro's Quest.nes 
+/**** 118 mapper=1 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 system=SYSTEM_PAL */
     0x441DE6D8, //  Licensed PAL\Sid Meier's Pirates! (English).nes 
     0x574E5F8B, //  Licensed PAL\Sid Meier's Pirates! (German).nes 
     0x4D1DF589, //  Licensed PAL\Turbo Racing.nes 
     0x47FD88CF, //  Licensed PAL\Zelda II꞉ The Adventure of Link (rev0).nes 
     0x97D52C06, //  Licensed PAL\Zelda II꞉ The Adventure of Link (rev1).nes 
     0x47B6A39F, //  Licensed PAL\Zelda II꞉ The Adventure of Link (rev2).nes 
-    0x262F31AC, //  Modern\GameCube Edition\Zelda II꞉ The Adventure of Link.nes 
-    0x93468390, //  Modern\Virtual Console\Baseball Simulator 1.000 (USA) (Virtual Console).nes 
-    0xD25FC226, //  Modern\Virtual Console\Zelda II꞉ The Adventure of Link (NTSC).nes 
     0x40AA120B, //  Modern\Virtual Console\Zelda II꞉ The Adventure of Link (PAL).nes 
-    0x607FD2AE, //  Modern\Virtual Console\超人꞉ Ultra Baseball.nes 
+/**** 119 mapper=1 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 system=SYSTEM_NTSC */
     0xB1384E6D, //  Modern\Witch n' Wiz.nes 
-    0xC22F3E9F, //  Unreleased\Advanced Dungeons &amp; Dragons꞉ Heroes of the Lance.nes 
-    0xA058219D, //  Unreleased\Taro's Quest.nes 
-/**** 79 mapper=1 prgrom=256K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 120 mapper=1 prgrom=256K prgnvram=8K chrram=8K mirror=H battery=1 */
     0x9BD01DD7, //  Homebrew\Bugfixes, Improvements\Ys [MakoKnight][screen Split].nes 
     0x30B827C1, //  Homebrew\Demos\Hellraiser.nes 
     0x46C47C6B, //  Homebrew\Hacks\Super Mario Quest [PR Translations].nes 
@@ -3036,13 +3214,6 @@ static const u32 s_crcs[] = {
     0xA4062017, //  Licensed North America\Ultima III꞉ Exodus.nes 
     0xA25A750F, //  Licensed North America\Ultima IV꞉ Quest of the Avatar.nes 
     0x4823EEFE, //  Licensed North America\Ultima V꞉ Warriors of Destiny.nes 
-    0xF59CFC3D, //  Licensed PAL\Maniac Mansion (English).nes 
-    0xF4B70BFE, //  Licensed PAL\Maniac Mansion (French).nes 
-    0x60EA98A0, //  Licensed PAL\Maniac Mansion (German).nes 
-    0xDC529482, //  Licensed PAL\Maniac Mansion (Italian).nes 
-    0xF5B2AFCA, //  Licensed PAL\Maniac Mansion (Spanish).nes 
-    0x3F2BDA65, //  Licensed PAL\Maniac Mansion (Swedish).nes 
-    0x2D020965, //  Licensed PAL\NES Open Tournament Golf.nes 
     0xC42D6424, //  Modern\Virtual Console\Final Fantasy (Japan rev0).nes 
     0x85359519, //  Modern\Virtual Console\Final Fantasy (Japan rev1).nes 
     0x3552BE7B, //  Modern\Virtual Console\Final Fantasy (North America).nes 
@@ -3050,18 +3221,26 @@ static const u32 s_crcs[] = {
     0x9202A8AF, //  Modern\Virtual Console\Final Fantasy II (rev1).nes 
     0xED749E50, //  Modern\Virtual Console\Mario Open Golf.nes 
     0x9953D34A, //  Modern\Virtual Console\NES Open Tournament Golf (NTSC).nes 
-    0x401B6AD0, //  Modern\Virtual Console\NES Open Tournament Golf (PAL).nes 
     0xAF6B5B85, //  Samples\Sweet Home.nes 
     0x988C290E, //  Samples\The Bard's Tale꞉ Tales of the Unknown.nes 
     0x93A2EEFB, //  Unreleased\Final Fantasy II.nes 
     0x1F53E946, //  Unreleased\Final Fantasy.nes 
     0xDE0C29A9, //  Unreleased\Maniac Mansion.nes 
     0x7D6C2065, //  Unreleased\The Legend of Robin Hood.nes 
-/**** 80 mapper=1 prgrom=256K prgnvram=32K chrram=8K mirror=H battery=1 */
+/**** 121 mapper=1 prgrom=256K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_PAL */
+    0xF59CFC3D, //  Licensed PAL\Maniac Mansion (English).nes 
+    0xF4B70BFE, //  Licensed PAL\Maniac Mansion (French).nes 
+    0x60EA98A0, //  Licensed PAL\Maniac Mansion (German).nes 
+    0xDC529482, //  Licensed PAL\Maniac Mansion (Italian).nes 
+    0xF5B2AFCA, //  Licensed PAL\Maniac Mansion (Spanish).nes 
+    0x3F2BDA65, //  Licensed PAL\Maniac Mansion (Swedish).nes 
+    0x2D020965, //  Licensed PAL\NES Open Tournament Golf.nes 
+    0x401B6AD0, //  Modern\Virtual Console\NES Open Tournament Golf (PAL).nes 
+/**** 122 mapper=1 prgrom=256K prgnvram=32K chrram=8K mirror=H battery=1 */
     0xB1AF38AA, //  Homebrew\Nova the Squirrel (alt).nes 
     0xB8747ABF, //  Licensed Japan\Best Play Pro 野球 Special (rev0).nes 
     0xC3DE7C69, //  Licensed Japan\Best Play Pro 野球 Special (rev1).nes 
-/**** 81 mapper=1 prgrom=256K prgram=8K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 123 mapper=1 prgrom=256K prgram=8K prgnvram=8K chrram=8K mirror=H battery=1 */
     0xABBF7217, //  Licensed Japan\三國志 (rev0).nes 
     0xCCF35C02, //  Licensed Japan\三國志 (rev1).nes 
     0x3F7AD415, //  Licensed Japan\信長の野望꞉ 全国版 (rev0).nes 
@@ -3070,9 +3249,9 @@ static const u32 s_crcs[] = {
     0x2225C20F, //  Licensed North America\Genghis Khan.nes 
     0x4642DDA6, //  Licensed North America\Nobunaga's Ambition.nes 
     0xC6182024, //  Licensed North America\Romance of the Three Kingdoms.nes 
-/**** 82 mapper=1 prgrom=256K prgnvram=8K chrrom=48K mirror=H battery=1 */
+/**** 124 mapper=1 prgrom=256K prgnvram=8K chrrom=48K mirror=H battery=1 */
     0x06086781, //  Homebrew\Demon District.nes 
-/**** 83 mapper=1 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 125 mapper=1 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x10E4AF0C, //  Bad Dumps\Jay and Silent Bob Mall Brawl [Steam file extract #1, no sound].nes 
     0xF4643DB5, //  Bad Dumps\Jay and Silent Bob Mall Brawl [Steam file extract #2, no sound].nes 
     0xCDDB85C9, //  Bad Dumps\Jay and Silent Bob Mall Brawl [Steam memory extract, no sound].nes 
@@ -3083,7 +3262,7 @@ static const u32 s_crcs[] = {
     0x0F82F97F, //  Homebrew\Translations\English\The Adventures of Musashi Jr. [Aishsha &amp; Stardust Crusaders v1.00].nes 
     0x59CF2856, //  Homebrew\Translations\English\The Adventures of Musashi Jr. [Aishsha &amp; Stardust Crusaders v1.01].nes 
     0xE0CBC2BA, //  Licensed Japan\Chaos World.nes 
-/**** 84 mapper=1 prgrom=512K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 126 mapper=1 prgrom=512K prgnvram=8K chrram=8K mirror=H battery=1 */
     0xB6A3A8E4, //  Compatibility Hacks\Faxanadu [Unsavory Maggot v1.04][FCE Ultra].nes 
     0x61C28C5E, //  Homebrew\Timec.nes 
     0xDDA62852, //  Homebrew\Translations\English\Deep Dungeon III꞉ The Journey to Become a Hero [KingMike].nes 
@@ -3096,15 +3275,16 @@ static const u32 s_crcs[] = {
     0xCEE5857B, //  Licensed Japan\忍者らホイ!.nes 
     0xA86A5318, //  Licensed North America\Dragon Warrior III.nes 
     0x506E259D, //  Licensed North America\Dragon Warrior IV.nes 
-/**** 85 mapper=1 prgrom=512K prgnvram=32K chrram=8K mirror=H battery=1 */
+/**** 127 mapper=1 prgrom=512K prgnvram=32K chrram=8K mirror=H battery=1 */
     0x629ACE81, //  Homebrew\Translations\English\Final Fantasy I &amp; II [Demiforce v1.03, Grond v1.1].nes 
     0xC9556B36, //  Licensed Japan\Final Fantasy I &amp; II.nes 
-/**** 86 mapper=1 submapper=5 prgrom=32K chrrom=16K mirror=H */
+/**** 128 mapper=1 submapper=5 prgrom=32K chrrom=16K mirror=H */
     0x2578AFDF, //  Homebrew\Bugfixes, Improvements\Tetris (title screen music).nes 
     0x1394F57E, //  Licensed North America\Tetris.nes 
-    0xFDFF80D5, //  Licensed PAL\Tetris.nes 
     0x5EDEC8CD, //  Unreleased\Virus (1990-02).nes 
-/**** 87 mapper=1 submapper=5 prgrom=32K chrrom=32K mirror=H */
+/**** 129 mapper=1 submapper=5 prgrom=32K chrrom=16K mirror=H system=SYSTEM_PAL */
+    0xFDFF80D5, //  Licensed PAL\Tetris.nes 
+/**** 130 mapper=1 submapper=5 prgrom=32K chrrom=32K mirror=H */
     0xAE868E88, //  Bootleg Singles\TouchGamePlayer\Boulder Dash.nes 
     0xF00726DE, //  Homebrew\Hacks\Anti-Hippie Dr. Mario [Blooshed&amp;Capt. Blade].nes 
     0x5004378F, //  Homebrew\Hacks\Challenging Lolo [Sivak].nes 
@@ -3133,49 +3313,51 @@ static const u32 s_crcs[] = {
     0xFDF4569B, //  Licensed North America\Snake Rattle 'n Roll.nes 
     0x40ED2A9D, //  Licensed North America\Taboo꞉ The Sixth Sense (rev0).nes 
     0x482C79AF, //  Licensed North America\Taboo꞉ The Sixth Sense (rev1).nes 
+    0x2AE77B9B, //  Modern\Virtual Console\Adventures of Lolo (NTSC).nes 
+    0x141FF4EE, //  Playchoice\Dr. Mario.nes 
+    0xE841518E, //  Playchoice\R.C. Pro-Am.nes 
+    0x6FD69F34, //  Unreleased\Dr. Mario (1990-04-27).nes 
+    0xC49FCAB4, //  Unreleased\Dr. Mario (1990-04-27+).nes 
+/**** 131 mapper=1 submapper=5 prgrom=32K chrrom=32K mirror=H system=SYSTEM_PAL */
     0xDF4EDC13, //  Licensed PAL\Adventures of Lolo.nes 
     0x8B7D3C75, //  Licensed PAL\Anticipation.nes 
     0xE5FCC4C1, //  Licensed PAL\Boulder Dash.nes 
     0x9735D267, //  Licensed PAL\Dr. Mario.nes 
     0x46931EA0, //  Licensed PAL\R.C. Pro-Am (rev1).nes 
     0x3824F7A5, //  Licensed PAL\Snake Rattle 'n Roll.nes 
-    0x2AE77B9B, //  Modern\Virtual Console\Adventures of Lolo (NTSC).nes 
-    0x141FF4EE, //  Playchoice\Dr. Mario.nes 
-    0xE841518E, //  Playchoice\R.C. Pro-Am.nes 
-    0x6FD69F34, //  Unreleased\Dr. Mario (1990-04-27).nes 
-    0xC49FCAB4, //  Unreleased\Dr. Mario (1990-04-27+).nes 
-/**** 88 mapper=1 submapper=5 prgrom=32K chrrom=40K mirror=H */
+/**** 132 mapper=1 submapper=5 prgrom=32K chrrom=40K mirror=H */
     0x6197EC16, //  Homebrew\Hacks\Asian Dr. Mario.nes 
-/**** 89 mapper=1 submapper=5 prgrom=32K chrrom=128K mirror=H */
+/**** 133 mapper=1 submapper=5 prgrom=32K chrrom=128K mirror=H */
     0x489EF6A2, //  Licensed North America\Airwolf.nes 
     0x3322105A, //  Licensed North America\Sky Kid.nes 
     0x51BEE3EA, //  Licensed North America\The All-New Family Feud.nes 
+/**** 134 mapper=1 submapper=5 prgrom=32K chrrom=128K mirror=H system=SYSTEM_PAL */
     0x4D345422, //  Licensed PAL\Airwolf.nes 
-/**** 90 mapper=1 submapper=5 prgrom=128K chrrom=128K mirror=H */
+/**** 135 mapper=1 submapper=5 prgrom=128K chrrom=128K mirror=H */
     0x1FE4E64A, //  Homebrew\Hacks\Dr. Blario.nes 
     0x4A4B8F1F, //  Homebrew\Hacks\Dr. Fred [Glutate].nes 
     0xB03087A2, //  Homebrew\Hacks\Dr. Manson [Kreegs].nes 
     0x88926A1F, //  Homebrew\Hacks\Dr. Maria [TeamX].nes 
     0x5250C15F, //  Homebrew\Hacks\Dr. Mario Crystal Clear [Tempes].nes 
-/**** 91 mapper=2 prgrom=64K chrram=8K mirror=H */
+/**** 136 mapper=2 prgrom=64K chrram=8K mirror=H */
     0x6EAFF3DD, //  Homebrew\F-FF.nes 
-/**** 92 mapper=2 prgrom=48K chrrom=8K mirror=V */
+/**** 137 mapper=2 prgrom=48K chrrom=8K mirror=V system=SYSTEM_NTSC */
     0x1774EBB8, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. View-On Edition.nes 
-/**** 93 mapper=2 prgrom=128K chrram=8K mirror=V */
+/**** 138 mapper=2 prgrom=128K chrram=8K mirror=V */
     0x1060311F, //  Homebrew\Translations\English\Dash Rascal [Pacnsacdave].nes 
     0x218AB967, //  Homebrew\Translations\English\The Black Bass [GAFF Translations].nes 
-/**** 94 mapper=2 submapper=1 prgrom=128K chrram=8K mirror=H */
+/**** 139 mapper=2 submapper=1 prgrom=128K chrram=8K mirror=H */
     0x3DD3BA1E, //  Bootleg Singles\Front Fareast Magic Card\(F2001) 戦場の狼.nes 
     0xB42A57C7, //  Bootleg Singles\Front Fareast Magic Card\(F2020) Booby Kids.nes 
     0x6F365E7B, //  Bootleg Singles\Front Fareast Magic Card\(F2023) Fantasy Zone.nes 
     0x957F3D28, //  Bootleg Singles\Front Fareast Magic Card\(F2032) Top Gun.nes 
     0xB8F3781D, //  Bootleg Singles\Front Fareast Magic Card\(F2033) 光の戦士 Photon꞉ The Ultimate Game on Planet Earth.nes 
     0x8C3D54E8, //  Bootleg Singles\Front Fareast Magic Card\(F2045) 怒 - Ikari.nes 
-/**** 95 mapper=2 submapper=1 prgrom=1024K chrram=8K mirror=H */
+/**** 140 mapper=2 submapper=1 prgrom=1024K chrram=8K mirror=H */
     0xAC7B0742, //  Unlicensed Taiwan&amp;Hong Kong\金曲 KTV.nes 
-/**** 96 mapper=2 submapper=1 prgrom=64K chrrom=8K mirror=V */
+/**** 141 mapper=2 submapper=1 prgrom=64K chrrom=8K mirror=V */
     0x12C096C0, //  Compatibility Hacks\Super Mario Bros. View-On Edition [PRG size].nes 
-/**** 97 mapper=2 submapper=1 prgrom=128K chrram=8K mirror=V */
+/**** 142 mapper=2 submapper=1 prgrom=128K chrram=8K mirror=V */
     0x09AD3773, //  Bad Dumps\Dan's Stake Demo [corrupt].nes 
     0xC86E8963, //  Bootleg Singles\Bung Game Doctor\(G080) Space Harrier.nes 
     0x3D623C6E, //  Bootleg Singles\Bung Game Doctor\たけしの挑戦状.nes 
@@ -3190,25 +3372,25 @@ static const u32 s_crcs[] = {
     0xBB4EE993, //  Bootleg Singles\Front Fareast Magic Card\(F2082) たけしの挑戦状.nes 
     0x5012D5D0, //  Bootleg Singles\Front Fareast Magic Card\(F2085) Ripple Island.nes 
     0xEE6EF957, //  Bootleg Singles\Front Fareast Magic Card\(F2086) Space Harrier.nes 
-/**** 98 mapper=2 submapper=1 prgrom=128K prgram=8K chrram=8K mirror=V */
+/**** 143 mapper=2 submapper=1 prgrom=128K prgram=8K chrram=8K mirror=V */
     0xB382AEA4, //  Bootleg Singles\Bung Game Doctor\Bomberman II.nes 
-/**** 99 mapper=2 submapper=1 prgrom=256K chrram=8K mirror=V */
+/**** 144 mapper=2 submapper=1 prgrom=256K chrram=8K mirror=V */
     0xA92C8FEB, //  Bootleg Singles\Bung Game Doctor\(L125) Jesus꞉ 恐怖のBio Monster.nes 
     0x5E5723F4, //  Bootleg Singles\Front Fareast Magic Card\(F4001) Faxanadu.nes 
     0x02B0B405, //  Bootleg Singles\Front Fareast Magic Card\(F4003) Esper 冒険隊꞉ 魔王の砦.nes 
     0xB4362294, //  Bootleg Singles\Front Fareast Magic Card\(F4111) Jesus꞉ 恐怖のBio Monster.nes 
     0xCA8204C4, //  Homebrew\Demos\Dynamite Dudes.nes 
     0x86BE4746, //  Unlicensed South Korea\Dooly Bravo Land.nes 
-/**** 100 mapper=2 submapper=1 prgrom=512K chrram=8K mirror=V */
+/**** 145 mapper=2 submapper=1 prgrom=512K chrram=8K mirror=V */
     0x387D3408, //  Homebrew\Proto Dere.nes 
-/**** 101 mapper=2 submapper=2 prgrom=128K prgram=2K chrram=8K mirror=4 */
+/**** 146 mapper=2 submapper=2 prgrom=128K prgram=2K chrram=8K mirror=4 */
     0xFFBEF374, //  Vs. System\Vs. Castlevania.nes 
     0x8C0C2DF5, //  Vs. System\Vs. Top Gun.nes 
-/**** 102 mapper=2 submapper=2 prgrom=16K chrram=8K mirror=H */
+/**** 147 mapper=2 submapper=2 prgrom=16K chrram=8K mirror=H */
     0x9CBDE609, //  Homebrew\Critical Match.nes 
-/**** 103 mapper=2 submapper=2 prgrom=32K chrram=8K mirror=H */
+/**** 148 mapper=2 submapper=2 prgrom=32K chrram=8K mirror=H */
     0xCC3148F6, //  Homebrew\MilioNESy.nes 
-/**** 104 mapper=2 submapper=2 prgrom=64K chrram=8K mirror=H */
+/**** 149 mapper=2 submapper=2 prgrom=64K chrram=8K mirror=H */
     0x0AA209C0, //  Homebrew\Arlington Apple in an Interplanetary Pickle (2017-04-22@16-22-26.12).nes 
     0x68D97836, //  Homebrew\Arlington Apple in an Interplanetary Pickle (2017-04-22@17-20-44.87).nes 
     0x280689D6, //  Homebrew\Arlington Apple in an Interplanetary Pickle (2017-04-23).nes 
@@ -3220,10 +3402,11 @@ static const u32 s_crcs[] = {
     0x472B9734, //  Homebrew\Dizzy꞉ Melanchony of Existance Chapter 0.nes 
     0x94766E4C, //  Homebrew\Nothing Good Can Come of This.nes 
     0x37141810, //  Homebrew\Squish꞉ The Bouncing Cat Ball.nes 
-    0x02D41AEA, //  Modern\Lucky Penguin.nes 
     0xF665FE1F, //  Samples\Lucky Penguin [Lukasz Kur].nes 
     0xFB253226, //  Samples\Tapeworm Disco Puzzle.nes 
-/**** 105 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=H */
+/**** 150 mapper=2 submapper=2 prgrom=64K chrram=8K mirror=H system=SYSTEM_NTSC */
+    0x02D41AEA, //  Modern\Lucky Penguin.nes 
+/**** 151 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=H */
     0xD4C7F0C3, //  Bootleg Singles\Bung Game Doctor\(G003) Terra Cresta.nes 
     0x24826927, //  Bootleg Singles\Bung Game Doctor\(G004) 怒.nes 
     0x67EDE374, //  Bootleg Singles\Bung Game Doctor\(G043) Fantasy Zone.nes 
@@ -3232,7 +3415,6 @@ static const u32 s_crcs[] = {
     0x85D3F785, //  Bootleg Singles\Front Fareast Magic Card\(F2089) 1944.nes 
     0x6E9E5890, //  Bootleg Singles\Gun.Smoke (NTDEC).nes 
     0x3C7A1329, //  Bootleg Singles\TouchGamePlayer\FlyingHero.nes 
-    0x3B317F9B, //  Bootleg Singles\TouchGamePlayer\Gun.Smoke.nes 
     0x4C24C375, //  Homebrew\Black Hole - Czarna Dziura (v0.20)[SIUDYM].nes 
     0x40CCAE9B, //  Homebrew\Hacks\1493꞉ The Year After [S. K. Dumbbus].nes 
     0xF2830B14, //  Homebrew\Hacks\1943꞉ The Battle of Midway - 2011 Update [DamienC].nes 
@@ -3285,14 +3467,6 @@ static const u32 s_crcs[] = {
     0xB6661BDA, //  Licensed North America\Wall Street Kid.nes 
     0x969EF9E4, //  Licensed North America\Winter Games (rev1).nes 
     0xE292AA10, //  Licensed North America\Zanac A.I..nes 
-    0x759418D2, //  Licensed PAL\Alfred Chicken.nes 
-    0x81AF4AF9, //  Licensed PAL\Crackout.nes 
-    0xB79C320D, //  Licensed PAL\Gun.Smoke.nes 
-    0x538218B2, //  Licensed PAL\Ikari Warriors.nes 
-    0x8D9AD3BF, //  Licensed PAL\Indiana Jones and the Last Crusade꞉ The Action Game.nes 
-    0xD7B35F7D, //  Licensed PAL\Konami Hyper Soccer.nes 
-    0x83000991, //  Licensed PAL\Side Pocket.nes 
-    0xD78BFB28, //  Licensed PAL\Top Gun.nes 
     0xFEAB08F1, //  Modern\8 Bit Xmas 2012꞉ Santa's Biplane (download).nes 
     0xF8D04AA0, //  Modern\8 Bit Xmas 2013꞉ Santa vs. the Aliens (download).nes 
     0x900CA825, //  Modern\8 Bit Xmas 2014꞉ Squish Everyone! (download).nes 
@@ -3306,17 +3480,25 @@ static const u32 s_crcs[] = {
     0x3FF10E3D, //  Unreleased\1943꞉ The Battle of Midway.nes 
     0x7E9BCA05, //  Unreleased\Crackout.nes 
     0xA3BF2ADA, //  Unreleased\HeroQuest (NTSC).nes 
+    0x5D40C08A, //  Unreleased\Pescatore.nes 
+/**** 152 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=H system=SYSTEM_PAL */
+    0x3B317F9B, //  Bootleg Singles\TouchGamePlayer\Gun.Smoke.nes 
+    0x759418D2, //  Licensed PAL\Alfred Chicken.nes 
+    0x81AF4AF9, //  Licensed PAL\Crackout.nes 
+    0xB79C320D, //  Licensed PAL\Gun.Smoke.nes 
+    0x538218B2, //  Licensed PAL\Ikari Warriors.nes 
+    0x8D9AD3BF, //  Licensed PAL\Indiana Jones and the Last Crusade꞉ The Action Game.nes 
+    0xD7B35F7D, //  Licensed PAL\Konami Hyper Soccer.nes 
+    0x83000991, //  Licensed PAL\Side Pocket.nes 
+    0xD78BFB28, //  Licensed PAL\Top Gun.nes 
     0xF9FC0700, //  Unreleased\HeroQuest (PAL English).nes 
     0xD91CF3DC, //  Unreleased\HeroQuest (PAL German).nes 
-    0x5D40C08A, //  Unreleased\Pescatore.nes 
-/**** 106 mapper=2 submapper=2 prgrom=128K prgram=8K chrram=8K mirror=H */
+/**** 153 mapper=2 submapper=2 prgrom=128K prgram=8K chrram=8K mirror=H */
     0x7D868C39, //  Bootleg Singles\Front Fareast Magic Card\(F2092) 激突四駆 Battle.nes 
-/**** 107 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=H */
-    0x3C5BE639, //  Homebrew\Demos\PCM Demo Wgraphics.nes 
+/**** 154 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=H */
     0xA0AE2A2D, //  Homebrew\JAMG - The Lost Coins.nes 
     0x5BCC67D0, //  Homebrew\Super Roman.nes 
     0x3A0965B1, //  Licensed North America\Paperboy 2.nes 
-    0x509E6032, //  Licensed PAL\Paperboy 2.nes 
     0x48BB5A71, //  Modern\Battle Kid꞉ Fortress of Peril (v1.000).nes 
     0xAEF464CE, //  Modern\Battle Kid꞉ Fortress of Peril (v1.100).nes 
     0x18E4BCFD, //  Modern\ぽるんちゃんのおにぎり大好き (Amabie).nes 
@@ -3324,39 +3506,44 @@ static const u32 s_crcs[] = {
     0x3B767B4A, //  Modern\ぽるんちゃんのおにぎり大好き (v1.1).nes 
     0xAAEA1D27, //  Samples\Battle Kid 2꞉ Mountain of Torment.nes 
     0xF7A14E41, //  Samples\Battle Kid꞉ Fortress of Peril.nes 
+/**** 155 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=H system=SYSTEM_PAL */
+    0x509E6032, //  Licensed PAL\Paperboy 2.nes 
+/**** 156 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=H system=SYSTEM_NTSC */
+    0x3C5BE639, //  Homebrew\Demos\PCM Demo Wgraphics.nes 
     0x2CDC974C, //  Samples\Twin Dragons.nes 
-/**** 108 mapper=2 submapper=2 prgrom=16K chrram=8K mirror=V */
+/**** 157 mapper=2 submapper=2 prgrom=16K chrram=8K mirror=V */
     0x2CA86503, //  Homebrew\Hot Seat Harry.nes 
-/**** 109 mapper=2 submapper=2 prgrom=32K chrram=8K mirror=V */
+/**** 158 mapper=2 submapper=2 prgrom=32K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x2AB114D5, //  Homebrew\Tests\Rainwarrior - Microphone Input Test.nes 
-/**** 110 mapper=2 submapper=2 prgrom=64K chrram=8K mirror=V */
+/**** 159 mapper=2 submapper=2 prgrom=64K chrram=8K mirror=V */
     0xE8C53885, //  Homebrew\Böbl (v1.0).nes 
     0xDEE8631E, //  Homebrew\Böbl (v1.1).nes 
+    0xFFDDEA7E, //  Homebrew\Filthy Kitchen [Dustmop].nes 
+    0xEBCF45BE, //  Homebrew\Super City Mayor.nes 
+    0x1394DED0, //  Homebrew\Super PakPak.nes 
+    0x6599113A, //  Homebrew\Tools\240p Test Suite (v0.15)[Artemio].nes 
+    0x3F87F554, //  Homebrew\Veggie Invasion.nes 
+    0xBB4569FA, //  Homebrew\Waddles the Duck.nes 
+    0xACD15774, //  Homebrew\we are hejikle.nes 
+    0x5581D82D, //  Samples\The Cowlitz Gamers' 2nd Adventure (v1.1)[Cowlitz Gamers].nes 
+    0x29A67DFD, //  Samples\Trials of the Wolf Clan #1꞉ The Wolf Spirit [Valdir Salgueiro].nes 
+/**** 160 mapper=2 submapper=2 prgrom=64K chrram=8K mirror=V system=SYSTEM_NTSC */
     0xF8FA4EF2, //  Homebrew\Cheril the Goddess (Alternate Jump).nes 
     0xBA392DA2, //  Homebrew\Cheril the Goddess.nes 
-    0xFFDDEA7E, //  Homebrew\Filthy Kitchen [Dustmop].nes 
     0x4CAC8341, //  Homebrew\Gruniozerca 2 (NESdev rev0).nes 
     0x9FB8F842, //  Homebrew\Gruniozerca 2 (NESdev rev1).nes 
     0xCCEB1CE3, //  Homebrew\Gruniozerca 2꞉ The Great Cavy Rescue!.nes 
     0xF4DE6CC4, //  Homebrew\Gruniozerca 3꞉ The Great Cavy Clean-Up! (alt).nes 
     0x4CC4E7DE, //  Homebrew\Gruniozerca 3꞉ The Great Cavy Clean-Up!.nes 
     0x1833B431, //  Homebrew\Lala the Magical (NESdev 2016).nes 
-    0xEBCF45BE, //  Homebrew\Super City Mayor.nes 
-    0x1394DED0, //  Homebrew\Super PakPak.nes 
     0xA418DE9D, //  Homebrew\The Banketh (Demo).nes 
     0x301CA5BB, //  Homebrew\The Cowlitz Gamers' Lost Adventure.nes 
-    0x6599113A, //  Homebrew\Tools\240p Test Suite (v0.15)[Artemio].nes 
-    0x3F87F554, //  Homebrew\Veggie Invasion.nes 
-    0xBB4569FA, //  Homebrew\Waddles the Duck.nes 
     0x6D618DDD, //  Homebrew\Wolfling (v1.1).nes 
     0xAF28C35C, //  Homebrew\Wolfling (v1.2).nes 
     0x4C86AD14, //  Homebrew\Wolfling (v1.4).nes 
-    0xACD15774, //  Homebrew\we are hejikle.nes 
-    0x5581D82D, //  Samples\The Cowlitz Gamers' 2nd Adventure (v1.1)[Cowlitz Gamers].nes 
-    0x29A67DFD, //  Samples\Trials of the Wolf Clan #1꞉ The Wolf Spirit [Valdir Salgueiro].nes 
-/**** 111 mapper=2 submapper=2 prgrom=64K chrram=16K mirror=V */
+/**** 161 mapper=2 submapper=2 prgrom=64K chrram=16K mirror=V */
     0x0E6EB220, //  Homebrew\Spacegulls (v1.1)[Morphcat Games].nes 
-/**** 112 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=V */
+/**** 162 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=V */
     0xACC8154A, //  Bad Dumps\Athena [broken music].nes 
     0x1959CB18, //  Bad Dumps\Contra [missing PROM].nes 
     0x6A91F769, //  Bootleg Hacks\'93 超级魂.nes 
@@ -3417,7 +3604,6 @@ static const u32 s_crcs[] = {
     0xF2603454, //  Bootleg Singles\The Little Mermaid (NT-6031).nes 
     0xE4216F78, //  Bootleg Singles\TouchGamePlayer\Jackal.nes 
     0xF0929533, //  Bootleg Singles\TouchGamePlayer\Rush'n Attack.nes 
-    0x68A6D938, //  Compatibility Hacks\TV System Conversions\Astérix (Dendy)[NewRisingSun].nes 
     0x55CAE33E, //  Compatibility Hacks\TV System Conversions\Astérix (NTSC)[NewRisingSun].nes 
     0x01E62AE2, //  Compatibility Hacks\Vs. Castlevania [home console].nes 
     0xD7CB97C7, //  Homebrew\Bugfixes, Improvements\Double Dribble (rev1)[DPCM bit order].nes 
@@ -3426,7 +3612,6 @@ static const u32 s_crcs[] = {
     0xDF01DA1E, //  Homebrew\Godzilla꞉ King of Monsters! [FG].nes 
     0x22CB5355, //  Homebrew\Hacks\ALF Escapes! [pacnsacdave].nes 
     0x637533A0, //  Homebrew\Hacks\Adventures in Vancouver, BC [RyanVG].nes 
-    0x7548616F, //  Homebrew\Hacks\All Hallow's Eve [Plimoth League Studios].nes 
     0xA6E68C88, //  Homebrew\Hacks\Castlevania series\Castle VI.nes 
     0xAEA58E8E, //  Homebrew\Hacks\Castlevania series\CastleVania 5 [xXbelmontXx].nes 
     0x41E396DA, //  Homebrew\Hacks\Castlevania series\Castlevania (Gun)[klaykree].nes 
@@ -3487,7 +3672,6 @@ static const u32 s_crcs[] = {
     0xCED05FC0, //  Homebrew\Hacks\Ghosts'n Goblins꞉ Arcade Restore.nes 
     0x0C928C0E, //  Homebrew\Hacks\Ghosts'n Goblins꞉ Hard Type.nes 
     0xE2F7968B, //  Homebrew\Hacks\God of War [pacnsacdave].nes 
-    0xB8141DA3, //  Homebrew\Hacks\Mega Man series\Danzig [Punktendo].nes 
     0x3EFA7E44, //  Homebrew\Hacks\Mega Man series\Mega Girl [Clomax Dominion].nes 
     0xF7145160, //  Homebrew\Hacks\Mega Man series\Mega Man 1 Speed Patches [StalkerMaestro].nes 
     0x9206137B, //  Homebrew\Hacks\Mega Man series\Mega Man Alpha.nes 
@@ -3511,9 +3695,7 @@ static const u32 s_crcs[] = {
     0x39CBA47E, //  Homebrew\Hacks\Mega Man series\Rockman RX.nes 
     0xFEADE8CB, //  Homebrew\Hacks\Mega Man series\Rockman Zero [MB Hacks].nes 
     0xD7CD7E8E, //  Homebrew\Panesian Power.nes 
-    0xF968E392, //  Homebrew\Scramble.nes 
     0x951AF0C1, //  Homebrew\Super Marxsky Comrade.nes 
-    0x3EBB0E6D, //  Homebrew\The Cowlitz Gamers' 2nd Adventure.nes 
     0x9280687F, //  Homebrew\The Incident (Demo).nes 
     0xF500383F, //  Homebrew\The Rise of Amondus.nes 
     0x78A40BD5, //  Homebrew\Tools\Tommy T's Sound Editor.nes 
@@ -3727,6 +3909,62 @@ static const u32 s_crcs[] = {
     0xCF26A149, //  Licensed North America\Twin Eagle꞉ Revenge Joe's Brother.nes 
     0xA0230D75, //  Licensed North America\WWF WrestleMania Challenge.nes 
     0x15F0D3F1, //  Licensed North America\Wayne Gretzky Hockey.nes 
+    0x38431BF6, //  Modern\8 Bit Xmas 2018.nes 
+    0xD8AB6288, //  Modern\8 Bit Xmas 2021꞉ Exciteduck (download).nes 
+    0x7D563942, //  Modern\Castlevania (Castlevania Anniversary Collection).nes 
+    0xACEC652E, //  Modern\Castlevania (Konami Collector's Series).nes 
+    0x755B7D59, //  Modern\Contra (Contra Anniversary Collection).nes 
+    0x7708B286, //  Modern\Contra (Konami Collector's Series).nes 
+    0x45C33A1B, //  Modern\DuckTales (The Disney Afternoon Collection).nes 
+    0x57085979, //  Modern\DuckTales 2 (The Disney Afternoon Collection).nes 
+    0x5F0DEC80, //  Modern\Hudson Best Collection\Hector '87.nes 
+    0x718EB40A, //  Modern\Jackal (Konami Collector's Series).nes 
+    0x1C47D202, //  Modern\Mega Man (Mega Man Legacy Collection).nes 
+    0x825313CA, //  Modern\The Rise of Amondus.nes 
+    0x1394B713, //  Modern\Virtual Console\Blades of Steel (NTSC).nes 
+    0xBD5932EC, //  Modern\Virtual Console\Castlevania (NTSC).nes 
+    0xAEF5B452, //  Modern\Virtual Console\Mega Man.nes 
+    0x1CA40FAF, //  Modern\Virtual Console\Renegade.nes 
+    0xA7A82B60, //  Modern\Virtual Console\Rockman.nes 
+    0x87E8CA9C, //  Modern\Virtual Console\Stinger.nes 
+    0xCBD7D955, //  Modern\Virtual Console\たけしの挑戦状.nes 
+    0x72EEED23, //  Modern\Virtual Console\もえろ TwinBee꞉ Cinnamon博士を救え!.nes 
+    0x4BAE96C2, //  Modern\Virtual Console\熱血硬派くにおくん.nes 
+    0x87CF8EF6, //  Modern\悪魔城 Dracula (Castlevania Anniversary Collection).nes 
+    0x7F8779F4, //  Playchoice\Castlevania.nes 
+    0xD431825B, //  Playchoice\Contra.nes 
+    0x107405C7, //  Playchoice\Double Dribble.nes 
+    0x29B2F488, //  Playchoice\Pro Wrestling.nes 
+    0xEFE2D423, //  Playchoice\Rush'n Attack.nes 
+    0xC88337AE, //  Playchoice\Rygar.nes 
+    0x989BAF84, //  Playchoice\Trojan.nes 
+    0xAE5B4B2D, //  Samples\Armed for Battle.nes 
+    0xDAAB873B, //  Samples\Spook-o'-tron (v1.1).nes 
+    0x85BFFFEF, //  Samples\The Goonies II꞉ Fratelli 最後の挑戦.nes 
+    0xE85B4D3D, //  Unlicensed Taiwan&amp;Hong Kong\Hit Marmot.nes 
+    0xED4D696F, //  Unlicensed Taiwan&amp;Hong Kong\Magic Block.nes 
+    0x239971D1, //  Unlicensed Taiwan&amp;Hong Kong\撞球傳說 花撞 II - Ball Story.nes 
+    0x0143EEB4, //  Unreleased\Airball (Prototype 1).nes 
+    0x240863B9, //  Unreleased\Airball (Prototype 2).nes 
+    0xD02BB85C, //  Unreleased\Astérix (NTSC)[Acmlm, WIP].nes 
+    0xA48D26C1, //  Unreleased\Caesars Palace.nes 
+    0x8D97155C, //  Unreleased\California Raisins꞉ The Grape Escape (Beta).nes 
+    0xF2096D9C, //  Unreleased\California Raisins꞉ The Grape Escape (Final).nes 
+    0x53328FC4, //  Unreleased\Chester Field꞉ 暗黒神への挑戦.nes 
+    0xCB17D41E, //  Unreleased\Color a Dinosaur.nes 
+    0x2C26736B, //  Unreleased\DuckTales (1989-02-05).nes 
+    0xFF53D73E, //  Unreleased\DuckTales (1989-05-25).nes 
+    0x55B4052B, //  Unreleased\Makai Island.nes 
+    0x3B0F4DB2, //  Unreleased\The Adventures of Dr. Franken.nes 
+    0x8366CF72, //  Unreleased\Titan Warriors.nes 
+    0x55568F0D, //  Unreleased\UWC.nes 
+    0x98C7B4DA, //  Unreleased\わんぱくDuck 夢冒険.nes 
+    0xEBB5E666, //  Unreleased\人魚姫.nes 
+    0xFBDD0F1B, //  Unreleased\突然! Machoman.nes 
+    0xD44FBB05, //  Unreleased\西遊記 World.nes 
+/**** 163 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=V system=SYSTEM_PAL */
+    0x7548616F, //  Homebrew\Hacks\All Hallow's Eve [Plimoth League Studios].nes 
+    0xB8141DA3, //  Homebrew\Hacks\Mega Man series\Danzig [Punktendo].nes 
     0xED77B453, //  Licensed PAL\Astérix.nes 
     0xC0EDEDD0, //  Licensed PAL\Blades of Steel.nes 
     0xB400172A, //  Licensed PAL\California Games.nes 
@@ -3768,73 +4006,24 @@ static const u32 s_crcs[] = {
     0xB6B5C372, //  Licensed PAL\Trog.nes 
     0x4F48B240, //  Licensed PAL\Trojan.nes 
     0x138862C5, //  Licensed PAL\WWF WrestleMania Challenge.nes 
-    0x38431BF6, //  Modern\8 Bit Xmas 2018.nes 
-    0xD8AB6288, //  Modern\8 Bit Xmas 2021꞉ Exciteduck (download).nes 
-    0x7D563942, //  Modern\Castlevania (Castlevania Anniversary Collection).nes 
-    0xACEC652E, //  Modern\Castlevania (Konami Collector's Series).nes 
+    0x811029EE, //  Modern\Virtual Console\Blades of Steel (PAL).nes 
+    0xD1DF88C6, //  Modern\Virtual Console\Life Force - Salamander.nes 
+    0x89EC53C8, //  Unreleased\DuckTales 2.nes 
+    0x36C3B13A, //  Unreleased\Rod Land, Featuring Rit and Tam.nes 
+/**** 164 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0xF968E392, //  Homebrew\Scramble.nes 
+    0x3EBB0E6D, //  Homebrew\The Cowlitz Gamers' 2nd Adventure.nes 
     0x3C882B42, //  Modern\Chumlee Adventure꞉ The Quest for Pinky.nes 
-    0x755B7D59, //  Modern\Contra (Contra Anniversary Collection).nes 
-    0x7708B286, //  Modern\Contra (Konami Collector's Series).nes 
-    0x45C33A1B, //  Modern\DuckTales (The Disney Afternoon Collection).nes 
-    0x57085979, //  Modern\DuckTales 2 (The Disney Afternoon Collection).nes 
-    0x5F0DEC80, //  Modern\Hudson Best Collection\Hector '87.nes 
-    0x718EB40A, //  Modern\Jackal (Konami Collector's Series).nes 
     0xF8D71993, //  Modern\L'Abbaye des Morts.nes 
-    0x1C47D202, //  Modern\Mega Man (Mega Man Legacy Collection).nes 
     0x894FA1A1, //  Modern\Streemerz (v01 English).nes 
     0xE8F57BCF, //  Modern\Streemerz (v02 English).nes 
     0x2D80C6DE, //  Modern\Streemerz (v02 French).nes 
-    0x825313CA, //  Modern\The Rise of Amondus.nes 
-    0x1394B713, //  Modern\Virtual Console\Blades of Steel (NTSC).nes 
-    0x811029EE, //  Modern\Virtual Console\Blades of Steel (PAL).nes 
-    0xBD5932EC, //  Modern\Virtual Console\Castlevania (NTSC).nes 
     0x534F11AE, //  Modern\Virtual Console\Castlevania (PAL).nes 
-    0xD1DF88C6, //  Modern\Virtual Console\Life Force - Salamander.nes 
-    0xAEF5B452, //  Modern\Virtual Console\Mega Man.nes 
-    0x1CA40FAF, //  Modern\Virtual Console\Renegade.nes 
-    0xA7A82B60, //  Modern\Virtual Console\Rockman.nes 
-    0x87E8CA9C, //  Modern\Virtual Console\Stinger.nes 
-    0xCBD7D955, //  Modern\Virtual Console\たけしの挑戦状.nes 
-    0x72EEED23, //  Modern\Virtual Console\もえろ TwinBee꞉ Cinnamon博士を救え!.nes 
-    0x4BAE96C2, //  Modern\Virtual Console\熱血硬派くにおくん.nes 
-    0x87CF8EF6, //  Modern\悪魔城 Dracula (Castlevania Anniversary Collection).nes 
-    0x7F8779F4, //  Playchoice\Castlevania.nes 
-    0xD431825B, //  Playchoice\Contra.nes 
-    0x107405C7, //  Playchoice\Double Dribble.nes 
-    0x29B2F488, //  Playchoice\Pro Wrestling.nes 
-    0xEFE2D423, //  Playchoice\Rush'n Attack.nes 
-    0xC88337AE, //  Playchoice\Rygar.nes 
-    0x989BAF84, //  Playchoice\Trojan.nes 
-    0xAE5B4B2D, //  Samples\Armed for Battle.nes 
-    0xDAAB873B, //  Samples\Spook-o'-tron (v1.1).nes 
-    0x85BFFFEF, //  Samples\The Goonies II꞉ Fratelli 最後の挑戦.nes 
+/**** 165 mapper=2 submapper=2 prgrom=128K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0x68A6D938, //  Compatibility Hacks\TV System Conversions\Astérix (Dendy)[NewRisingSun].nes 
     0xED4984E0, //  Unlicensed China\跳舞与卡拉OK.nes 
-    0xE85B4D3D, //  Unlicensed Taiwan&amp;Hong Kong\Hit Marmot.nes 
-    0xED4D696F, //  Unlicensed Taiwan&amp;Hong Kong\Magic Block.nes 
-    0x239971D1, //  Unlicensed Taiwan&amp;Hong Kong\撞球傳說 花撞 II - Ball Story.nes 
-    0x0143EEB4, //  Unreleased\Airball (Prototype 1).nes 
-    0x240863B9, //  Unreleased\Airball (Prototype 2).nes 
-    0xD02BB85C, //  Unreleased\Astérix (NTSC)[Acmlm, WIP].nes 
-    0xA48D26C1, //  Unreleased\Caesars Palace.nes 
-    0x8D97155C, //  Unreleased\California Raisins꞉ The Grape Escape (Beta).nes 
-    0xF2096D9C, //  Unreleased\California Raisins꞉ The Grape Escape (Final).nes 
-    0x53328FC4, //  Unreleased\Chester Field꞉ 暗黒神への挑戦.nes 
-    0xCB17D41E, //  Unreleased\Color a Dinosaur.nes 
-    0x2C26736B, //  Unreleased\DuckTales (1989-02-05).nes 
-    0xFF53D73E, //  Unreleased\DuckTales (1989-05-25).nes 
-    0x89EC53C8, //  Unreleased\DuckTales 2.nes 
-    0x55B4052B, //  Unreleased\Makai Island.nes 
-    0x36C3B13A, //  Unreleased\Rod Land, Featuring Rit and Tam.nes 
-    0x3B0F4DB2, //  Unreleased\The Adventures of Dr. Franken.nes 
-    0x8366CF72, //  Unreleased\Titan Warriors.nes 
-    0x55568F0D, //  Unreleased\UWC.nes 
-    0x98C7B4DA, //  Unreleased\わんぱくDuck 夢冒険.nes 
-    0xEBB5E666, //  Unreleased\人魚姫.nes 
-    0xFBDD0F1B, //  Unreleased\突然! Machoman.nes 
-    0xD44FBB05, //  Unreleased\西遊記 World.nes 
-/**** 113 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=V */
+/**** 166 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=V */
     0x92042049, //  Bootleg Singles\Bung Game Doctor\The Rocketeer.nes 
-    0x18832471, //  Educational Computers\小学语文数学智力游戏 趣味教学卡 - 小状元.nes 
     0x6ABE6C87, //  Homebrew\Translations\English\Fiery Renegade Kunio [Stardust Crusaders v1.00].nes 
     0x1760CF9D, //  Homebrew\Translations\English\Ghost Hunter [Snark, Proveaux].nes 
     0x19FEEA1F, //  Homebrew\Translations\English\Law of the West [GAFF Translations].nes 
@@ -3851,34 +4040,38 @@ static const u32 s_crcs[] = {
     0xD8F651E2, //  Licensed Japan\星霊狩り.nes 
     0x1027C432, //  Licensed Japan\桃太郎電鉄.nes 
     0xA6A725B8, //  Licensed North America\Best of the Best꞉ Championship Karate.nes 
-    0xBD339E75, //  Licensed PAL\Best of the Best꞉ Championship Karate.nes 
     0x566F1F66, //  Modern\F-Theta [Little Sound].nes 
+/**** 167 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=V system=SYSTEM_PAL */
+    0xBD339E75, //  Licensed PAL\Best of the Best꞉ Championship Karate.nes 
+/**** 168 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
     0xA0B8CB59, //  Samples\Roniu's Tale.nes 
     0xCAB97150, //  Samples\The Meating (Cafeparty Demo).nes 
-/**** 114 mapper=2 submapper=2 prgrom=512K chrram=8K mirror=V */
+/**** 169 mapper=2 submapper=2 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0x18832471, //  Educational Computers\小学语文数学智力游戏 趣味教学卡 - 小状元.nes 
+/**** 170 mapper=2 submapper=2 prgrom=512K chrram=8K mirror=V */
     0x6DC55447, //  Homebrew\Translations\English\Esper Corps [Aishsha v1.01].nes 
-/**** 115 mapper=2 submapper=2 prgrom=256K prgnvram=8K chrram=8K mirror=V battery=1 */
+/**** 171 mapper=2 submapper=2 prgrom=256K prgnvram=8K chrram=8K mirror=V battery=1 */
     0xC86DD855, //  Homebrew\Translations\English\Stargazers [KingMike's Translations v0.80](SRAM Hack).nes 
     0x9CEB6D70, //  Homebrew\Translations\English\Stargazers [KingMike's Translations v0.80].nes 
-/**** 116 mapper=2 submapper=2 prgrom=512K prgnvram=8K chrram=8K mirror=V battery=1 */
+/**** 172 mapper=2 submapper=2 prgrom=512K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x10066391, //  Modern\Alwa's Awakening.nes 
-/**** 117 mapper=3 prgrom=32K chrrom=32K mirror=H */
+/**** 173 mapper=3 prgrom=32K chrrom=32K mirror=H */
     0xE01389E9, //  Homebrew\Translations\English\Cosmo Genesis [Aeon Genesis v1.1].nes 
-/**** 118 mapper=3 prgrom=32K chrrom=32K mirror=V */
+/**** 174 mapper=3 prgrom=32K chrrom=32K mirror=V */
     0xFC8EB63A, //  Modern\Virtual Console\迷宮組曲꞉ Milonの大冒険.nes 
-/**** 119 mapper=3 submapper=1 prgrom=32K chrrom=16K mirror=H */
+/**** 175 mapper=3 submapper=1 prgrom=32K chrrom=16K mirror=H */
     0x5E1ADD91, //  Bootleg Singles\Bung Game Doctor\(E016) 響尾蛇 - Sidewinder.nes 
-/**** 120 mapper=3 submapper=1 prgrom=32K chrrom=32K mirror=H */
+/**** 176 mapper=3 submapper=1 prgrom=32K chrrom=32K mirror=H */
     0x21178D4D, //  Bootleg Hacks\FIFA 99.nes 
     0xD04A40E6, //  Compatibility Hacks\75 Bingo [m003].nes 
     0x2915FAF0, //  Compatibility Hacks\蝶變 - Incantation [m003].nes 
-/**** 121 mapper=3 submapper=1 prgrom=32K prgram=2K chrrom=32K mirror=H */
+/**** 177 mapper=3 submapper=1 prgrom=32K prgram=2K chrrom=32K mirror=H */
     0xB3BE2F71, //  Multicarts\extracts\超一流 烟山杯 围棋.nes 
-/**** 122 mapper=3 submapper=1 prgrom=16K chrrom=32K mirror=V */
+/**** 178 mapper=3 submapper=1 prgrom=16K chrrom=32K mirror=V */
     0x189ACA12, //  Homebrew\ファミ姦.nes 
-/**** 123 mapper=3 submapper=1 prgrom=32K chrrom=16K mirror=V */
+/**** 179 mapper=3 submapper=1 prgrom=32K chrrom=16K mirror=V */
     0xC7D0AF96, //  Bootleg Singles\Bung Game Doctor\(D002) 忍者じゃじゃ丸くん.nes 
-/**** 124 mapper=3 submapper=1 prgrom=32K chrrom=32K mirror=V */
+/**** 180 mapper=3 submapper=1 prgrom=32K chrrom=32K mirror=V */
     0x1D31AED1, //  Bootleg Singles\Bung Game Doctor\(F002) Atlantisの謎.nes 
     0x45A9C9A7, //  Bootleg Singles\Bung Game Doctor\(F005) かんしゃく玉投げカン太郎の東海道五十三次.nes 
     0xF283CF58, //  Bootleg Singles\Bung Game Doctor\Colorful Dragon.nes 
@@ -3887,11 +4080,11 @@ static const u32 s_crcs[] = {
     0xE8BF92F7, //  Homebrew\Hacks\爆チュー問題.nes 
     0xB1857F3B, //  Homebrew\Tetris.nes 
     0x70852046, //  Modern\Hudson Best Collection\高橋名人の冒険島.nes 
-/**** 125 mapper=3 submapper=2 prgrom=16K chrrom=16K mirror=H */
+/**** 181 mapper=3 submapper=2 prgrom=16K chrrom=16K mirror=H */
     0xBE387AF0, //  Licensed North America\Joust.nes 
-/**** 126 mapper=3 submapper=2 prgrom=16K chrrom=32K mirror=H */
+/**** 182 mapper=3 submapper=2 prgrom=16K chrrom=32K mirror=H system=SYSTEM_NTSC */
     0x973DFED9, //  Homebrew\Drakaina.nes 
-/**** 127 mapper=3 submapper=2 prgrom=32K chrrom=16K mirror=H */
+/**** 183 mapper=3 submapper=2 prgrom=32K chrrom=16K mirror=H */
     0xF9443A53, //  Bootleg Singles\Bung Game Doctor\(E001) TwinBee.nes 
     0x6ED1EC0B, //  Bootleg Singles\Bung Game Doctor\(E004) 影の伝説.nes 
     0x60CCE95D, //  Bootleg Singles\Bung Game Doctor\(E005) Mighty Bomb Jack.nes 
@@ -3900,23 +4093,23 @@ static const u32 s_crcs[] = {
     0x19E69767, //  Bootleg Singles\Bung Game Doctor\Poker II.nes 
     0x0B3D7B44, //  Bootleg Singles\Front Fareast Magic Card\(F1115) Mighty Bomb Jack.nes 
     0xED3402D2, //  Compatibility Hacks\Vs. Pinball [home console v1.3].nes 
-    0x64044F64, //  Homebrew\Cave [Mojon Twins].nes 
     0x0F92E654, //  Homebrew\Hacks\Arkanoid 11 [Bloodstar].nes 
     0x07CC0E99, //  Homebrew\Hacks\Arkanoid Revised (v1.03)[Nesrocks].nes 
     0x9F91F9D0, //  Homebrew\Hacks\Arkanoid꞉ Enemies Hack [Anton].nes 
-    0x10F25E07, //  Homebrew\The Wizard.nes 
     0x5FE82456, //  Homebrew\Ultimate Frogger Champion (Demo).nes 
     0xD89E5A67, //  Licensed Japan\Arkanoid.nes 
     0x8F4497EE, //  Licensed Japan\Peepar Time.nes 
     0x32FB0583, //  Licensed North America\Arkanoid.nes 
     0xBBED6E6E, //  Licensed North America\The Legend of Kage.nes 
-    0x77EE877C, //  Modern\Ultimate Frogger Champion.nes 
     0x03BDC96F, //  Modern\Virtual Console\Mighty Bomb Jack.nes 
     0x925C63C3, //  Modern\Virtual Console\The Legend of Kage.nes 
-/**** 128 mapper=3 submapper=2 prgrom=32K chrrom=24K mirror=H */
+/**** 184 mapper=3 submapper=2 prgrom=32K chrrom=16K mirror=H system=SYSTEM_NTSC */
+    0x64044F64, //  Homebrew\Cave [Mojon Twins].nes 
+    0x10F25E07, //  Homebrew\The Wizard.nes 
+    0x77EE877C, //  Modern\Ultimate Frogger Champion.nes 
+/**** 185 mapper=3 submapper=2 prgrom=32K chrrom=24K mirror=H */
     0x38B9DC71, //  Bad Dumps\マリ・アヤミ・ルカのA.V. Poker (Taiwan).nes 
-/**** 129 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=H */
-    0x9DB91BDB, //  Bad Dumps\Dream Fighter (Asder 20-in-1 extract)[CHR overdump].nes 
+/**** 186 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=H */
     0xB23508FF, //  Bootleg Singles\Bung Game Doctor\(F006) Solomonの鍵.nes 
     0xF99525B7, //  Bootleg Singles\Bung Game Doctor\(F010) ASO - Armored Scrum Object.nes 
     0x078864F2, //  Bootleg Singles\Bung Game Doctor\(F012) King's Knight.nes 
@@ -3936,13 +4129,11 @@ static const u32 s_crcs[] = {
     0x7EE60C14, //  Homebrew\Copyright Restorations\Destroyer [based on Gluk Video version].nes 
     0x32D11749, //  Homebrew\Demos\NES Fireplace.nes 
     0x38336451, //  Homebrew\Elusion of the Dead (Early Concept 1).nes 
-    0xC69FBC1F, //  Homebrew\Espitene.nes 
     0xCDD03185, //  Homebrew\Hacks\Back to the Future 4 [RyanVG].nes 
     0x2D8196A1, //  Homebrew\Hacks\Back to the Future꞉ Enhanced Edition [pacnsacdave].nes 
     0x9CFB9199, //  Homebrew\Hacks\Popeye vs. Bluto DK Edition [Riggs].nes 
     0xFA0A70C5, //  Homebrew\Jammin' Honey (rev0).nes 
     0x29003686, //  Homebrew\Jammin' Honey (rev1).nes 
-    0xBA96C270, //  Homebrew\MiedoW꞉ Cheril's Nightmares.nes 
     0x62606957, //  Homebrew\Translations\English\Egypt [Dodgy Translations v1.01].nes 
     0xF4B71793, //  Homebrew\Translations\English\Egypt [Magic Translations v0.90].nes 
     0x304DA68E, //  Homebrew\Translations\English\Family Trainer꞉ Baby Kyonshi's Big Adventure [Pacnsacdave].nes 
@@ -3991,24 +4182,9 @@ static const u32 s_crcs[] = {
     0xC3C7A568, //  Licensed North America\Tiger-Heli.nes 
     0x5734EB9E, //  Licensed North America\World Class Track Meet (rev0).nes 
     0xAF4010EA, //  Licensed North America\World Class Track Meet (rev1).nes 
-    0x976893D2, //  Licensed PAL\Alpha Mission.nes 
-    0xFC5026EE, //  Licensed PAL\Battleship.nes 
-    0x842A3FD9, //  Licensed PAL\Mighty Bomb Jack.nes 
-    0xEE219A49, //  Licensed PAL\Paperboy.nes 
-    0xFC2DA286, //  Licensed PAL\Puzznic.nes 
-    0x75C3E7D4, //  Licensed PAL\Solomon's Key.nes 
-    0x0DA28A50, //  Licensed PAL\Stadium Events.nes 
-    0x40BFA660, //  Licensed PAL\Tiger-Heli (rev0).nes 
-    0x95D3BFFF, //  Licensed PAL\Tiger-Heli (rev1).nes 
-    0x5519A326, //  Modern\Donkey Kong - Original Edition (NTSC).nes 
-    0x90B1B309, //  Modern\Donkey Kong - Original Edition (PAL).nes 
-    0x9908C6C9, //  Modern\Exploding Fist (Piko Interactive Evercade cartridge).nes 
     0xAE90380E, //  Modern\Virtual Console\King's Knight (Japan).nes 
     0x8B62807B, //  Modern\Virtual Console\King's Knight (North America).nes 
     0xE326E0F5, //  Samples\ASO - Armored Scrum Object.nes 
-    0xE9AD2163, //  Unlicensed Elsewhere\Cosmos Cop.nes 
-    0x322C9F6A, //  Unlicensed Elsewhere\Destroyer.nes 
-    0xBF0C485D, //  Unlicensed Elsewhere\Jackpot.nes 
     0x026C1E1A, //  Unlicensed Taiwan&amp;Hong Kong\Cosmos Cop.nes 
     0x2EFE622F, //  Unlicensed Taiwan&amp;Hong Kong\Destroyer.nes 
     0x2B20ED9B, //  Unlicensed Taiwan&amp;Hong Kong\水果狸.nes 
@@ -4018,20 +4194,39 @@ static const u32 s_crcs[] = {
     0x1C31DD60, //  Unreleased\Exploding Fist (Beta).nes 
     0xE4A6E151, //  Unreleased\Family Trainer꞉ 来! 来! キョンシーズ - Baby キョンシーのあみだ大冒険.nes 
     0xC8BD1908, //  Unreleased\Ghostbusters.nes 
-/**** 130 mapper=3 submapper=2 prgrom=32K prgram=2K chrrom=32K mirror=H */
+/**** 187 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=H system=SYSTEM_PAL */
+    0x976893D2, //  Licensed PAL\Alpha Mission.nes 
+    0xFC5026EE, //  Licensed PAL\Battleship.nes 
+    0x842A3FD9, //  Licensed PAL\Mighty Bomb Jack.nes 
+    0xEE219A49, //  Licensed PAL\Paperboy.nes 
+    0xFC2DA286, //  Licensed PAL\Puzznic.nes 
+    0x75C3E7D4, //  Licensed PAL\Solomon's Key.nes 
+    0x0DA28A50, //  Licensed PAL\Stadium Events.nes 
+    0x40BFA660, //  Licensed PAL\Tiger-Heli (rev0).nes 
+    0x95D3BFFF, //  Licensed PAL\Tiger-Heli (rev1).nes 
+/**** 188 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=H system=SYSTEM_NTSC */
+    0x9DB91BDB, //  Bad Dumps\Dream Fighter (Asder 20-in-1 extract)[CHR overdump].nes 
+    0xC69FBC1F, //  Homebrew\Espitene.nes 
+    0xBA96C270, //  Homebrew\MiedoW꞉ Cheril's Nightmares.nes 
+    0x5519A326, //  Modern\Donkey Kong - Original Edition (NTSC).nes 
+    0x90B1B309, //  Modern\Donkey Kong - Original Edition (PAL).nes 
+    0x9908C6C9, //  Modern\Exploding Fist (Piko Interactive Evercade cartridge).nes 
+    0xE9AD2163, //  Unlicensed Elsewhere\Cosmos Cop.nes 
+    0x322C9F6A, //  Unlicensed Elsewhere\Destroyer.nes 
+    0xBF0C485D, //  Unlicensed Elsewhere\Jackpot.nes 
+/**** 189 mapper=3 submapper=2 prgrom=32K prgram=2K chrrom=32K mirror=H */
     0x642855AB, //  Bootleg Hacks\超一流 烟山杯 围棋.nes 
     0xFA7E02FA, //  Licensed Japan\早打ち Super 囲碁 (rev0).nes 
     0x74F19C76, //  Licensed Japan\早打ち Super 囲碁 (rev1).nes 
-/**** 131 mapper=3 submapper=2 prgrom=32K chrrom=128K mirror=H */
+/**** 190 mapper=3 submapper=2 prgrom=32K chrrom=128K mirror=H */
     0x2B286601, //  Compatibility Hacks\美女拳 - Honey Peach [m003].nes 
-/**** 132 mapper=3 submapper=2 prgrom=16K chrrom=16K mirror=V */
+/**** 191 mapper=3 submapper=2 prgrom=16K chrrom=16K mirror=V */
     0xCDF27B7C, //  Homebrew\Demos\Super Fighter Demo [Chris Covell].nes 
-/**** 133 mapper=3 submapper=2 prgrom=16K chrrom=32K mirror=V */
+/**** 192 mapper=3 submapper=2 prgrom=16K chrrom=32K mirror=V */
     0xF278E465, //  Compatibility Hacks\Bird Week [m003].nes 
-/**** 134 mapper=3 submapper=2 prgrom=32K chrrom=8K mirror=V */
+/**** 193 mapper=3 submapper=2 prgrom=32K chrrom=8K mirror=V */
     0x08E11357, //  Bad Dumps\Super Dyna'mix Badminton [missing CHR bank].nes 
-/**** 135 mapper=3 submapper=2 prgrom=32K chrrom=16K mirror=V */
-    0x655BC8FC, //  Bad Dumps\Balloon Monster [CHR overdump].nes 
+/**** 194 mapper=3 submapper=2 prgrom=32K chrrom=16K mirror=V */
     0x395BE496, //  Bad Dumps\Super Maruo [CHR overdump].nes 
     0x14B3D977, //  Bootleg Singles\Bung Game Doctor\(D001) City Connection.nes 
     0x007BB58A, //  Bootleg Singles\Bung Game Doctor\(E002) The Goonies.nes 
@@ -4057,7 +4252,6 @@ static const u32 s_crcs[] = {
     0xB379F50D, //  Homebrew\Robo-Ninja Climb (NESdev 2017).nes 
     0x57B2EA2F, //  Homebrew\Robo-Ninja Climb (alt).nes 
     0xA8ED1000, //  Homebrew\Robo-Ninja Climb.nes 
-    0x0E3B9491, //  Homebrew\Sinking Feeling.nes 
     0x66EF7B24, //  Homebrew\Translations\English\Banana [KingMike].nes 
     0x76272E67, //  Homebrew\Translations\English\Spontaneous Musician [Psyklax].nes 
     0x2E22071C, //  Homebrew\Translations\English\Super Maruo.nes 
@@ -4067,22 +4261,21 @@ static const u32 s_crcs[] = {
     0xD074653D, //  Licensed Japan\Tetris (rev1).nes 
     0x5C5A1AB8, //  Licensed Japan\Tetris (rev2).nes 
     0x092EC15C, //  Licensed Japan\いきなり Musician.nes 
-    0xAB2006B4, //  Licensed North America\Donkey Kong Classics.nes 
     0x3413E33B, //  Modern\Virtual Console\Seicross.nes 
-    0x09CA75FB, //  Samples\Project Blue [Toggle Switch &amp; Frankengraphics].nes 
     0xF0F14C4C, //  Samples\Star Soldier.nes 
-    0xBF6418AA, //  Unlicensed Elsewhere\Adam &amp; Eve.nes 
     0x89E6C1F1, //  Unlicensed Taiwan&amp;Hong Kong\Adam &amp; Eve.nes 
     0xCF4483AF, //  Unreleased\Banana (1986-00-00).nes 
     0x7C42CB7B, //  Unreleased\Banana (1986-06-30).nes 
-/**** 136 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=V */
-    0x637BA508, //  Bad Dumps\Adam &amp; Eve [CHR overdump].nes 
+/**** 195 mapper=3 submapper=2 prgrom=32K chrrom=16K mirror=V system=SYSTEM_NTSC */
+    0x655BC8FC, //  Bad Dumps\Balloon Monster [CHR overdump].nes 
+    0x0E3B9491, //  Homebrew\Sinking Feeling.nes 
+    0xAB2006B4, //  Licensed North America\Donkey Kong Classics.nes 
+    0x09CA75FB, //  Samples\Project Blue [Toggle Switch &amp; Frankengraphics].nes 
+    0xBF6418AA, //  Unlicensed Elsewhere\Adam &amp; Eve.nes 
+/**** 196 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=V */
     0xB66A1BAE, //  Bad Dumps\Ballnana [CHR overdump].nes 
     0x019F531B, //  Bad Dumps\Banana [KingMike][overdumped CHR].nes 
-    0xCB04726D, //  Bad Dumps\Magic Carpet 1001 [bad CHR].nes 
     0xC9EE15A7, //  Bootleg Hacks\Aladdin III (A-N2).nes 
-    0xC83A89DA, //  Bootleg Hacks\Harry Potter (Magic Carpet 1001).nes 
-    0xFD5D51BE, //  Bootleg Hacks\Harry Tour.nes 
     0x4C455DF7, //  Bootleg Hacks\Super Barbie.nes 
     0x623020FB, //  Bootleg Hacks\孫小毛 奇幻島 - Kiddy Sun in Fantasia.nes 
     0x886B5BD3, //  Bootleg Singles\Bung Game Doctor\(F001) ゲゲゲの鬼太郎꞉ 妖怪大魔境.nes 
@@ -4138,7 +4331,6 @@ static const u32 s_crcs[] = {
     0x407B4AFA, //  Homebrew\Antenna Antics [FG Software].nes 
     0x9447458A, //  Homebrew\Bugfixes, Improvements\Elfland [restored CHR data][NewRisingSun].nes 
     0x6A6A6100, //  Homebrew\Bugfixes, Improvements\Star Soldier (Special Version)[homebrew restoration].nes 
-    0x272A1063, //  Homebrew\Bust-A-Nut.nes 
     0x2A0C9105, //  Homebrew\Demos\Tanespot [Dreamhack].nes 
     0x8AFA82C8, //  Homebrew\Elusion of the Dead (Early Concept 2).nes 
     0xA574B2B4, //  Homebrew\Espitenen und Herr Pimponen.nes 
@@ -4148,17 +4340,9 @@ static const u32 s_crcs[] = {
     0xA0540F23, //  Homebrew\Hacks\Chodius.nes 
     0x76E69AD8, //  Homebrew\Hacks\Marioくん (Moaiくん).nes 
     0x0E891078, //  Homebrew\Hacks\Nesrocks' Adventure Island Speedrun (v1.2)[Nesrocks].nes 
-    0x4CB3E559, //  Homebrew\Hacks\Super Mario Bros. series\Lady Opera in Swf Panic! [Darkdata].nes 
-    0x64BB4540, //  Homebrew\Hacks\Super Mario Bros. series\Mario is Lost on Mystic Island [teeporage777].nes 
-    0x082626ED, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. with Super Mario Bros. 3 Graphics [GeneralGir2].nes 
-    0xD01C81D9, //  Homebrew\Hacks\Super Mario Bros. series\Toad's Christmas Adventure.nes 
-    0x9436C354, //  Homebrew\Hacks\Super Mario Bros. series\Toadette's Christmas Adventure.nes 
-    0x2DBFB836, //  Homebrew\Inherent Smile (NESdev 2017).nes 
-    0xDD7B06B5, //  Homebrew\Inherent Smile (v1.1).nes 
     0x9B405349, //  Homebrew\Nin Nin.nes 
     0xE4E874C7, //  Homebrew\Saturn Smash.nes 
     0x2EC1E92E, //  Homebrew\Solar Wars (v1.5).nes 
-    0x9CE3374D, //  Homebrew\The Alfonzo Game.nes 
     0x4F42D622, //  Homebrew\Translations\English\Cadillac [Gil Galad].nes 
     0x11F238D0, //  Homebrew\Translations\English\Dragon Quest [Polynim v1.3, Bregalad v1.0](Quick EXP).nes 
     0x610FA718, //  Homebrew\Translations\English\Dragon Quest [Polynim v1.3, Bregalad v1.0].nes 
@@ -4263,18 +4447,8 @@ static const u32 s_crcs[] = {
     0x983948A5, //  Licensed North America\The Karate Kid.nes 
     0x6997F5E1, //  Licensed North America\The Last Starfighter.nes 
     0x9C9F3571, //  Licensed North America\Track &amp; Field.nes 
-    0xE592F53A, //  Licensed PAL\Athletic World.nes 
-    0x681798A8, //  Licensed PAL\City Connection.nes 
-    0xE402B134, //  Licensed PAL\Drop Zone.nes 
-    0x51C51C35, //  Licensed PAL\Gradius.nes 
-    0x86867830, //  Licensed PAL\Hudson's Adventure Island.nes 
-    0x5CE55F5B, //  Licensed PAL\Star Force.nes 
-    0x5D99053D, //  Licensed PAL\Track &amp; Field in Barcelona.nes 
-    0x0C54AB9D, //  Modern\Alfonzo Melee!.nes 
-    0xEC9C9E93, //  Modern\Eskimo Bob Starring Alfonzo.nes 
     0xA6D73BC3, //  Modern\Hudson Best Collection\Star Soldier.nes 
     0xA0318BB4, //  Modern\Hudson Best Collection\迷宮組曲꞉ Milonの大冒険.nes 
-    0x6DB09CC7, //  Modern\Virtual Console\City Connection (World).nes 
     0x4D998633, //  Modern\Virtual Console\Milon's Secret Castle.nes 
     0xCFB4A313, //  Modern\Virtual Console\つっぱり大相撲.nes 
     0x4095BB67, //  Modern\Virtual Console\戦え! 超 Robot 生命体 Transformers꞉ Convoyの謎.nes 
@@ -4283,15 +4457,8 @@ static const u32 s_crcs[] = {
     0x167C5EDB, //  Playchoice\Track &amp; Field.nes 
     0xAEC8D250, //  Samples\Cadillac.nes 
     0x22D7C95E, //  Samples\迷宮組曲꞉ Milonの大冒険.nes 
-    0x86083FBC, //  Unlicensed Elsewhere\Go! Benny!.nes 
-    0xBAACF521, //  Unlicensed Elsewhere\Magic Block.nes 
-    0xC3AACD94, //  Unlicensed Elsewhere\Magic Carpet 1001.nes 
     0x0CEB9526, //  Unlicensed Taiwan&amp;Hong Kong\Elfland.nes 
-    0x4C1BFF78, //  Unlicensed Taiwan&amp;Hong Kong\Go! Benny!.nes 
-    0x1A018A26, //  Unlicensed Taiwan&amp;Hong Kong\Huge Insect.nes 
-    0x303D483D, //  Unlicensed Taiwan&amp;Hong Kong\Magic Carpet 1001.nes 
     0xC70409AB, //  Unlicensed Taiwan&amp;Hong Kong\Pokey.nes 
-    0x2BA86F76, //  Unlicensed Taiwan&amp;Hong Kong\Sea of Dreamland.nes 
     0x42110147, //  Unlicensed Taiwan&amp;Hong Kong\Tank 風雲 - King Tank.nes 
     0x1CF48EF1, //  Unlicensed Taiwan&amp;Hong Kong\双响炮.nes 
     0x722F4E38, //  Unlicensed Taiwan&amp;Hong Kong\戰國四川省 (C&amp;E).nes 
@@ -4306,42 +4473,71 @@ static const u32 s_crcs[] = {
     0x162F328E, //  Unreleased\算数 4年 けいさん Game.nes 
     0x9EF351DC, //  Unreleased\算数 5,6年 けいさん Game.nes 
     0xFE9FE4DA, //  Unreleased\長靴をはいた猫 世界一周 80日大冒険.nes 
-/**** 137 mapper=3 submapper=2 prgrom=32K prgram=2K chrrom=32K mirror=V */
+/**** 197 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=V system=SYSTEM_PAL */
+    0x272A1063, //  Homebrew\Bust-A-Nut.nes 
+    0xE592F53A, //  Licensed PAL\Athletic World.nes 
+    0x681798A8, //  Licensed PAL\City Connection.nes 
+    0xE402B134, //  Licensed PAL\Drop Zone.nes 
+    0x51C51C35, //  Licensed PAL\Gradius.nes 
+    0x86867830, //  Licensed PAL\Hudson's Adventure Island.nes 
+    0x5CE55F5B, //  Licensed PAL\Star Force.nes 
+    0x5D99053D, //  Licensed PAL\Track &amp; Field in Barcelona.nes 
+/**** 198 mapper=3 submapper=2 prgrom=32K chrrom=32K mirror=V system=SYSTEM_NTSC */
+    0x637BA508, //  Bad Dumps\Adam &amp; Eve [CHR overdump].nes 
+    0xCB04726D, //  Bad Dumps\Magic Carpet 1001 [bad CHR].nes 
+    0xC83A89DA, //  Bootleg Hacks\Harry Potter (Magic Carpet 1001).nes 
+    0xFD5D51BE, //  Bootleg Hacks\Harry Tour.nes 
+    0x4CB3E559, //  Homebrew\Hacks\Super Mario Bros. series\Lady Opera in Swf Panic! [Darkdata].nes 
+    0x64BB4540, //  Homebrew\Hacks\Super Mario Bros. series\Mario is Lost on Mystic Island [teeporage777].nes 
+    0x082626ED, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. with Super Mario Bros. 3 Graphics [GeneralGir2].nes 
+    0xD01C81D9, //  Homebrew\Hacks\Super Mario Bros. series\Toad's Christmas Adventure.nes 
+    0x9436C354, //  Homebrew\Hacks\Super Mario Bros. series\Toadette's Christmas Adventure.nes 
+    0x2DBFB836, //  Homebrew\Inherent Smile (NESdev 2017).nes 
+    0xDD7B06B5, //  Homebrew\Inherent Smile (v1.1).nes 
+    0x9CE3374D, //  Homebrew\The Alfonzo Game.nes 
+    0x0C54AB9D, //  Modern\Alfonzo Melee!.nes 
+    0xEC9C9E93, //  Modern\Eskimo Bob Starring Alfonzo.nes 
+    0x6DB09CC7, //  Modern\Virtual Console\City Connection (World).nes 
+    0x86083FBC, //  Unlicensed Elsewhere\Go! Benny!.nes 
+    0xBAACF521, //  Unlicensed Elsewhere\Magic Block.nes 
+    0xC3AACD94, //  Unlicensed Elsewhere\Magic Carpet 1001.nes 
+    0x4C1BFF78, //  Unlicensed Taiwan&amp;Hong Kong\Go! Benny!.nes 
+    0x1A018A26, //  Unlicensed Taiwan&amp;Hong Kong\Huge Insect.nes 
+    0x303D483D, //  Unlicensed Taiwan&amp;Hong Kong\Magic Carpet 1001.nes 
+    0x2BA86F76, //  Unlicensed Taiwan&amp;Hong Kong\Sea of Dreamland.nes 
+/**** 199 mapper=3 submapper=2 prgrom=32K prgram=2K chrrom=32K mirror=V */
     0xF2ABEB30, //  Bootleg Singles\Bung Game Doctor\早打ち Super 囲碁.nes 
     0x98087E4D, //  Bootleg Singles\Front Fareast Magic Card\(F1159) 早打ち Super 囲碁.nes 
-/**** 138 mapper=3 submapper=2 prgrom=32K chrrom=128K mirror=V */
+/**** 200 mapper=3 submapper=2 prgrom=32K chrrom=128K mirror=V */
     0x6381A369, //  Bad Dumps\Galf [CHR overdump].nes 
     0xC569BBE1, //  Homebrew\Translations\English\Family Trainer꞉ Jogging Race [Jink640, MrRichard999 v1.01].nes 
     0x2F128512, //  Licensed Japan\Family Trainer꞉ Jogging Race.nes 
-/**** 139 mapper=3 submapper=2 prgrom=128K chrrom=128K mirror=V */
+/**** 201 mapper=3 submapper=2 prgrom=128K chrrom=128K mirror=V */
     0x3A96F1B1, //  Bad Dumps\Galf [PRG+CHR overdump].nes 
-/**** 140 mapper=4 prgrom=32K chrrom=16K mirror=4 */
+/**** 202 mapper=4 prgrom=32K chrrom=16K mirror=4 system=SYSTEM_NTSC */
     0xAA1814F5, //  Homebrew\Crypto.nes 
     0xF6334554, //  Samples\Crypto.nes 
-/**** 141 mapper=4 prgrom=64K chrrom=64K mirror=4 */
+/**** 203 mapper=4 prgrom=64K chrrom=64K mirror=4 */
     0x404B2E8B, //  Licensed North America\Rad Racer II.nes 
     0x998BFC08, //  Playchoice\Rad Racer 2.nes 
-/**** 142 mapper=4 prgrom=128K chrrom=64K mirror=4 */
+/**** 204 mapper=4 prgrom=128K chrrom=64K mirror=4 */
     0xEC968C51, //  Licensed North America\Gauntlet.nes 
     0x35193823, //  Playchoice\Gauntlet.nes 
-/**** 143 mapper=4 prgrom=256K chrrom=128K mirror=4 */
+/**** 205 mapper=4 prgrom=256K chrrom=128K mirror=4 system=SYSTEM_NTSC */
     0x491CD95E, //  Unlicensed Taiwan&amp;Hong Kong\Jurassic Boy 2.nes 
-/**** 144 mapper=4 prgrom=256K chrrom=256K mirror=4 */
+/**** 206 mapper=4 prgrom=256K chrrom=256K mirror=4 system=SYSTEM_NTSC */
     0x9F7BF36F, //  Homebrew\Translations\Chinese (Traditional)\洛克人X.nes 
     0x36CA3102, //  Unlicensed Taiwan&amp;Hong Kong\Rocman X.nes 
-/**** 145 mapper=4 prgrom=16K chrrom=8K mirror=H */
+/**** 207 mapper=4 prgrom=16K chrrom=8K mirror=H */
     0x70B4A437, //  Homebrew\Demos\Color 64.nes 
     0x2F95D72B, //  Plug-and-Play\extracts\Five Days.nes 
     0x85DA9C47, //  Plug-and-Play\extracts\Plush Dog.nes 
-/**** 146 mapper=4 prgrom=32K chrram=8K mirror=H */
+/**** 208 mapper=4 prgrom=32K chrram=8K mirror=H */
     0x81A2CC4A, //  Multicarts\extracts\(福州 Coolboy) 245-in-1 Real Game (menu).nes 
-/**** 147 mapper=4 prgrom=32K prgram=8K chrram=8K mirror=H */
+/**** 209 mapper=4 prgrom=32K prgram=8K chrram=8K mirror=H */
     0x2A72A051, //  Homebrew\鳥之诗.nes 
-/**** 148 mapper=4 prgrom=32K chrrom=8K mirror=H */
-    0x9BC42E51, //  Educational Computers\extracts\Add &amp; Sub.nes 
-    0xC1980560, //  Educational Computers\extracts\Calculator 1.nes 
+/**** 210 mapper=4 prgrom=32K chrrom=8K mirror=H */
     0x00514347, //  Educational Computers\extracts\Multiplication.nes 
-    0xFFDB9179, //  Homebrew\Demos\Fullscreen Madness.nes 
     0x9CDC9AFD, //  Homebrew\Putt Putt.nes 
     0xBE003042, //  Homebrew\Tests\My First Sample Test.nes 
     0x8EFFF29B, //  Multicarts\extracts\Awful Rushing+Moto Boat.nes 
@@ -4358,11 +4554,16 @@ static const u32 s_crcs[] = {
     0x26F38C2C, //  Plug-and-Play\extracts\Rocketman.nes 
     0x0EC70C7C, //  Plug-and-Play\extracts\Slot Machine.nes 
     0x92324D59, //  Plug-and-Play\extracts\Twin Fish (FC).nes 
-/**** 149 mapper=4 prgrom=32K prgram=8K chrrom=8K mirror=H */
+/**** 211 mapper=4 prgrom=32K chrrom=8K mirror=H system=SYSTEM_PAL */
+    0xFFDB9179, //  Homebrew\Demos\Fullscreen Madness.nes 
+/**** 212 mapper=4 prgrom=32K chrrom=8K mirror=H system=SYSTEM_NTSC */
+    0x9BC42E51, //  Educational Computers\extracts\Add &amp; Sub.nes 
+    0xC1980560, //  Educational Computers\extracts\Calculator 1.nes 
+/**** 213 mapper=4 prgrom=32K prgram=8K chrrom=8K mirror=H */
     0xB04C8201, //  Homebrew\Demos\Mario Flicker - Color Demo.nes 
     0x34F94A8C, //  Homebrew\Demos\Pattern Table Pixel - Flickering Demo.nes 
     0x156DF4FB, //  Homebrew\Tests\Colorful.nes 
-/**** 150 mapper=4 prgrom=32K chrrom=16K mirror=H */
+/**** 214 mapper=4 prgrom=32K chrrom=16K mirror=H */
     0xEF9859E4, //  Homebrew\Connect 4.nes 
     0x27F71D87, //  Homebrew\Tests\Serial.nes 
     0x5D4CAC4B, //  Homebrew\The Adventures of Lex &amp; Grim.nes 
@@ -4374,7 +4575,7 @@ static const u32 s_crcs[] = {
     0x2A561F41, //  Plug-and-Play\extracts\Rabbit Village.nes 
     0x44A6CA07, //  Plug-and-Play\extracts\Road Worker.nes 
     0xC042B605, //  Plug-and-Play\extracts\Vigilant.nes 
-/**** 151 mapper=4 prgrom=32K chrrom=32K mirror=H */
+/**** 215 mapper=4 prgrom=32K chrrom=32K mirror=H */
     0x73EA3196, //  Bootleg Hacks\7-up 2꞉ Spot the Cool Adventures (KT-2167).nes 
     0x3A3B5E59, //  Bootleg Singles\TouchGamePlayer\Adventures of Lolo 2.nes 
     0xD4FE398C, //  Bootleg Singles\TouchGamePlayer\Adventures of Lolo.nes 
@@ -4392,38 +4593,41 @@ static const u32 s_crcs[] = {
     0x1992D163, //  Licensed North America\Adventures of Lolo 2.nes 
     0xCE228874, //  Licensed North America\Burai Fighter.nes 
     0xDE8FD935, //  Licensed North America\To the Earth.nes 
+    0xF3ECFDAA, //  Modern\Virtual Console\Adventures of Lolo 2 (NTSC).nes 
+    0x0751D47D, //  Multicarts\extracts\Panda Adventure (CB-4034).nes 
+/**** 216 mapper=4 prgrom=32K chrrom=32K mirror=H system=SYSTEM_PAL */
     0x853FEEA4, //  Licensed PAL\Adventures of Lolo 2.nes 
     0x28492586, //  Licensed PAL\Burai Fighter.nes 
     0x790B295B, //  Licensed PAL\To the Earth.nes 
-    0xF3ECFDAA, //  Modern\Virtual Console\Adventures of Lolo 2 (NTSC).nes 
     0x6F41C26D, //  Modern\Virtual Console\Adventures of Lolo 2 (PAL).nes 
-    0x0751D47D, //  Multicarts\extracts\Panda Adventure (CB-4034).nes 
-/**** 152 mapper=4 prgrom=32K chrrom=40K mirror=H */
+/**** 217 mapper=4 prgrom=32K chrrom=40K mirror=H */
     0xF249075D, //  Homebrew\Demos\Pulsewave.nes 
-/**** 153 mapper=4 prgrom=32K chrrom=56K mirror=H */
+/**** 218 mapper=4 prgrom=32K chrrom=56K mirror=H */
     0xD47164E2, //  Homebrew\Demos\Super Stalin Bros. [TAONGAD].nes 
-/**** 154 mapper=4 prgrom=32K chrrom=64K mirror=H */
+/**** 219 mapper=4 prgrom=32K chrrom=64K mirror=H */
     0x146B5C5A, //  Bootleg Singles\TouchGamePlayer\Angry Birds.nes 
     0x7A3D7004, //  Homebrew\Crazy Bus [FG Software].nes 
-/**** 155 mapper=4 prgrom=32K chrrom=128K mirror=H */
+/**** 220 mapper=4 prgrom=32K chrrom=128K mirror=H */
     0x54346B3F, //  Homebrew\ChuChu Rocket!.nes 
-/**** 156 mapper=4 prgrom=32K chrrom=256K mirror=H */
+/**** 221 mapper=4 prgrom=32K chrrom=256K mirror=H system=SYSTEM_PAL */
     0x5204949E, //  Homebrew\Demos\Shaping Reality [8bitpeoples].nes 
-/**** 157 mapper=4 prgrom=64K chrram=8K mirror=H */
+/**** 222 mapper=4 prgrom=64K chrram=8K mirror=H */
     0x54F93D92, //  Homebrew\NSF Players\Kirby's Dream Land.nes 
-/**** 158 mapper=4 prgrom=64K chrrom=8K mirror=H */
+/**** 223 mapper=4 prgrom=64K chrrom=8K mirror=H */
     0xFD0BB368, //  Homebrew\Demos\Rockman 9.nes 
     0xB1C964A8, //  Homebrew\Mega Man 9 Project.nes 
-/**** 159 mapper=4 prgrom=64K chrrom=16K mirror=H */
-    0xA39A8F6E, //  Homebrew\Hacks\Super Mario Bros. series\Extra Mario Bros. [ATA].nes 
+/**** 224 mapper=4 prgrom=64K chrrom=16K mirror=H */
     0xF71AB1B0, //  Plug-and-Play\extracts\Sky Zone.nes 
-/**** 160 mapper=4 prgrom=64K chrrom=32K mirror=H */
+/**** 225 mapper=4 prgrom=64K chrrom=16K mirror=H system=SYSTEM_NTSC */
+    0xA39A8F6E, //  Homebrew\Hacks\Super Mario Bros. series\Extra Mario Bros. [ATA].nes 
+/**** 226 mapper=4 prgrom=64K chrrom=32K mirror=H */
     0x9C2DE911, //  Bootleg Singles\The Tiny Toon 3 Crazy Castle.nes 
     0x95128CA0, //  Bootleg Singles\TouchGamePlayer\R.B.I. Baseball.nes 
     0xFD5F2D07, //  Compatibility Hacks\Vs. Gradius [home console].nes 
     0x8D7CBF44, //  Homebrew\Wraith.nes 
+/**** 227 mapper=4 prgrom=64K chrrom=32K mirror=H system=SYSTEM_NTSC */
     0x235B54DB, //  Unlicensed China\TCL王牌꞉ 王牌海战.nes 
-/**** 161 mapper=4 prgrom=64K chrrom=64K mirror=H */
+/**** 228 mapper=4 prgrom=64K chrrom=64K mirror=H */
     0xCCD18661, //  Bootleg Hacks\II International FIFA 97.nes 
     0xD56EF1E3, //  Bootleg Hacks\The Tiny Toon 3 Crazy Castle.nes 
     0x0A6E9645, //  Bootleg Singles\TouchGamePlayer\FIFA III - 2006.nes 
@@ -4431,35 +4635,37 @@ static const u32 s_crcs[] = {
     0x94E27E04, //  Homebrew\Hacks\Aoki Densetsu Shoot꞉ Tecmo World Cup Soccer [Knighteen87].nes 
     0x9CBB0291, //  Licensed Japan\Super Sprint.nes 
     0x8A5BC0D3, //  Licensed Japan\Tecmo World Cup Soccer.nes 
-    0x86E02D65, //  Licensed PAL\Tecmo World Cup Soccer.nes 
     0x96F328FF, //  Plug-and-Play\extracts\Jungle Adventure.nes 
+/**** 229 mapper=4 prgrom=64K chrrom=64K mirror=H system=SYSTEM_PAL */
+    0x86E02D65, //  Licensed PAL\Tecmo World Cup Soccer.nes 
+/**** 230 mapper=4 prgrom=64K chrrom=64K mirror=H system=SYSTEM_NTSC */
     0x153EB948, //  Unlicensed China\鋤大D.nes 
-/**** 162 mapper=4 prgrom=128K chrram=8K mirror=H */
+/**** 231 mapper=4 prgrom=128K chrram=8K mirror=H */
     0xEB637549, //  Homebrew\Demos\Sorcerian for FC [Coke774].nes 
     0xB5E24324, //  Licensed Japan\Ninja Crusaders꞉ 龍牙.nes 
     0x3D1C4894, //  Licensed North America\Ninja Crusaders.nes 
-/**** 163 mapper=4 prgrom=128K prgram=8K chrram=8K mirror=H */
+/**** 232 mapper=4 prgrom=128K prgram=8K chrram=8K mirror=H */
     0x023EDD1A, //  Compatibility Hacks\もえろ TwinBee꞉ Cinnamon 博士を救え! (LG25)[m004].nes 
     0xDE6A3FF9, //  Homebrew\Demos\Ray Casting Demo [Celius].nes 
     0x25E26057, //  Homebrew\NESdev Project.nes 
     0xCF992E34, //  Unreleased\Blockout.nes 
-/**** 164 mapper=4 prgrom=128K chrrom=8K mirror=H */
+/**** 233 mapper=4 prgrom=128K chrrom=8K mirror=H */
     0x60037099, //  Homebrew\The Tao of 007.nes 
-/**** 165 mapper=4 prgrom=128K chrrom=16K mirror=H */
+/**** 234 mapper=4 prgrom=128K chrrom=16K mirror=H */
     0x334E69AC, //  Homebrew\Bugfixes, Improvements\Dikki Paingun in TKO for the Third Reich [real hardware].nes 
     0x75378399, //  Homebrew\Dikki Paingun in TKO for the Third Reich.nes 
-/**** 166 mapper=4 prgrom=128K chrrom=32K mirror=H */
+/**** 235 mapper=4 prgrom=128K chrrom=32K mirror=H */
     0x558F7A7C, //  Homebrew\Utaco (Final).nes 
     0xF7CF24FB, //  Homebrew\Utaco.nes 
     0x83FC38F8, //  Licensed North America\Mappy-Land.nes 
-    0xE2F77868, //  Modern\Virtual Console\Mappy-Land.nes 
     0xDFEEF042, //  Plug-and-Play\extracts\Vanguard.nes 
-/**** 167 mapper=4 prgrom=128K chrrom=64K mirror=H */
+/**** 236 mapper=4 prgrom=128K chrrom=32K mirror=H system=SYSTEM_NTSC */
+    0xE2F77868, //  Modern\Virtual Console\Mappy-Land.nes 
+/**** 237 mapper=4 prgrom=128K chrrom=64K mirror=H */
     0xF0B1B568, //  Bootleg Hacks\Coast Speed.nes 
     0x0652445D, //  Bootleg Hacks\Mario 12.nes 
     0x0EE54B6A, //  Bootleg Singles\TouchGamePlayer\Rock 'n Ball.nes 
     0x70178745, //  Bootleg Singles\TouchGamePlayer\The Tiny Toon 3 Crazy Castle.nes 
-    0xD84AD16C, //  Homebrew\Demos\High Hopes [aspekt].nes 
     0xBA6CA54A, //  Homebrew\Galaxxon꞉ The Third War (alt)[Psych].nes 
     0x565AB57E, //  Homebrew\Galaxxon꞉ The Third War [Psych].nes 
     0x3B341B9C, //  Homebrew\Vigilante Ninja 2.nes 
@@ -4471,27 +4677,28 @@ static const u32 s_crcs[] = {
     0x263AC8A0, //  Licensed North America\Rampage.nes 
     0x476E022B, //  Licensed North America\Rock 'n Ball.nes 
     0x52B58732, //  Licensed North America\Yoshi's Cookie.nes 
-    0xE37A39AB, //  Licensed PAL\Yoshi's Cookie.nes 
     0xE421E2B3, //  Modern\Namco Museum Archives\Legacy of the Wizard.nes 
     0x775D14CC, //  Modern\Star Versus (TLROM).nes 
     0x64FDE029, //  Modern\Virtual Console\Yoshi's Cookie (NTSC).nes 
     0x4CAECD7D, //  Plug-and-Play\extracts\Justice.nes 
     0x98F71BB0, //  Plug-and-Play\extracts\War.nes 
     0x7D6B3BA2, //  Unlicensed Taiwan&amp;Hong Kong\Pocket Monster.nes 
+/**** 238 mapper=4 prgrom=128K chrrom=64K mirror=H system=SYSTEM_PAL */
+    0xD84AD16C, //  Homebrew\Demos\High Hopes [aspekt].nes 
+    0xE37A39AB, //  Licensed PAL\Yoshi's Cookie.nes 
+/**** 239 mapper=4 prgrom=128K chrrom=64K mirror=H system=SYSTEM_NTSC */
     0x6540FBE3, //  Unreleased\Music Box.nes 
-/**** 168 mapper=4 prgrom=128K chrrom=88K mirror=H */
+/**** 240 mapper=4 prgrom=128K chrrom=88K mirror=H */
     0xC8D69902, //  Unreleased\Mick &amp; Mack as the Global Gladiators (1993-05-28 #1).nes 
     0xCDEE5934, //  Unreleased\Mick &amp; Mack as the Global Gladiators (1993-05-28 #2).nes 
-/**** 169 mapper=4 prgrom=128K chrrom=96K mirror=H */
+/**** 241 mapper=4 prgrom=128K chrrom=96K mirror=H */
     0xAE4DD2E9, //  Unreleased\Mick &amp; Mack as the Global Gladiators (1993-06-16).nes 
-/**** 170 mapper=4 prgrom=128K chrrom=128K mirror=H */
+/**** 242 mapper=4 prgrom=128K chrrom=128K mirror=H */
     0xC23025CD, //  Bad Dumps\Batman Flash [bad CHR].nes 
-    0x92D9D268, //  Bad Dumps\Music Box [CHR overdump].nes 
     0x52D8EE1C, //  Bad Dumps\Nintendo World Cup [missing PROM].nes 
     0x8A02A8FD, //  Bad Dumps\Pokémon Blue [bad CHR].nes 
     0x4A6E8161, //  Bad Dumps\Pokémon Silver [bad CHR, text missing].nes 
     0xA2BD26DE, //  Bad Dumps\SMB Tiny Mario Adventures [bad CHR].nes 
-    0x3CEEFAD6, //  Bad Dumps\Street Gangs [bad CHR].nes 
     0xFF5BC56A, //  Bootleg Hacks\4-in-1 忍者2系列 (AA6156).nes 
     0x64558FC4, //  Bootleg Hacks\4-in-1 忍者3系列 (AA6157).nes 
     0x5452966E, //  Bootleg Hacks\9-in-1 キャッ党忍伝てやんでえ.nes 
@@ -4540,7 +4747,6 @@ static const u32 s_crcs[] = {
     0xB19CBC98, //  Bootleg Hacks\Super Bros. 16.nes 
     0x08D9DDAB, //  Bootleg Hacks\Super Bros. 6.nes 
     0xAAC75B3A, //  Bootleg Hacks\Super Contra 6.nes 
-    0xEE5618C0, //  Bootleg Hacks\Super Contra 8.nes 
     0xE0B73FC2, //  Bootleg Hacks\Super Fighter.nes 
     0x9BB66333, //  Bootleg Hacks\Super Fighters.nes 
     0x5DD6ECB9, //  Bootleg Hacks\Super Mario 15.nes 
@@ -4574,7 +4780,6 @@ static const u32 s_crcs[] = {
     0xEC106744, //  Bootleg Singles\Monster in My Pocket (M-I6).nes 
     0x59949CA4, //  Bootleg Singles\NBA '98 (NT-6098).nes 
     0x349678D7, //  Bootleg Singles\NBA Live '96 (NT-865).nes 
-    0x37B6D70D, //  Bootleg Singles\Pokémon 4-in-1.nes 
     0xB56DA862, //  Bootleg Singles\Samurai Zombie Nation (LEE08072).nes 
     0x945020B7, //  Bootleg Singles\Super 魂斗羅 (1990 Yellow).nes 
     0xEE21F263, //  Bootleg Singles\Super 魂斗羅 (S-P1).nes 
@@ -4585,9 +4790,7 @@ static const u32 s_crcs[] = {
     0x7E90F5B1, //  Bootleg Singles\Tiny Toon Adventures 2꞉ Trouble in Wackyland (LEE05040).nes 
     0xE7962A37, //  Bootleg Singles\TouchGamePlayer\Astyanax.nes 
     0xBFC07ACE, //  Bootleg Singles\TouchGamePlayer\Blaster Master.nes 
-    0xF2A81699, //  Bootleg Singles\TouchGamePlayer\Blue Shadow.nes 
     0x1AF0296E, //  Bootleg Singles\TouchGamePlayer\Bubble Bobble Part 2.nes 
-    0x5342C6F7, //  Bootleg Singles\TouchGamePlayer\Bucky O'Hare.nes 
     0x08D5A6EC, //  Bootleg Singles\TouchGamePlayer\ChipとDaleの大作戦.nes 
     0x57B247B5, //  Bootleg Singles\TouchGamePlayer\Contra Force.nes 
     0xB5C286F6, //  Bootleg Singles\TouchGamePlayer\Contra.nes 
@@ -4604,8 +4807,6 @@ static const u32 s_crcs[] = {
     0xC216749C, //  Bootleg Singles\TouchGamePlayer\Monster in My Pocket.nes 
     0xBC6E3FA6, //  Bootleg Singles\TouchGamePlayer\P.O.W. - Prisoners of War.nes 
     0x7D02DACA, //  Bootleg Singles\TouchGamePlayer\Panic Restaurant.nes 
-    0xEFB1F076, //  Bootleg Singles\TouchGamePlayer\RoboCop.nes 
-    0x1CED49AC, //  Bootleg Singles\TouchGamePlayer\Street Gangs.nes 
     0x94F40662, //  Bootleg Singles\TouchGamePlayer\Teenage Mutant Ninja Turtles꞉ Tournament Fighters.nes 
     0x65D83C5E, //  Bootleg Singles\TouchGamePlayer\Wacky Races.nes 
     0x2E181061, //  Bootleg Singles\TouchGamePlayer\Whomp'em.nes 
@@ -4620,9 +4821,7 @@ static const u32 s_crcs[] = {
     0x19BA3688, //  Compatibility Hacks\Mickey's Safari in Letterland [Nintendo MMC3].nes 
     0xBCC91AB3, //  Compatibility Hacks\Super Hang-On [m004].nes 
     0xDEE05A23, //  Compatibility Hacks\Super Mario 14 [m004].nes 
-    0x798A2012, //  Compatibility Hacks\TV System Conversions\Probotector II꞉ Return of the Evil Forces (Dendy)[NewRisingSun].nes 
     0x1F41220E, //  Compatibility Hacks\TV System Conversions\Probotector II꞉ Return of the Evil Forces (NTSC)[NewRisingSun].nes 
-    0xF0A65D85, //  Compatibility Hacks\Toy Story [m004][NewRisingSun].nes 
     0x3E85BA0F, //  Compatibility Hacks\獵殺侏羅紀 - Blood of Jurassic [m004][NewRisingSun].nes 
     0xF911383F, //  Homebrew\Almost Hero.nes 
     0xCE47005A, //  Homebrew\Bugfixes, Improvements\Batman꞉ The Video Game.nes 
@@ -4638,7 +4837,6 @@ static const u32 s_crcs[] = {
     0xFB2CC161, //  Homebrew\Hacks\8 Eyes to Castlevania Conversion (v0.3)[Elbobelo].nes 
     0xC0BFE9D1, //  Homebrew\Hacks\Adventure Island 3꞉ The Lost Aisles [Aether-K].nes 
     0x3B532B87, //  Homebrew\Hacks\Astyanax Remix [Googie].nes 
-    0x7EFBC241, //  Homebrew\Hacks\Banana Prince 2꞉ Adventure of Banana Goat (v3)[Danger X].nes 
     0x422D0724, //  Homebrew\Hacks\Batman (v1.2)[Macbee].nes 
     0x97CAB75C, //  Homebrew\Hacks\Batman Robin꞉ Shadows of Gotham (v1.1)[Magnus Nilsson].nes 
     0xA382A2EC, //  Homebrew\Hacks\Batman with Assassins Creed Enzo [Cakewarden].nes 
@@ -4655,13 +4853,10 @@ static const u32 s_crcs[] = {
     0x63E0DF7A, //  Homebrew\Hacks\Super Mario Adventures.nes 
     0x75355437, //  Homebrew\Hacks\Wendy 2꞉ Lost Krion [Korxtendo].nes 
     0x33D7B629, //  Homebrew\Hacks\Wolverine - Easy Version.nes 
-    0xB5A3461A, //  Homebrew\Indivisible.nes 
     0xC11E40E9, //  Homebrew\Translations\Chinese (Simplified)\成龙的龙.nes 
     0xA8F4B45E, //  Homebrew\Translations\English\Adventures in Asmik Land [Gil Galad].nes 
     0x9C5C642E, //  Homebrew\Translations\English\Altered Beast [Aka Translations].nes 
     0xE548385B, //  Homebrew\Translations\English\Astro Fang꞉ Super Machine [Caution].nes 
-    0xE7EB2689, //  Homebrew\Translations\English\Banana Prince [KingMike, elbobelo].nes 
-    0x10BD7F35, //  Homebrew\Translations\English\Banana Prince [KingMike].nes 
     0x7562AE12, //  Homebrew\Translations\English\Brave Fighter of the Sun꞉ Fighbird [Zynk Oxhyde v1.2].nes 
     0xD038F796, //  Homebrew\Translations\English\Castle Quest [Hubz, Stardust Crusaders].nes 
     0x0E52E198, //  Homebrew\Translations\English\Chef Cookie in Gourmet World [Stardust Crusaders v1.01].nes 
@@ -4699,7 +4894,6 @@ static const u32 s_crcs[] = {
     0xECE951EA, //  Homebrew\Translations\English\Riki Kunio [oRdErEDchaos v0.95].nes 
     0x8CBC305C, //  Homebrew\Translations\English\River City Ransom [FANS v1.1].nes 
     0x9FC18DDF, //  Homebrew\Translations\English\SD Hero Total Battle꞉ Defeat! The Army of Evil [Corvo].nes 
-    0xB3258212, //  Homebrew\Translations\English\Super C 7 [Pacnsacdave].nes 
     0xFB7B0EF7, //  Homebrew\Translations\English\Super Rescue꞉ Solbrain [Chronix].nes 
     0xE17C6B19, //  Homebrew\Translations\English\Superstar Pro Wrestling [Pacnsacdave].nes 
     0xA180BD71, //  Homebrew\Translations\English\Taito Chase H.Q. [Pacnsacdave].nes 
@@ -4890,7 +5084,6 @@ static const u32 s_crcs[] = {
     0xE353969F, //  Licensed North America\The Last Ninja.nes 
     0x27F8D0D2, //  Licensed North America\The Punisher.nes 
     0xE98AB943, //  Licensed North America\The Ren &amp; Stimpy Show꞉ Buckaroo$!.nes 
-    0x6272C549, //  Licensed North America\The Terminator.nes 
     0x35C6F574, //  Licensed North America\The Young Indiana Jones Chronicles.nes 
     0x81A5EB65, //  Licensed North America\Tiny Toon Adventures 2꞉ Trouble in Wackyland.nes 
     0x99DDDB04, //  Licensed North America\Tiny Toon Adventures.nes 
@@ -4911,6 +5104,94 @@ static const u32 s_crcs[] = {
     0x35476E87, //  Licensed North America\Wolverine.nes 
     0x8593E5AD, //  Licensed North America\World Champ.nes 
     0xD8578BFD, //  Licensed North America\Zen꞉ Intergalactic Ninja.nes 
+    0xA55F66D7, //  Modern\Capcom Classics꞉ Mini Mix\Mighty Final Fight.nes 
+    0x36E71F0E, //  Modern\Hudson Best Collection\高橋名人の冒険島 II.nes 
+    0x4B1F07F2, //  Modern\Hudson Best Collection\高橋名人の冒険島 III.nes 
+    0xA21BA648, //  Modern\Namco Museum Archives\Dragon Spirit꞉ The New Legend.nes 
+    0xE87092B9, //  Modern\Namco Museum Archives\Mendel Palace.nes 
+    0x6CA0B45C, //  Modern\Super C (Contra Anniversary Collection).nes 
+    0x69603DB7, //  Modern\Super C (Konami Collector's Series).nes 
+    0x39A18397, //  Modern\Virtual Console\Downtown 熱血物語.nes 
+    0xD1E6EAB9, //  Modern\Virtual Console\Ninja Gaiden III꞉ The Ancient Ship of Doom (rev0).nes 
+    0xBEFB4FA8, //  Modern\Virtual Console\Ninja Gaiden III꞉ The Ancient Ship of Doom (rev1).nes 
+    0x75CE6EE2, //  Modern\Virtual Console\Ninja Gaiden II꞉ The Dark Sword of Chaos.nes 
+    0x29A12BEA, //  Modern\Virtual Console\Shadow of the Ninja.nes 
+    0xC7F56088, //  Modern\Virtual Console\Super Chinese 2꞉ Dragon Kid.nes 
+    0xC6B1A4C4, //  Modern\Virtual Console\熱血高校 Dodgeball 部 Soccer 編.nes 
+    0x801BFFAE, //  Modern\くにおくん熱血 Collection\Downtown 熱血行進曲 ~それゆけ大運動会~.nes 
+    0x82B54765, //  Modern\くにおくん熱血 Collection\いけいけ熱血 Hockey部꞉ すべってころんで大乱闘.nes 
+    0x2B2ED4EC, //  Modern\くにおくん熱血 Collection\熱血! Street Basket ~がんばれ Dunk Heroes~.nes 
+    0x1006EBC7, //  Modern\くにおくん熱血 Collection\熱血高校 Dodgeball 部 Soccer 編.nes 
+    0xA42B731C, //  Multicarts\extracts\Chip &amp; Dale 3 (multicart extract).nes 
+    0xF7E9D60D, //  Multicarts\extracts\Cross Pacific (3810).nes 
+    0x1F09FC2B, //  Multicarts\extracts\Magic Imp (3810).nes 
+    0x52ADD886, //  Multicarts\extracts\Martian (3810).nes 
+    0xE93B0284, //  Multicarts\extracts\Massacre (3810).nes 
+    0x1DAB6162, //  Multicarts\extracts\Monster Inc..nes 
+    0xC8B5D39D, //  Multicarts\extracts\怪鴨 II - Darkwing Duck 2.nes 
+    0x737CAD2B, //  Multicarts\extracts\超強魂斗羅.nes 
+    0x5C9D57DA, //  Playchoice\Ninja Gaiden II - The Dark Sword of Chaos.nes 
+    0xC9589199, //  Playchoice\Ninja Gaiden III - The Ancient Ship of Doom.nes 
+    0x5EA8DEF3, //  Playchoice\Nintendo World Cup.nes 
+    0x2AC4817F, //  Playchoice\Power Blade.nes 
+    0xA1B9158D, //  Playchoice\Rockin' Kats.nes 
+    0xCD47382E, //  Playchoice\Super C.nes 
+    0x33FB8A12, //  Playchoice\Tiny Toon Adventures.nes 
+    0x3C201DCC, //  Plug-and-Play\extracts\Difference.nes 
+    0x9BB8F450, //  Plug-and-Play\extracts\Diveman.nes 
+    0xF527CD98, //  Plug-and-Play\extracts\Dragon Running.nes 
+    0x7981C762, //  Plug-and-Play\extracts\Metro Mania.nes 
+    0x15F9138F, //  Plug-and-Play\extracts\Underground Mission.nes 
+    0x94CDBC32, //  Plug-and-Play\extracts\War of Strike Mouse.nes 
+    0x49FD2867, //  Plug-and-Play\extracts\Wonder Rabbit.nes 
+    0x8BD7FDF3, //  Plug-and-Play\extracts\三國春秋꞉ 四川省 (Power Joy Navigator 50-in-1).nes 
+    0xE56AA5E8, //  Samples\Double Dragon II꞉ The Revenge.nes 
+    0x7D5F149B, //  Samples\Ninja Gaiden II꞉ The Dark Sword of Chaos.nes 
+    0xD7077D96, //  Samples\US Championship V'Ball.nes 
+    0x56E0E8E6, //  Unlicensed Elsewhere\Harry's Legend.nes 
+    0xB77E7B27, //  Unlicensed Taiwan&amp;Hong Kong\Harry's Legend - 哈利傳奇.nes 
+    0xA39311CA, //  Unlicensed Taiwan&amp;Hong Kong\Mortal Kombat 4.nes 
+    0x831E6E0E, //  Unlicensed Taiwan&amp;Hong Kong\Super Donkey Kong 2.nes 
+    0xA46D7F02, //  Unreleased\Astyanax.nes 
+    0x816AD178, //  Unreleased\Batman꞉ The Video Game (Earlier).nes 
+    0xCB8F9AB7, //  Unreleased\Batman꞉ The Video Game (Later).nes 
+    0x190E52FF, //  Unreleased\Bio Force Ape.nes 
+    0xBEE30C5F, //  Unreleased\Crossfire.nes 
+    0xEAB002AE, //  Unreleased\Dino Hockey (1990-00-00).nes 
+    0x78C8E949, //  Unreleased\Dino Hockey (1990-12-18).nes 
+    0xDB0F299A, //  Unreleased\Hit the Ice (finished).nes 
+    0x1CB9A019, //  Unreleased\Hit the Ice (unfinished).nes 
+    0x8CACCA85, //  Unreleased\Hudson's Adventure Island II.nes 
+    0xFC507AF1, //  Unreleased\Joe &amp; Mac꞉ Caveman Ninja.nes 
+    0x250DC104, //  Unreleased\John Smith꞉ Special Agent.nes 
+    0x592854A1, //  Unreleased\Magical Doropie.nes 
+    0x7E146C3E, //  Unreleased\Magician (1990-03-02).nes 
+    0x39D74458, //  Unreleased\Mick &amp; Mack as the Global Gladiators (1993-06-30).nes 
+    0xA16128B8, //  Unreleased\Mick &amp; Mack as the Global Gladiators (1993-07-09).nes 
+    0xDEDFB3DF, //  Unreleased\Mickey's Adventures in Numberland.nes 
+    0xFE84FCAC, //  Unreleased\Monster in My Pocket.nes 
+    0x7AC3E8A1, //  Unreleased\RoboCop.nes 
+    0x63D3AFF4, //  Unreleased\Rockin' Kats.nes 
+    0x4E36538F, //  Unreleased\Samurai Zombie Nation.nes 
+    0xB4801882, //  Unreleased\Secret Ties.nes 
+    0x15A1CBB0, //  Unreleased\Shatterhand.nes 
+    0xD6EFAB8D, //  Unreleased\Solomon's Key 2.nes 
+    0xF03E6D72, //  Unreleased\Squashed.nes 
+    0x9C4C2B9C, //  Unreleased\Street Fighter 2010.nes 
+    0x47F7F860, //  Unreleased\Superman (Sunsoft).nes 
+    0x01934171, //  Unreleased\Terminator 2꞉ Judgment Day.nes 
+    0xE46AEE21, //  Unreleased\Thomas the Tank Engine and Friends.nes 
+    0xBFF1D847, //  Unreleased\Time Diver Eon Man (Japan).nes 
+    0xE4E7C62D, //  Unreleased\Time Diver Eon Man (North America).nes 
+/**** 243 mapper=4 prgrom=128K chrrom=128K mirror=H system=SYSTEM_PAL */
+    0x3CEEFAD6, //  Bad Dumps\Street Gangs [bad CHR].nes 
+    0xF2A81699, //  Bootleg Singles\TouchGamePlayer\Blue Shadow.nes 
+    0x5342C6F7, //  Bootleg Singles\TouchGamePlayer\Bucky O'Hare.nes 
+    0xEFB1F076, //  Bootleg Singles\TouchGamePlayer\RoboCop.nes 
+    0x1CED49AC, //  Bootleg Singles\TouchGamePlayer\Street Gangs.nes 
+    0x7EFBC241, //  Homebrew\Hacks\Banana Prince 2꞉ Adventure of Banana Goat (v3)[Danger X].nes 
+    0xE7EB2689, //  Homebrew\Translations\English\Banana Prince [KingMike, elbobelo].nes 
+    0x10BD7F35, //  Homebrew\Translations\English\Banana Prince [KingMike].nes 
     0xDDC6D9C9, //  Licensed PAL\Alien 3.nes 
     0xB68F9814, //  Licensed PAL\Astyanax.nes 
     0x8C252AC4, //  Licensed PAL\Bad Dudes vs. Dragon Ninja.nes 
@@ -4976,109 +5257,37 @@ static const u32 s_crcs[] = {
     0x5D0D3047, //  Licensed PAL\Werewolf꞉ The Last Warrior.nes 
     0x9B05B278, //  Licensed PAL\World Champ.nes 
     0x0430DB08, //  Licensed PAL\Zen꞉ Intergalactic Ninja.nes 
-    0xA55F66D7, //  Modern\Capcom Classics꞉ Mini Mix\Mighty Final Fight.nes 
-    0x36E71F0E, //  Modern\Hudson Best Collection\高橋名人の冒険島 II.nes 
-    0x4B1F07F2, //  Modern\Hudson Best Collection\高橋名人の冒険島 III.nes 
-    0xA21BA648, //  Modern\Namco Museum Archives\Dragon Spirit꞉ The New Legend.nes 
-    0xE87092B9, //  Modern\Namco Museum Archives\Mendel Palace.nes 
     0x54BCF00C, //  Modern\Probotector II꞉ Return of the Evil Forces (Contra Anniversary Collection).nes 
-    0x6CA0B45C, //  Modern\Super C (Contra Anniversary Collection).nes 
-    0x69603DB7, //  Modern\Super C (Konami Collector's Series).nes 
-    0x39A18397, //  Modern\Virtual Console\Downtown 熱血物語.nes 
-    0xD1E6EAB9, //  Modern\Virtual Console\Ninja Gaiden III꞉ The Ancient Ship of Doom (rev0).nes 
-    0xBEFB4FA8, //  Modern\Virtual Console\Ninja Gaiden III꞉ The Ancient Ship of Doom (rev1).nes 
-    0x75CE6EE2, //  Modern\Virtual Console\Ninja Gaiden II꞉ The Dark Sword of Chaos.nes 
-    0x29A12BEA, //  Modern\Virtual Console\Shadow of the Ninja.nes 
-    0xC7F56088, //  Modern\Virtual Console\Super Chinese 2꞉ Dragon Kid.nes 
     0x1EEEB556, //  Modern\Virtual Console\U-four-ia꞉ The Saga (rev0).nes 
     0x0BF2B8B1, //  Modern\Virtual Console\U-four-ia꞉ The Saga (rev1).nes 
     0xCAA76927, //  Modern\Virtual Console\Yoshi's Cookie (PAL).nes 
-    0xC6B1A4C4, //  Modern\Virtual Console\熱血高校 Dodgeball 部 Soccer 編.nes 
-    0x801BFFAE, //  Modern\くにおくん熱血 Collection\Downtown 熱血行進曲 ~それゆけ大運動会~.nes 
-    0x82B54765, //  Modern\くにおくん熱血 Collection\いけいけ熱血 Hockey部꞉ すべってころんで大乱闘.nes 
-    0x2B2ED4EC, //  Modern\くにおくん熱血 Collection\熱血! Street Basket ~がんばれ Dunk Heroes~.nes 
-    0x1006EBC7, //  Modern\くにおくん熱血 Collection\熱血高校 Dodgeball 部 Soccer 編.nes 
-    0xA42B731C, //  Multicarts\extracts\Chip &amp; Dale 3 (multicart extract).nes 
-    0xF7E9D60D, //  Multicarts\extracts\Cross Pacific (3810).nes 
-    0x1F09FC2B, //  Multicarts\extracts\Magic Imp (3810).nes 
-    0x52ADD886, //  Multicarts\extracts\Martian (3810).nes 
-    0xE93B0284, //  Multicarts\extracts\Massacre (3810).nes 
-    0x1DAB6162, //  Multicarts\extracts\Monster Inc..nes 
-    0xC8B5D39D, //  Multicarts\extracts\怪鴨 II - Darkwing Duck 2.nes 
-    0x737CAD2B, //  Multicarts\extracts\超強魂斗羅.nes 
-    0x5C9D57DA, //  Playchoice\Ninja Gaiden II - The Dark Sword of Chaos.nes 
-    0xC9589199, //  Playchoice\Ninja Gaiden III - The Ancient Ship of Doom.nes 
-    0x5EA8DEF3, //  Playchoice\Nintendo World Cup.nes 
-    0x2AC4817F, //  Playchoice\Power Blade.nes 
-    0xA1B9158D, //  Playchoice\Rockin' Kats.nes 
-    0xCD47382E, //  Playchoice\Super C.nes 
-    0x33FB8A12, //  Playchoice\Tiny Toon Adventures.nes 
-    0x3C201DCC, //  Plug-and-Play\extracts\Difference.nes 
-    0x9BB8F450, //  Plug-and-Play\extracts\Diveman.nes 
-    0xF527CD98, //  Plug-and-Play\extracts\Dragon Running.nes 
-    0x7981C762, //  Plug-and-Play\extracts\Metro Mania.nes 
+    0x0E945FA1, //  Unreleased\Hudson's Adventure Island III.nes 
+    0x015D4555, //  Unreleased\Sunman.nes 
+    0x56F05853, //  Unreleased\U-four-ia꞉ The Saga (PAL).nes 
+/**** 244 mapper=4 prgrom=128K chrrom=128K mirror=H system=SYSTEM_NTSC */
+    0xF0A65D85, //  Compatibility Hacks\Toy Story [m004][NewRisingSun].nes 
+    0xB5A3461A, //  Homebrew\Indivisible.nes 
+    0x6272C549, //  Licensed North America\The Terminator.nes 
+/**** 245 mapper=4 prgrom=128K chrrom=128K mirror=H system=SYSTEM_NTSC */
+    0x92D9D268, //  Bad Dumps\Music Box [CHR overdump].nes 
+    0xEE5618C0, //  Bootleg Hacks\Super Contra 8.nes 
+    0x37B6D70D, //  Bootleg Singles\Pokémon 4-in-1.nes 
+    0x798A2012, //  Compatibility Hacks\TV System Conversions\Probotector II꞉ Return of the Evil Forces (Dendy)[NewRisingSun].nes 
+    0xB3258212, //  Homebrew\Translations\English\Super C 7 [Pacnsacdave].nes 
     0x35C596B6, //  Plug-and-Play\extracts\Navigator.nes 
-    0x15F9138F, //  Plug-and-Play\extracts\Underground Mission.nes 
-    0x94CDBC32, //  Plug-and-Play\extracts\War of Strike Mouse.nes 
-    0x49FD2867, //  Plug-and-Play\extracts\Wonder Rabbit.nes 
-    0x8BD7FDF3, //  Plug-and-Play\extracts\三國春秋꞉ 四川省 (Power Joy Navigator 50-in-1).nes 
-    0xE56AA5E8, //  Samples\Double Dragon II꞉ The Revenge.nes 
-    0x7D5F149B, //  Samples\Ninja Gaiden II꞉ The Dark Sword of Chaos.nes 
-    0xD7077D96, //  Samples\US Championship V'Ball.nes 
     0x140C6A3D, //  Unlicensed China\外星\超級戰魂 - Super Contra 7 (960418).nes 
     0x43DB0D06, //  Unlicensed China\外星\超級戰魂 - Super Contra 7.nes 
     0x4E4EA7C8, //  Unlicensed China\外星\鏡花緣.nes 
     0x0D9BF742, //  Unlicensed China\燕城\Pokémon 4-in-1.nes 
-    0x56E0E8E6, //  Unlicensed Elsewhere\Harry's Legend.nes 
-    0xB77E7B27, //  Unlicensed Taiwan&amp;Hong Kong\Harry's Legend - 哈利傳奇.nes 
-    0xA39311CA, //  Unlicensed Taiwan&amp;Hong Kong\Mortal Kombat 4.nes 
-    0x831E6E0E, //  Unlicensed Taiwan&amp;Hong Kong\Super Donkey Kong 2.nes 
-    0xA46D7F02, //  Unreleased\Astyanax.nes 
-    0x816AD178, //  Unreleased\Batman꞉ The Video Game (Earlier).nes 
-    0xCB8F9AB7, //  Unreleased\Batman꞉ The Video Game (Later).nes 
-    0x190E52FF, //  Unreleased\Bio Force Ape.nes 
-    0xBEE30C5F, //  Unreleased\Crossfire.nes 
-    0xEAB002AE, //  Unreleased\Dino Hockey (1990-00-00).nes 
-    0x78C8E949, //  Unreleased\Dino Hockey (1990-12-18).nes 
-    0xDB0F299A, //  Unreleased\Hit the Ice (finished).nes 
-    0x1CB9A019, //  Unreleased\Hit the Ice (unfinished).nes 
-    0x8CACCA85, //  Unreleased\Hudson's Adventure Island II.nes 
-    0x0E945FA1, //  Unreleased\Hudson's Adventure Island III.nes 
-    0xFC507AF1, //  Unreleased\Joe &amp; Mac꞉ Caveman Ninja.nes 
-    0x250DC104, //  Unreleased\John Smith꞉ Special Agent.nes 
-    0x592854A1, //  Unreleased\Magical Doropie.nes 
-    0x7E146C3E, //  Unreleased\Magician (1990-03-02).nes 
-    0x39D74458, //  Unreleased\Mick &amp; Mack as the Global Gladiators (1993-06-30).nes 
-    0xA16128B8, //  Unreleased\Mick &amp; Mack as the Global Gladiators (1993-07-09).nes 
-    0xDEDFB3DF, //  Unreleased\Mickey's Adventures in Numberland.nes 
-    0xFE84FCAC, //  Unreleased\Monster in My Pocket.nes 
-    0x7AC3E8A1, //  Unreleased\RoboCop.nes 
-    0x63D3AFF4, //  Unreleased\Rockin' Kats.nes 
-    0x4E36538F, //  Unreleased\Samurai Zombie Nation.nes 
-    0xB4801882, //  Unreleased\Secret Ties.nes 
-    0x15A1CBB0, //  Unreleased\Shatterhand.nes 
-    0xD6EFAB8D, //  Unreleased\Solomon's Key 2.nes 
-    0xF03E6D72, //  Unreleased\Squashed.nes 
-    0x9C4C2B9C, //  Unreleased\Street Fighter 2010.nes 
-    0x015D4555, //  Unreleased\Sunman.nes 
-    0x47F7F860, //  Unreleased\Superman (Sunsoft).nes 
-    0x01934171, //  Unreleased\Terminator 2꞉ Judgment Day.nes 
-    0xE46AEE21, //  Unreleased\Thomas the Tank Engine and Friends.nes 
-    0xBFF1D847, //  Unreleased\Time Diver Eon Man (Japan).nes 
-    0xE4E7C62D, //  Unreleased\Time Diver Eon Man (North America).nes 
-    0x56F05853, //  Unreleased\U-four-ia꞉ The Saga (PAL).nes 
-/**** 171 mapper=4 prgrom=128K prgram=8K chrrom=128K mirror=H */
+/**** 246 mapper=4 prgrom=128K prgram=8K chrrom=128K mirror=H */
     0x40B8EE9A, //  Bad Dumps\F-1 Sensation [bad CHR].nes 
     0xC3D4178F, //  Bootleg Hacks\Pokémon 2000 (Felix the Cat, Charmander).nes 
     0x00BECBFE, //  Bootleg Hacks\Pokémon 2000 (Felix the Cat, Pikachu).nes 
-    0x635A7C12, //  Bootleg Hacks\Super Bros. 2.nes 
-    0xE9E1C6CC, //  Bootleg Hacks\Super Bros. 5.nes 
     0xE106FE8C, //  Bootleg Hacks\Teletubbies 2000.nes 
     0xBBA545BB, //  Bootleg Hacks\Tiny Toon 4.nes 
     0x42728718, //  Bootleg Singles\Over Horizon - 飛離航道.nes 
     0xFF2AAE8A, //  Compatibility Hacks\Pikachu Y2K [m004].nes 
     0xE46DB38C, //  Homebrew\Bugfixes, Improvements\Super Mario Bros. 2 (NTSC rev1) [animation].nes 
-    0xC77A717F, //  Homebrew\Bugfixes, Improvements\Super Mario Bros. 2 (PAL) [animation].nes 
     0xAECF8729, //  Homebrew\Bugfixes, Improvements\Super Mario USA [animation].nes 
     0x3364F00A, //  Homebrew\Hacks\Super Mario Bros. series\Cemetery Bros 2 [Megafield64].nes 
     0xC1148548, //  Homebrew\Hacks\Super Mario Bros. series\Doki Doki Panik! [MB Hacks].nes 
@@ -5131,6 +5340,18 @@ static const u32 s_crcs[] = {
     0x126EBF66, //  Licensed North America\The Bugs Bunny Birthday Blowout.nes 
     0x9E6092A4, //  Licensed North America\Tiny Toon Adventures꞉ Cartoon Workshop.nes 
     0xC3463A3D, //  Licensed North America\Where's Waldo？.nes 
+    0x056F3063, //  Modern\Virtual Console\Super Mario Bros. 2 (NTSC).nes 
+    0x4FCD04C6, //  Modern\Virtual Console\Super Mario USA.nes 
+    0x8BC588CB, //  Playchoice\Super Mario Bros. 2.nes 
+    0xAE7DF77F, //  Unreleased\M.C. Kids.nes 
+    0x899213DC, //  Unreleased\Mickey Mouse꞉ Dream Balloon.nes 
+    0xDF43E073, //  Unreleased\RoboCop vs. The Terminator.nes 
+    0xB30599A1, //  Unreleased\Star Wars꞉ A New Hope.nes 
+    0x85D02CD4, //  Unreleased\The Bugs Bunny Birthday Bash [broken].nes 
+/**** 247 mapper=4 prgrom=128K prgram=8K chrrom=128K mirror=H system=SYSTEM_PAL */
+    0x635A7C12, //  Bootleg Hacks\Super Bros. 2.nes 
+    0xE9E1C6CC, //  Bootleg Hacks\Super Bros. 5.nes 
+    0xC77A717F, //  Homebrew\Bugfixes, Improvements\Super Mario Bros. 2 (PAL) [animation].nes 
     0x89A45446, //  Licensed PAL\Bram Stoker's Dracula.nes 
     0x256392F1, //  Licensed PAL\F-1 Sensation.nes 
     0xFBD48274, //  Licensed PAL\Felix the Cat.nes 
@@ -5145,23 +5366,16 @@ static const u32 s_crcs[] = {
     0xAD0394F0, //  Licensed PAL\Roundball 2-on-2 Challenge.nes 
     0xFCD772EB, //  Licensed PAL\Star Wars꞉ A New Hope.nes 
     0xE94E883D, //  Licensed PAL\Super Mario Bros. 2.nes 
-    0x88C30FDA, //  Licensed PAL\Super Turrican.nes 
     0x5D2B1962, //  Licensed PAL\Tetris 2.nes 
     0x9BD3F3C2, //  Licensed PAL\The Bugs Bunny Blowout.nes 
     0xC8EBD977, //  Licensed PAL\Tiny Toon Adventures꞉ Cartoon Workshop.nes 
-    0x056F3063, //  Modern\Virtual Console\Super Mario Bros. 2 (NTSC).nes 
     0x037CB1B4, //  Modern\Virtual Console\Super Mario Bros. 2 (PAL).nes 
-    0x4FCD04C6, //  Modern\Virtual Console\Super Mario USA.nes 
-    0x8BC588CB, //  Playchoice\Super Mario Bros. 2.nes 
-    0xAE7DF77F, //  Unreleased\M.C. Kids.nes 
-    0x899213DC, //  Unreleased\Mickey Mouse꞉ Dream Balloon.nes 
     0x6328B44D, //  Unreleased\Parodius.nes 
-    0xDF43E073, //  Unreleased\RoboCop vs. The Terminator.nes 
-    0xB30599A1, //  Unreleased\Star Wars꞉ A New Hope.nes 
-    0x85D02CD4, //  Unreleased\The Bugs Bunny Birthday Bash [broken].nes 
-/**** 172 mapper=4 prgrom=128K chrrom=232K mirror=H */
+/**** 248 mapper=4 prgrom=128K prgram=8K chrrom=128K mirror=H system=SYSTEM_NTSC */
+    0x88C30FDA, //  Licensed PAL\Super Turrican.nes 
+/**** 249 mapper=4 prgrom=128K chrrom=232K mirror=H */
     0x73663E35, //  Multicarts\extracts\Titenic [超强年度新卡 15-in-1].nes 
-/**** 173 mapper=4 prgrom=128K chrrom=256K mirror=H */
+/**** 250 mapper=4 prgrom=128K chrrom=256K mirror=H */
     0x62377191, //  Bad Dumps\3-in-1 Street Blaster II Pro [incomplete].nes 
     0x229EEBEB, //  Bad Dumps\Street Fighter V Turbo 60 [bad CHR].nes 
     0x6A3E9E43, //  Bad Dumps\武士魂 (4 characters)[bad CHR].nes 
@@ -5224,6 +5438,24 @@ static const u32 s_crcs[] = {
     0x8889C564, //  Licensed North America\The Immortal.nes 
     0x2BF61C53, //  Licensed North America\The Jetsons꞉ Cogswell's Caper!.nes 
     0x7FB74A43, //  Licensed North America\Toki.nes 
+    0x911B67FF, //  Multicarts\extracts\Fighter V.nes 
+    0x903AA8AA, //  Multicarts\extracts\Mortal Kombat 6 (NT-639).nes 
+    0xA1E99DB4, //  Multicarts\extracts\Mortal Kombat 7 (NT-639).nes 
+    0x681FFECC, //  Multicarts\extracts\Mortal Kombat III Turbo (KY-9006).nes 
+    0xF9CAFA80, //  Multicarts\extracts\Mortal Kombat III Turbo (YH-2001).nes 
+    0x94347727, //  Multicarts\extracts\Street Fighter VI (16 People).nes 
+    0xF65D93A9, //  Multicarts\extracts\Titenic [CB-40xx].nes 
+    0x6FB28AF7, //  Unlicensed Elsewhere\Super Donkey Kong 2.nes 
+    0x51CEAC29, //  Unlicensed Taiwan&amp;Hong Kong\Mortal Kombat Trilogy MK5 (16 Fighters).nes 
+    0x53FFA0D5, //  Unlicensed Taiwan&amp;Hong Kong\Mortal Kombat Trilogy MK5 (8 Fighters).nes 
+    0x3704C1B9, //  Unlicensed Taiwan&amp;Hong Kong\Samurai Shodown III.nes 
+    0x6C98E873, //  Unlicensed Taiwan&amp;Hong Kong\Street Fighter V Turbo 60.nes 
+    0xEDB662C5, //  Unlicensed Taiwan&amp;Hong Kong\武士魂 (4 characters).nes 
+    0x9DDF9017, //  Unreleased\G.I. Joe꞉ The Atlantis Factor.nes 
+    0xDCEC4A59, //  Unreleased\Gremlins 2꞉ The New Batch (NTSC).nes 
+    0xDB7F07BE, //  Unreleased\Toki.nes 
+    0x1675A6C1, //  Unreleased\War on Wheels.nes 
+/**** 251 mapper=4 prgrom=128K chrrom=256K mirror=H system=SYSTEM_PAL */
     0x79D48F34, //  Licensed PAL\Batman Returns.nes 
     0xC4E81924, //  Licensed PAL\Beauty and the Beast.nes 
     0xFA73D3A2, //  Licensed PAL\Days of Thunder.nes 
@@ -5236,44 +5468,30 @@ static const u32 s_crcs[] = {
     0x65D1AB64, //  Licensed PAL\The Jetsons꞉ Cogswell's Caper!.nes 
     0x071D4C2D, //  Licensed PAL\WWF King of the Ring.nes 
     0x21F2A1A6, //  Licensed PAL\WWF WrestleMania Steel Cage Challenge.nes 
-    0x911B67FF, //  Multicarts\extracts\Fighter V.nes 
-    0x903AA8AA, //  Multicarts\extracts\Mortal Kombat 6 (NT-639).nes 
-    0xA1E99DB4, //  Multicarts\extracts\Mortal Kombat 7 (NT-639).nes 
-    0x681FFECC, //  Multicarts\extracts\Mortal Kombat III Turbo (KY-9006).nes 
-    0xF9CAFA80, //  Multicarts\extracts\Mortal Kombat III Turbo (YH-2001).nes 
-    0x94347727, //  Multicarts\extracts\Street Fighter VI (16 People).nes 
-    0xF65D93A9, //  Multicarts\extracts\Titenic [CB-40xx].nes 
+    0x78CC796B, //  Unreleased\Batman Returns.nes 
+    0x8BDD3D93, //  Unreleased\Gremlins 2꞉ The New Batch (PAL).nes 
+/**** 252 mapper=4 prgrom=128K chrrom=256K mirror=H system=SYSTEM_NTSC */
+    0xA7EF8F80, //  Unlicensed Taiwan&amp;Hong Kong\Gaiapolis.nes 
+/**** 253 mapper=4 prgrom=128K chrrom=256K mirror=H system=SYSTEM_NTSC */
     0xB7116595, //  Unlicensed China\外星\Impartial Judge.nes 
     0x4B83D1D3, //  Unlicensed China\外星\夜明珠 - Pearl.nes 
-    0x6FB28AF7, //  Unlicensed Elsewhere\Super Donkey Kong 2.nes 
-    0xA7EF8F80, //  Unlicensed Taiwan&amp;Hong Kong\Gaiapolis.nes 
-    0x51CEAC29, //  Unlicensed Taiwan&amp;Hong Kong\Mortal Kombat Trilogy MK5 (16 Fighters).nes 
-    0x53FFA0D5, //  Unlicensed Taiwan&amp;Hong Kong\Mortal Kombat Trilogy MK5 (8 Fighters).nes 
-    0x3704C1B9, //  Unlicensed Taiwan&amp;Hong Kong\Samurai Shodown III.nes 
-    0x6C98E873, //  Unlicensed Taiwan&amp;Hong Kong\Street Fighter V Turbo 60.nes 
-    0xEDB662C5, //  Unlicensed Taiwan&amp;Hong Kong\武士魂 (4 characters).nes 
-    0x78CC796B, //  Unreleased\Batman Returns.nes 
-    0x9DDF9017, //  Unreleased\G.I. Joe꞉ The Atlantis Factor.nes 
-    0xDCEC4A59, //  Unreleased\Gremlins 2꞉ The New Batch (NTSC).nes 
-    0x8BDD3D93, //  Unreleased\Gremlins 2꞉ The New Batch (PAL).nes 
-    0xDB7F07BE, //  Unreleased\Toki.nes 
-    0x1675A6C1, //  Unreleased\War on Wheels.nes 
-/**** 174 mapper=4 prgrom=128K prgram=8K chrrom=256K mirror=H */
+/**** 254 mapper=4 prgrom=128K prgram=8K chrrom=256K mirror=H */
     0x1D89610E, //  Licensed Japan\Great Battle Cyber.nes 
     0x847D672D, //  Licensed North America\Bill Elliott's NASCAR Challenge.nes 
     0x5FD2AAB1, //  Licensed North America\Bo Jackson Baseball.nes 
     0xBEE1C0D9, //  Licensed North America\Silver Surfer.nes 
     0x917770D8, //  Licensed North America\Where in Time is Carmen Sandiego？.nes 
-/**** 175 mapper=4 prgrom=256K chrram=8K mirror=H */
-    0xC2BC279A, //  Compatibility Hacks\Dead Tomb꞉ A Temporal Adventure [m004 extract].nes 
+/**** 255 mapper=4 prgrom=256K chrram=8K mirror=H */
     0x6A562927, //  Homebrew\Translations\English\Wily &amp; Right's Rockboard꞉ That's Paradise!! [Interordi Software v1.1](Mega Man names).nes 
     0x234799E5, //  Homebrew\Translations\English\Wily &amp; Right's Rockboard꞉ That's Paradise!! [Interordi Software v1.1](Rockman names).nes 
     0x23F4B48F, //  Licensed Japan\Wily &amp; Light no Rockboard꞉ That's Paradise.nes 
-/**** 176 mapper=4 prgrom=256K prgram=8K chrram=8K mirror=H */
+/**** 256 mapper=4 prgrom=256K chrram=8K mirror=H system=SYSTEM_NTSC */
+    0xC2BC279A, //  Compatibility Hacks\Dead Tomb꞉ A Temporal Adventure [m004 extract].nes 
+/**** 257 mapper=4 prgrom=256K prgram=8K chrram=8K mirror=H */
     0x8D77E5E6, //  Licensed Japan\Business Wars.nes 
     0x5A6860F1, //  Licensed Japan\将棋名鑑 '92.nes 
     0xAE280E20, //  Licensed Japan\将棋名鑑 '93.nes 
-/**** 177 mapper=4 prgrom=256K chrrom=128K mirror=H */
+/**** 258 mapper=4 prgrom=256K chrrom=128K mirror=H */
     0x06F70455, //  Bootleg Singles\Robocco Wars (K-W3).nes 
     0xAFCBEBAA, //  Homebrew\Hacks\Bases Loaded 3 2004 [GRG].nes 
     0x88C41E40, //  Homebrew\Hacks\Captain 翼 series\Angel Wings 2 (with Features Keeper) [Heroy].nes 
@@ -5439,26 +5657,28 @@ static const u32 s_crcs[] = {
     0x603AAA57, //  Licensed North America\Mega Man III.nes 
     0x23D17F5E, //  Licensed North America\The Lone Ranger.nes 
     0xA0DF4B8F, //  Licensed North America\The Simpsons꞉ Krusty's Fun House.nes 
+    0xC5D48067, //  Modern\Expedition.nes 
+    0x754D9130, //  Modern\Hudson Best Collection\高橋名人の冒険島 IV.nes 
+    0x599629D5, //  Modern\Mega Man III (Mega Man Legacy Collection).nes 
+    0x16B06537, //  Modern\Virtual Console\Mega Man III (NTSC).nes 
+    0x11C87C02, //  Modern\Virtual Console\Rockman 3꞉ Dr. Wilyの最期!？.nes 
+    0xED09FAF0, //  Multicarts\extracts\Angry Birds (KY-1008).nes 
+    0x863FDEB8, //  Playchoice\Mega Man III.nes 
+    0x59114E78, //  Unlicensed Taiwan&amp;Hong Kong\Aladdin II.nes 
+    0x12481CC0, //  Unreleased\Mega Man III.nes 
+    0x77F0F71D, //  Unreleased\The Simpsons꞉ Bartman Meets Radioactive Man.nes 
+    0xAADA620C, //  Unreleased\U-four-ia꞉ The Saga (North America).nes 
+/**** 259 mapper=4 prgrom=256K chrrom=128K mirror=H system=SYSTEM_PAL */
     0x5B5AB1F8, //  Licensed PAL\Little Samson.nes 
     0x837A3D8A, //  Licensed PAL\Mega Man III (rev0).nes 
     0x001388B3, //  Licensed PAL\Mega Man III (rev1).nes 
     0xE9F8EF15, //  Licensed PAL\The Simpsons꞉ Bart vs. the World.nes 
     0x95CE3B58, //  Licensed PAL\The Simpsons꞉ Bartman Meets Radioactive Man.nes 
     0x585BA83D, //  Licensed PAL\The Simpsons꞉ Krusty's Fun House.nes 
-    0xC5D48067, //  Modern\Expedition.nes 
-    0x754D9130, //  Modern\Hudson Best Collection\高橋名人の冒険島 IV.nes 
-    0x599629D5, //  Modern\Mega Man III (Mega Man Legacy Collection).nes 
-    0x16B06537, //  Modern\Virtual Console\Mega Man III (NTSC).nes 
     0x8A88AE79, //  Modern\Virtual Console\Mega Man III (PAL).nes 
-    0x11C87C02, //  Modern\Virtual Console\Rockman 3꞉ Dr. Wilyの最期!？.nes 
-    0xED09FAF0, //  Multicarts\extracts\Angry Birds (KY-1008).nes 
-    0x863FDEB8, //  Playchoice\Mega Man III.nes 
+/**** 260 mapper=4 prgrom=256K chrrom=128K mirror=H system=SYSTEM_NTSC */
     0xBC7364BB, //  Unlicensed Elsewhere\Ну, погоди!.nes 
-    0x59114E78, //  Unlicensed Taiwan&amp;Hong Kong\Aladdin II.nes 
-    0x12481CC0, //  Unreleased\Mega Man III.nes 
-    0x77F0F71D, //  Unreleased\The Simpsons꞉ Bartman Meets Radioactive Man.nes 
-    0xAADA620C, //  Unreleased\U-four-ia꞉ The Saga (North America).nes 
-/**** 178 mapper=4 prgrom=256K prgram=8K chrrom=128K mirror=H */
+/**** 261 mapper=4 prgrom=256K prgram=8K chrrom=128K mirror=H */
     0x6BD0717A, //  Bootleg Hacks\Super Mario Sister.nes 
     0xCA3CBFAC, //  Bootleg Singles\Super Mario Bros. 3 (047).nes 
     0xE39ECF54, //  Homebrew\Brony Blaster (NESWorld).nes 
@@ -5501,7 +5721,6 @@ static const u32 s_crcs[] = {
     0x4A5F9E7E, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Ridley X Hack 3 [Ridley X].nes 
     0xC6D74CA0, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. Ridley X Hack 4 [Ridley X].nes 
     0x2D1249DC, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. in the Mystery of the Flying Fish.nes 
-    0x2778B826, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ The Second World of the Super Mario Bros. 3 [John].nes 
     0xFCC3C259, //  Homebrew\Hacks\Super Mario Bros. series\Super Mitch Bros. 3 (v1.1)[Chipius].nes 
     0xAE7389DE, //  Homebrew\Hacks\Super Mario Bros. series\Super Sheffy Bros. 3 (v1.2)[West].nes 
     0x1CB9FA2D, //  Homebrew\Hacks\Super Mario Bros. series\Super Wario Bros. 3 [Googie].nes 
@@ -5514,32 +5733,29 @@ static const u32 s_crcs[] = {
     0x52E2B5E0, //  Licensed Japan\Super Mario Bros. 3 (rev1).nes 
     0xA0B0B742, //  Licensed North America\Super Mario Bros. 3 (rev0).nes 
     0x2E6301ED, //  Licensed North America\Super Mario Bros. 3 (rev1).nes 
-    0x1ED5C801, //  Licensed PAL\Super Mario Bros. 3.nes 
     0xF12997EA, //  Modern\Virtual Console\Super Mario Bros. 3 (Japan).nes 
     0xF4DFA033, //  Modern\Virtual Console\Super Mario Bros. 3 (North America).nes 
-    0xC46969DF, //  Modern\Virtual Console\Super Mario Bros. 3 (PAL).nes 
     0xAA9A34A4, //  Playchoice\Super Mario Bros. 3.nes 
-/**** 179 mapper=4 prgrom=256K chrrom=256K mirror=H */
+/**** 262 mapper=4 prgrom=256K prgram=8K chrrom=128K mirror=H system=SYSTEM_PAL */
+    0x2778B826, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ The Second World of the Super Mario Bros. 3 [John].nes 
+    0x1ED5C801, //  Licensed PAL\Super Mario Bros. 3.nes 
+    0xC46969DF, //  Modern\Virtual Console\Super Mario Bros. 3 (PAL).nes 
+/**** 263 mapper=4 prgrom=256K chrrom=256K mirror=H */
     0xB9AA4EEB, //  Bad Dumps\Earthworm Jim 3 [bad CHR data].nes 
     0x5983D32D, //  Bad Dumps\Somari the Adventurer (NT-616)[bad CHR].nes 
     0xAFAD321B, //  Bad Dumps\Street Blaster V Turbo 20 [PRG overdump].nes 
     0xBF78E8C1, //  Bad Dumps\Street Fighter V Turbo 60 [PRG overdump].nes 
     0x0B6E91DD, //  Bad Dumps\Street Fighter V Turbo 60 [bad CHR][PRG overdump].nes 
     0xA38DF799, //  Bad Dumps\Super Aladdin [bad CHR].nes 
-    0x659C8EF4, //  Bad Dumps\机器猫 - 小叮当 - socat [dumper graffiti].nes 
-    0x1C718B68, //  Bad Dumps\西天取经 II - Journey to the West [bad PRG].nes 
-    0xE82714C5, //  Bad Dumps\鏡花緣 [PRG&amp;CHR overdump].nes 
     0x3627D662, //  Bootleg Hacks\Rockman 6꞉ Bluesの罠!？.nes 
     0x7638BDB3, //  Bootleg Singles\Aladdin - 阿拉丁 (A-N7).nes 
     0x9CD7D385, //  Bootleg Singles\Aladdin - 阿拉丁 (NT-622).nes 
     0xBD79514D, //  Bootleg Singles\Aladdin 4.nes 
     0xDC5959D2, //  Bootleg Singles\Somari the Adventurer (NT-616).nes 
     0x10CB935F, //  Bootleg Singles\Super Lion King (NT-656).nes 
-    0x6912DE82, //  Bootleg Singles\The Dragon (李小龍傳奇).nes 
     0xA88C6388, //  Bootleg Singles\Tiny Toon Adventures 6 (NT-6088).nes 
     0xB14209F0, //  Bootleg Singles\TouchGamePlayer\Teenage Mutant Ninja Turtles III꞉ The Manhattan Project.nes 
     0x085B7023, //  Bootleg Singles\TouchGamePlayer\Teenage Mutant Ninja Turtles II꞉ The Arcade Game.nes 
-    0xE6402758, //  Bootleg Singles\中國兔寶寶 Rabbit (NT-6089).nes 
     0x2BB08BCA, //  Compatibility Hacks\Bomber Boy [m004].nes 
     0xBC45F99E, //  Compatibility Hacks\Jim Power꞉ The Lost Dimension [m004 extract].nes 
     0xC919F31D, //  Compatibility Hacks\Nightshade Part 1꞉ The Claws of Sutekh (Piko Interactive)[m004 extract].nes 
@@ -5551,7 +5767,6 @@ static const u32 s_crcs[] = {
     0xEE1CAD03, //  Compatibility Hacks\TV System Conversions\西天取经 II - Journey to the West (NTSC)[NewRisingSun].nes 
     0xAAB0F29E, //  Compatibility Hacks\The Panda Prince [m004][NewRisingSun].nes 
     0xC3B2E39E, //  Compatibility Hacks\The Super Shinobi [m004].nes 
-    0x3A9D43C3, //  Compatibility Hacks\戰斧 - Golden Axe [m004].nes 
     0x7914B6E2, //  Homebrew\8 Bit Riki Illustrations [Riki].nes 
     0xCE17D7CB, //  Homebrew\Bugfixes, Improvements\Aladdin - 阿拉丁 (A-N7)[music replacement v1.1][Gigasoft].nes 
     0x4660A73A, //  Homebrew\Bugfixes, Improvements\Aladdin - 阿拉丁 (NT-622)[music replacement v1.1][Gigasoft].nes 
@@ -5600,19 +5815,10 @@ static const u32 s_crcs[] = {
     0x128C1D19, //  Homebrew\Hacks\Mega Man series\とっても Luckyman!! 5 - 現る!! のまき.nes 
     0x4E554BF7, //  Homebrew\Hacks\Mega Man series\とっても Luckyman!! Part 5 - 再来!! のまき.nes 
     0xD9EBFC0D, //  Homebrew\Hacks\Sonic the Hedgehog Improvement [the jabu].nes 
-    0x74F1E4DF, //  Homebrew\Translations\English\Dragon Knife [Pacnsacdave].nes 
-    0xB5B49F83, //  Homebrew\Translations\English\Flowers in the Mirror [Pacnsacdave].nes 
-    0x062CC3FB, //  Homebrew\Translations\English\Genuine Monkey [Pacnsacdave].nes 
     0x94E11574, //  Homebrew\Translations\English\Monkey King [Pacnsacdave v1.0].nes 
     0x8085CA5D, //  Homebrew\Translations\English\Moon Crystal [Alex W. Jackson].nes 
     0xF79E6A3F, //  Homebrew\Translations\English\Speeding Hummer [Pacnsacdave].nes 
-    0x43B0FA71, //  Homebrew\Translations\English\Super Contra X [Pacnsacdave].nes 
-    0x54FCBE43, //  Homebrew\Translations\English\Super Donkey Kong꞉ Banana Boat [Pacnsacdave].nes 
     0x7E6E6E78, //  Homebrew\Translations\English\Tetrastar꞉ The Fighter [Gaijin Productions v1.00beta].nes 
-    0x31E8B65C, //  Homebrew\Translations\English\The Hacker [Pacnsacdave].nes 
-    0xE1BF81CA, //  Homebrew\Translations\English\The Lion King Legend [Pacnsacdave].nes 
-    0x2FD52AF3, //  Homebrew\Translations\English\Titanic [Pacnsacdave v2.1].nes 
-    0x8CEB23F7, //  Homebrew\Translations\English\Titanic [Pacnsacdave vx.x].nes 
     0x7C27AB86, //  Licensed Japan\Aces꞉ Iron Eagle 3.nes 
     0x26E39935, //  Licensed Japan\Moon Crystal.nes 
     0xFDDF2135, //  Licensed Japan\Rockman 5꞉ Bluesの罠!？.nes 
@@ -5630,6 +5836,28 @@ static const u32 s_crcs[] = {
     0xBB6D7949, //  Licensed North America\Teenage Mutant Ninja Turtles III꞉ The Manhattan Project.nes 
     0xA9217EA2, //  Licensed North America\Teenage Mutant Ninja Turtles II꞉ The Arcade Game.nes 
     0xE387C77F, //  Licensed North America\Ultimate Air Combat.nes 
+    0x6512605B, //  Modern\8 Bit Music Power Encore.nes 
+    0x68B85928, //  Modern\Mega Man V (Mega Man Legacy Collection).nes 
+    0x005C7569, //  Modern\Virtual Console\Mega Man V (NTSC).nes 
+    0x1BC3F53B, //  Modern\Virtual Console\Rockman 5꞉ Bluesの罠!？.nes 
+    0xCBE29C42, //  Modern\キラキラ Star Night.nes 
+    0xD3AC6990, //  Multicarts\extracts\餓狼伝説 Special.nes 
+    0x0496DD98, //  Playchoice\Teenage Mutant Ninja Turtles II꞉ The Arcade Game.nes 
+    0xC46EDA12, //  Plug-and-Play\extracts\Super Hero.nes 
+    0xBDA183BB, //  Samples\Teenage Mutant Ninja Turtles II꞉ The Arcade Game.nes 
+    0xCF3CB261, //  Unlicensed China\The Lion King 5꞉ Timon and Pumbaa.nes 
+    0x513EB779, //  Unlicensed China\The Lion King III꞉ Timon and Pumbaa.nes 
+    0xA81C485B, //  Unlicensed Taiwan&amp;Hong Kong\Earthworm Jim 3.nes 
+    0x3A6577CD, //  Unlicensed Taiwan&amp;Hong Kong\Jurassic Park꞉ The Lost World.nes 
+    0x78872BD7, //  Unlicensed Taiwan&amp;Hong Kong\Sonic the Hedgehog.nes 
+    0xD9261FEE, //  Unlicensed Taiwan&amp;Hong Kong\Super Aladdin.nes 
+    0x7CF90D81, //  Unreleased\Earthworm Jim 2 (Test build).nes 
+    0xDBC6E234, //  Unreleased\Karaoke.nes 
+    0x6C6565A2, //  Unreleased\Pocahontas Part 2 (debug).nes 
+    0xE9A151CB, //  Unreleased\Pocahontas Part 2 (dev).nes 
+    0xCFD29C93, //  Unreleased\Star Wars꞉ The Empire Strikes Back.nes 
+    0x0754544F, //  Unreleased\Super Boogerman.nes 
+/**** 264 mapper=4 prgrom=256K chrrom=256K mirror=H system=SYSTEM_PAL */
     0x989C1019, //  Licensed PAL\F-15 Strike Eagle (English).nes 
     0xBBB710D9, //  Licensed PAL\F-15 Strike Eagle (French).nes 
     0xD353D351, //  Licensed PAL\F-15 Strike Eagle (German).nes 
@@ -5641,22 +5869,31 @@ static const u32 s_crcs[] = {
     0xC5657C12, //  Licensed PAL\Teenage Mutant Hero Turtles II꞉ The Arcade Game.nes 
     0x7BCCAFBB, //  Licensed PAL\Teenage Mutant Ninja Turtles II꞉ The Arcade Game.nes 
     0xC0F251EA, //  Licensed PAL\Ultimate Air Combat.nes 
-    0x6512605B, //  Modern\8 Bit Music Power Encore.nes 
-    0x68B85928, //  Modern\Mega Man V (Mega Man Legacy Collection).nes 
-    0x005C7569, //  Modern\Virtual Console\Mega Man V (NTSC).nes 
     0x3DCA964A, //  Modern\Virtual Console\Mega Man V (PAL).nes 
-    0x1BC3F53B, //  Modern\Virtual Console\Rockman 5꞉ Bluesの罠!？.nes 
-    0xCBE29C42, //  Modern\キラキラ Star Night.nes 
-    0xD3AC6990, //  Multicarts\extracts\餓狼伝説 Special.nes 
-    0x0496DD98, //  Playchoice\Teenage Mutant Ninja Turtles II꞉ The Arcade Game.nes 
-    0xC46EDA12, //  Plug-and-Play\extracts\Super Hero.nes 
-    0xBDA183BB, //  Samples\Teenage Mutant Ninja Turtles II꞉ The Arcade Game.nes 
+    0x690AFE9F, //  Unreleased\Ultimate Air Combat.nes 
+/**** 265 mapper=4 prgrom=256K chrrom=256K mirror=H system=SYSTEM_NTSC */
+    0x6912DE82, //  Bootleg Singles\The Dragon (李小龍傳奇).nes 
+    0xE6402758, //  Bootleg Singles\中國兔寶寶 Rabbit (NT-6089).nes 
     0xA9C07FF3, //  Unlicensed China\Felix the Cat.nes 
     0x64F19E5C, //  Unlicensed China\Panda Baby.nes 
+    0xB7456A6A, //  Unlicensed Elsewhere\Family Kid.nes 
+    0xDDED013E, //  Unlicensed Taiwan&amp;Hong Kong\The Dragon.nes 
+/**** 266 mapper=4 prgrom=256K chrrom=256K mirror=H system=SYSTEM_NTSC */
+    0x659C8EF4, //  Bad Dumps\机器猫 - 小叮当 - socat [dumper graffiti].nes 
+    0x1C718B68, //  Bad Dumps\西天取经 II - Journey to the West [bad PRG].nes 
+    0xE82714C5, //  Bad Dumps\鏡花緣 [PRG&amp;CHR overdump].nes 
+    0x3A9D43C3, //  Compatibility Hacks\戰斧 - Golden Axe [m004].nes 
+    0x74F1E4DF, //  Homebrew\Translations\English\Dragon Knife [Pacnsacdave].nes 
+    0xB5B49F83, //  Homebrew\Translations\English\Flowers in the Mirror [Pacnsacdave].nes 
+    0x062CC3FB, //  Homebrew\Translations\English\Genuine Monkey [Pacnsacdave].nes 
+    0x43B0FA71, //  Homebrew\Translations\English\Super Contra X [Pacnsacdave].nes 
+    0x54FCBE43, //  Homebrew\Translations\English\Super Donkey Kong꞉ Banana Boat [Pacnsacdave].nes 
+    0x31E8B65C, //  Homebrew\Translations\English\The Hacker [Pacnsacdave].nes 
+    0xE1BF81CA, //  Homebrew\Translations\English\The Lion King Legend [Pacnsacdave].nes 
+    0x2FD52AF3, //  Homebrew\Translations\English\Titanic [Pacnsacdave v2.1].nes 
+    0x8CEB23F7, //  Homebrew\Translations\English\Titanic [Pacnsacdave vx.x].nes 
     0xBF4E9925, //  Unlicensed China\Street Dance.nes 
     0xA462B119, //  Unlicensed China\Super Contra X.nes 
-    0xCF3CB261, //  Unlicensed China\The Lion King 5꞉ Timon and Pumbaa.nes 
-    0x513EB779, //  Unlicensed China\The Lion King III꞉ Timon and Pumbaa.nes 
     0x0AA49929, //  Unlicensed China\Tom &amp; Jerry 3.nes 
     0xA031C422, //  Unlicensed China\南晶\The Hacker.nes 
     0xA6E4F246, //  Unlicensed China\南晶\Titanic.nes 
@@ -5671,28 +5908,15 @@ static const u32 s_crcs[] = {
     0xBA433EBB, //  Unlicensed China\外星\西天取经 II - Journey to the West.nes 
     0xA410290B, //  Unlicensed China\外星\靈界護法 - Shock.nes 
     0xD96D9924, //  Unlicensed China\香蕉船 - Super Donkey Kong.nes 
-    0xB7456A6A, //  Unlicensed Elsewhere\Family Kid.nes 
-    0xA81C485B, //  Unlicensed Taiwan&amp;Hong Kong\Earthworm Jim 3.nes 
-    0x3A6577CD, //  Unlicensed Taiwan&amp;Hong Kong\Jurassic Park꞉ The Lost World.nes 
-    0x78872BD7, //  Unlicensed Taiwan&amp;Hong Kong\Sonic the Hedgehog.nes 
-    0xD9261FEE, //  Unlicensed Taiwan&amp;Hong Kong\Super Aladdin.nes 
-    0xDDED013E, //  Unlicensed Taiwan&amp;Hong Kong\The Dragon.nes 
     0xCDF63F0C, //  Unreleased\2002 World Cup PK.nes 
-    0x7CF90D81, //  Unreleased\Earthworm Jim 2 (Test build).nes 
-    0xDBC6E234, //  Unreleased\Karaoke.nes 
-    0x6C6565A2, //  Unreleased\Pocahontas Part 2 (debug).nes 
-    0xE9A151CB, //  Unreleased\Pocahontas Part 2 (dev).nes 
-    0xCFD29C93, //  Unreleased\Star Wars꞉ The Empire Strikes Back.nes 
-    0x0754544F, //  Unreleased\Super Boogerman.nes 
-    0x690AFE9F, //  Unreleased\Ultimate Air Combat.nes 
-/**** 180 mapper=4 prgrom=256K prgram=8K chrrom=256K mirror=H */
+/**** 267 mapper=4 prgrom=256K prgram=8K chrrom=256K mirror=H */
     0xEBF01E65, //  Homebrew\Gotta Protectors꞉ Amazon's Running Diet [Ancient].nes 
     0x2DDE1B73, //  Homebrew\Hacks\Mega Man series\Mega Man V Time Attack (v0.311)[Matrixz].nes 
     0xAA98E50A, //  Homebrew\Hacks\Super Mario Bros. series\Mario Chronicles [RingoDoggie].nes 
     0xB88866EC, //  Homebrew\みんなでまもって騎士꞉ AmazonのDiet大作戦.nes 
     0x00837960, //  Licensed North America\King's Quest V꞉ Absence Makes the Heart Go Yonder!.nes 
     0x6FFACEE5, //  Samples\東方老桜夢.nes 
-/**** 181 mapper=4 prgrom=512K chrram=8K mirror=H */
+/**** 268 mapper=4 prgrom=512K chrram=8K mirror=H */
     0xE3526D8B, //  Bootleg Hacks\Rockman 7꞉ 史上最大の戦い!!.nes 
     0x368C3A96, //  Homebrew\Demos\Bad Apple PV-FC.nes 
     0x04379E63, //  Homebrew\Demos\Megaman Forever - Unabridged Demo.nes 
@@ -5737,23 +5961,24 @@ static const u32 s_crcs[] = {
     0x2BC67AA8, //  Licensed North America\Mega Man IV (rev0).nes 
     0x18A2E74F, //  Licensed North America\Mega Man IV (rev1).nes 
     0x988798A8, //  Licensed North America\Mega Man VI.nes 
-    0x1B932BEA, //  Licensed PAL\Mega Man IV.nes 
     0x0FAA8F73, //  Modern\Mega Man IV (Mega Man Legacy Collection).nes 
     0xDCC74EF2, //  Modern\Mega Man VI (Mega Man Legacy Collection).nes 
     0x659266E8, //  Modern\Virtual Console\Mega Man IV (NTSC).nes 
-    0x66A3AA4D, //  Modern\Virtual Console\Mega Man IV (PAL).nes 
     0x111B2B1D, //  Modern\Virtual Console\Rockman 4꞉ 新たなる野望!!.nes 
-/**** 182 mapper=4 prgrom=512K chrram=32K mirror=H */
+/**** 269 mapper=4 prgrom=512K chrram=8K mirror=H system=SYSTEM_PAL */
+    0x1B932BEA, //  Licensed PAL\Mega Man IV.nes 
+    0x66A3AA4D, //  Modern\Virtual Console\Mega Man IV (PAL).nes 
+/**** 270 mapper=4 prgrom=512K chrram=32K mirror=H */
     0xF401D3EE, //  Modern\Haunted Halloween '86꞉ The Curse of Possum Hollow (alt).nes 
     0xA7682169, //  Modern\Haunted Halloween '86꞉ The Curse of Possum Hollow.nes 
     0x614B8850, //  Unreleased\Haunted Halloween '86.nes 
-/**** 183 mapper=4 prgrom=512K chrrom=8K mirror=H */
+/**** 271 mapper=4 prgrom=512K chrrom=8K mirror=H */
     0x999107A7, //  Homebrew\Demos\Max-300.nes 
-/**** 184 mapper=4 prgrom=512K chrrom=64K mirror=H */
+/**** 272 mapper=4 prgrom=512K chrrom=64K mirror=H */
     0x2922CA6C, //  Homebrew\Demos\Aaaeeeooo 8 Bit [N.K.].nes 
-/**** 185 mapper=4 prgrom=512K chrrom=128K mirror=H */
+/**** 273 mapper=4 prgrom=512K chrrom=128K mirror=H */
     0x40DB45E0, //  Modern\NEO 平安京 Alien.nes 
-/**** 186 mapper=4 prgrom=512K chrrom=256K mirror=H */
+/**** 274 mapper=4 prgrom=512K chrrom=256K mirror=H */
     0x949B3EEA, //  Homebrew\Hacks\Mega Man series\Mega Man III - Improvement (v2.01).nes 
     0x3BEE76DD, //  Homebrew\Hacks\Mega Man series\Rockman 3꞉ Dr. Wilyの最期!？- Improvement (v2.01).nes 
     0xF53F83DD, //  Modern\8 Bit Music Power Final (rev0).nes 
@@ -5762,36 +5987,36 @@ static const u32 s_crcs[] = {
     0x2A5BCA85, //  Modern\8 Bit Rhythm Land.nes 
     0x96D8E95E, //  Modern\Trophy (Limited Edition).nes 
     0xF61F3B0A, //  Modern\Trophy.nes 
-/**** 187 mapper=4 prgrom=512K prgram=8K chrrom=256K mirror=H */
+/**** 275 mapper=4 prgrom=512K prgram=8K chrrom=256K mirror=H */
     0x683B053D, //  Homebrew\Demos\Bad Apple 2.5 2015 [Little Limit].nes 
     0x70A077E4, //  Homebrew\Demos\Bad Apple 2.5 [Little Limit].nes 
     0xCA45F105, //  Homebrew\Hacks\Mega Man series\Mega Man 3꞉ Dr. Wily's End!？ [FlashPV].nes 
     0x2D70BBBD, //  Homebrew\Hacks\Super Mario Bros. series\Communist Mario 3 [KP9000].nes 
-/**** 188 mapper=4 prgrom=512K chrrom=512K mirror=H */
+/**** 276 mapper=4 prgrom=512K chrrom=512K mirror=H */
     0x8F6CC85A, //  Bad Dumps\(KT-220B) Totally Rad 4-in-1 [overdump].nes 
-/**** 189 mapper=4 prgrom=32K prgnvram=8K chrrom=40K mirror=H battery=1 */
+/**** 277 mapper=4 prgrom=32K prgnvram=8K chrrom=40K mirror=H battery=1 */
     0x8095AD30, //  Samples\Nanaca-Crash!!.nes 
-/**** 190 mapper=4 prgrom=32K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 278 mapper=4 prgrom=32K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x64594DA3, //  Modern\Russian Roulette.nes 
-/**** 191 mapper=4 prgrom=64K prgnvram=8K chrrom=8K mirror=H battery=1 */
+/**** 279 mapper=4 prgrom=64K prgnvram=8K chrrom=8K mirror=H battery=1 */
     0x5C61A993, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. 2 Special [Jordan Bieber].nes 
-/**** 192 mapper=4 prgrom=64K prgnvram=8K chrrom=16K mirror=H battery=1 */
+/**** 280 mapper=4 prgrom=64K prgnvram=8K chrrom=16K mirror=H battery=1 */
     0x00C32856, //  Compatibility Hacks\Super Mario Bros. 2 (Loopy rev0).nes 
     0x7F3A4ADD, //  Compatibility Hacks\Super Mario Bros. 2 (Loopy rev1).nes 
     0xC39743EE, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. 2 with Super Mario Bros. Grahics [Vallenatero2015].nes 
-/**** 193 mapper=4 prgrom=64K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 281 mapper=4 prgrom=64K prgnvram=8K chrrom=128K mirror=H battery=1 system=SYSTEM_NTSC */
     0x2BD30289, //  Modern\Justice Duel.nes 
     0x0CE9CA00, //  Samples\Justice Duel (Demo 1).nes 
     0xA04AD3BB, //  Samples\Justice Duel (Demo 2).nes 
-/**** 194 mapper=4 prgrom=128K prgnvram=8K chrram=8K mirror=H battery=1 */
-    0x2C3AD058, //  Bad Dumps\神秘金三角꞉ The Hyrule Fantasy [SRAM enable fail].nes 
+/**** 282 mapper=4 prgrom=128K prgnvram=8K chrram=8K mirror=H battery=1 */
     0xCEB1FD42, //  Homebrew\Hacks\Super Pitfall 30th Anniversary Edition [Nesrocks].nes 
     0xA81294B1, //  Homebrew\Hacks\The Goonies II꞉ SRAM Saving Edition [8-bit fan].nes 
+/**** 283 mapper=4 prgrom=128K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_NTSC */
+    0x2C3AD058, //  Bad Dumps\神秘金三角꞉ The Hyrule Fantasy [SRAM enable fail].nes 
     0xB5766659, //  Unlicensed China\外星\東方的傳說꞉ The Hyrule Fantasy.nes 
-/**** 195 mapper=4 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 284 mapper=4 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x553AD67C, //  Bootleg Hacks\5 Winning Goal.nes 
     0x040ABC34, //  Bootleg Hacks\France 98.nes 
-    0xC57060CE, //  Compatibility Hacks\宠物宝宝 [m004].nes 
     0x7314F5C9, //  Homebrew\Hacks\8-bit Smash Bros..nes 
     0xEFB3B017, //  Homebrew\Nanaca-Crash!!.nes 
     0xC7D62AF0, //  Homebrew\Translations\English\Christopher Columbus [PL Trans Force].nes 
@@ -5835,23 +6060,26 @@ static const u32 s_crcs[] = {
     0x6A1F628A, //  Licensed North America\Shadowgate.nes 
     0x9BAC73EF, //  Licensed North America\Uninvited.nes 
     0x6BC33D2F, //  Licensed North America\Wizardry꞉ The Knight of Diamonds.nes 
+    0x7E549E49, //  Modern\Namco Museum Archives\Gaplus.nes 
+    0x2628E6D4, //  Modern\Virtual Console\すごろ Quest꞉ Diceの戦士たち.nes 
+    0xD3EC98AA, //  Samples\Columbus꞉ 黄金の夜明け.nes 
+    0xB7D69A6D, //  Unreleased\Magician (Beta 2).nes 
+    0x2D1FEE70, //  Unreleased\Magician (Beta 3).nes 
+/**** 285 mapper=4 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 system=SYSTEM_PAL */
     0x1590CF62, //  Licensed PAL\Capcom's Gold Medal Challenge '92.nes 
     0x13E01649, //  Licensed PAL\Shadowgate (English).nes 
     0x9F01687D, //  Licensed PAL\Shadowgate (French).nes 
     0xB64078F3, //  Licensed PAL\Shadowgate (German).nes 
     0x2B1497DC, //  Licensed PAL\Shadowgate (Swedish).nes 
-    0x7E549E49, //  Modern\Namco Museum Archives\Gaplus.nes 
-    0x2628E6D4, //  Modern\Virtual Console\すごろ Quest꞉ Diceの戦士たち.nes 
-    0xD3EC98AA, //  Samples\Columbus꞉ 黄金の夜明け.nes 
+/**** 286 mapper=4 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 system=SYSTEM_NTSC */
+    0xC57060CE, //  Compatibility Hacks\宠物宝宝 [m004].nes 
     0x343611E3, //  Unlicensed China\振华\大戰略.nes 
-    0xB7D69A6D, //  Unreleased\Magician (Beta 2).nes 
-    0x2D1FEE70, //  Unreleased\Magician (Beta 3).nes 
-/**** 196 mapper=4 prgrom=128K prgnvram=16K chrrom=128K mirror=H battery=1 */
+/**** 287 mapper=4 prgrom=128K prgnvram=16K chrrom=128K mirror=H battery=1 */
     0xA5C5A521, //  Modern\くにおくん熱血 Collection\Downtown Special꞉ くにおくんの時代劇だよ ~全員集合!~.nes 
-/**** 197 mapper=4 prgrom=128K prgram=8K chrrom=128K mirror=H battery=1 */
+/**** 288 mapper=4 prgrom=128K prgram=8K chrrom=128K mirror=H battery=1 */
     0xE783DE86, //  Bootleg Hacks\FIFA International Soccer '96.nes 
     0xE557307F, //  Bootleg Hacks\FIFA International Soccer '97.nes 
-/**** 198 mapper=4 prgrom=128K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 289 mapper=4 prgrom=128K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x0AA1D73D, //  Bootleg Singles\Tecmo NBA Basketball.nes 
     0x70A5485F, //  Homebrew\Blurred Lines 2048 (2015-04).nes 
     0xBC571CA7, //  Homebrew\Blurred Lines 2048 (2016-03).nes 
@@ -5871,20 +6099,24 @@ static const u32 s_crcs[] = {
     0x2651F227, //  Licensed North America\Tecmo NBA Basketball (rev0).nes 
     0xDA8E4AF4, //  Licensed North America\Tecmo NBA Basketball (rev1).nes 
     0xB54BAEBE, //  Licensed North America\Tecmo NBA Basketball (rev2).nes 
+/**** 290 mapper=4 prgrom=128K prgnvram=8K chrrom=256K mirror=H battery=1 system=SYSTEM_PAL */
     0x39D43261, //  Licensed PAL\Déjà Vu.nes 
+/**** 291 mapper=4 prgrom=128K prgnvram=8K chrrom=256K mirror=H battery=1 system=SYSTEM_NTSC */
     0xB7CED210, //  Modern\Log Jammers.nes 
     0x616B55D1, //  Samples\LogJammers.nes 
+/**** 292 mapper=4 prgrom=128K prgnvram=8K chrrom=256K mirror=H battery=1 system=SYSTEM_NTSC */
     0xA50124FF, //  Unlicensed China\外星\疯狂鸡蛋仔 - Flighty Chicken.nes 
     0x12B1C8F3, //  Unlicensed China\外星\魔道士阴谋.nes 
-/**** 199 mapper=4 prgrom=256K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 293 mapper=4 prgrom=256K prgnvram=8K chrram=8K mirror=H battery=1 */
     0xC1BA8BB9, //  Licensed Japan\Project Q.nes 
     0xBDC124E5, //  Licensed Japan\Shuffle Fight.nes 
+/**** 294 mapper=4 prgrom=256K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_NTSC */
     0xD78638EC, //  Unlicensed China\外星\勇者斗恶龙 - Dragon Quest IV.nes 
     0x29EB8331, //  Unlicensed China\外星\勇者斗惡龍 2 - Dragon Quest.nes 
     0xD3A269DC, //  Unlicensed China\外星\勇者斗惡龍 5 - Dragon Quest.nes 
     0x77EFB5D9, //  Unlicensed China\外星\龙珠英雄 - Dragongen Hero.nes 
     0xDFAD3F66, //  Unlicensed China\恒格\英雄源义经传奇.nes 
-/**** 200 mapper=4 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 295 mapper=4 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x3F9524EC, //  Homebrew\Blade Buster (2010-09-28).nes 
     0x325C3E52, //  Homebrew\Blade Buster (2012-03-01).nes 
     0x37E0D156, //  Homebrew\Hacks\Super Mario Bros. series\New Super Mario Bros. 3 [Pacnsacdave, Silas].nes 
@@ -5970,23 +6202,11 @@ static const u32 s_crcs[] = {
     0x13E09D7A, //  Unreleased\Dragon Wars.nes 
     0xDB2D4F9D, //  Unreleased\Tecmo Super Bowl.nes 
     0xD6190C63, //  Unreleased\Tower of Radia.nes 
-/**** 201 mapper=4 prgrom=256K chrrom=256K mirror=H battery=1 */
+/**** 296 mapper=4 prgrom=256K chrrom=256K mirror=H battery=1 */
     0xE674099E, //  Homebrew\Hacks\Mega Man series\Rockman 5꞉ Double Jumper [Rock5easily 2015].nes 
-/**** 202 mapper=4 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
-    0x6CEDCA3D, //  Bad Dumps\侠客情꞉ 荆轲刺秦王 (TKROM)[dumper graffiti].nes 
-    0x70026D3F, //  Bad Dumps\匹诺槽的复苏 [dumper graffiti].nes 
-    0x520E93D3, //  Bad Dumps\帝国风暴 - Napoleon's War (980100029)[dumper graffiti].nes 
-    0xCAEAEE6A, //  Bad Dumps\魔域英雄传 - Hero on Devil Lands (TKROM)[dumper graffiti].nes 
-    0xF8690050, //  Bad Dumps\魔神法师 - Demogorgon Monk (TKROM)[dumper graffiti].nes 
+/**** 297 mapper=4 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x40CDD563, //  Bad Dumps\魔道士阴谋 [PRG overdump].nes 
-    0x87EA86FD, //  Compatibility Hacks\三十六計 - The Thirty-Six Tricks (970158)[m004].nes 
-    0x0E3B1D39, //  Compatibility Hacks\夺宝小英豪꞉ 光明與黑暗傳説 [m004].nes 
-    0xE13399EC, //  Compatibility Hacks\林則徐禁烟 [SMD132 lockout].nes 
-    0x1B503BC5, //  Compatibility Hacks\林則徐禁烟 [invincibility].nes 
     0x846C9304, //  Compatibility Hacks\林則徐禁烟 [invincibility][SMD132 lockout].nes 
-    0x507982E1, //  Compatibility Hacks\楚留香꞉ 香帥傳奇之血海飘零 [m004].nes 
-    0x352B93D6, //  Compatibility Hacks\水滸傳 - Marsh Outlaws [m004].nes 
-    0xE905A251, //  Compatibility Hacks\魔法门之英雄无敌 (980100295)[m004].nes 
     0xE042519C, //  Homebrew\Creepy Brawlers.nes 
     0x1640420A, //  Homebrew\Hacks\Cooey Found Weed.nes 
     0xF0473130, //  Homebrew\Hacks\Mega Man series\Mega Man Ultimate+Save [RetroRain].nes 
@@ -6042,10 +6262,8 @@ static const u32 s_crcs[] = {
     0x1CBB5703, //  Homebrew\Hacks\Tecmo Bowl series\Tecmo Super Bowl - Week 13.nes 
     0x2EC15C42, //  Homebrew\Hacks\Tecmo Bowl series\Tecmo Super Bowl - Week 14.nes 
     0x2583D8D3, //  Homebrew\Hacks\Wario's Woods - Improved [PKMNwww411].nes 
-    0xF31D8F5D, //  Homebrew\Original Mapper Restorations\絶代英雄 - Unrivalled Hero.nes 
     0x783146B2, //  Homebrew\Translations\English\Armed Dragon Fantasy Villgust [cccmar].nes 
     0x2DFE0EEC, //  Homebrew\Translations\English\Joy Mech Fight [AlanMidas joy.mech].nes 
-    0x729EF1E3, //  Homebrew\Translations\English\Lin Zexu No Smoking [Pacnsacdave].nes 
     0x1F07DDC1, //  Homebrew\Translations\English\SD Gundam - Gachapon Senshi 3꞉ Hero Warrior [MrRichard999].nes 
     0xFC52B870, //  Homebrew\Translations\English\SD Gundam - Gachapon Soldier 4꞉ NewType Story [MrRichard999 &amp; Proveaux v1.01].nes 
     0x9F0FB1CD, //  Homebrew\Translations\English\Shadow Brain [Aishsha &amp; Stardust Crusaders, MrRichard999].nes 
@@ -6054,8 +6272,6 @@ static const u32 s_crcs[] = {
     0xCF90DF9D, //  Homebrew\Translations\English\Super Robot Wars 2 [Aeon Genesis](Gallant Char).nes 
     0xEC216AA7, //  Homebrew\Translations\English\Super Robot Wars 2 [Aeon Genesis](Music Persistence).nes 
     0xC2CADB46, //  Homebrew\Translations\English\Super Robot Wars 2 [Aeon Genesis].nes 
-    0x9CDE3036, //  Homebrew\Translations\English\The Recovery of Pinocchio [Pacnsacdave].nes 
-    0x1CD1EAE7, //  Homebrew\Translations\English\The Wizard of Oz [Pacnsacdave].nes 
     0x708EA2BE, //  Licensed Japan\Joy Mech Fight.nes 
     0x9509F703, //  Licensed Japan\Metal Max.nes 
     0x9BDCD892, //  Licensed Japan\Might and Magic꞉ Secret of the Inner Sanctum.nes 
@@ -6066,9 +6282,7 @@ static const u32 s_crcs[] = {
     0xC48363B4, //  Licensed Japan\第2次 Super Robot 大戦.nes 
     0x532A27E6, //  Licensed North America\Might and Magic꞉ Secret of the Inner Sanctum.nes 
     0xF79A75D7, //  Licensed North America\Wario's Woods.nes 
-    0x668D1715, //  Licensed PAL\Wario's Woods.nes 
     0x53A9E2BA, //  Modern\EarthBound Beginnings.nes 
-    0xFC41249E, //  Modern\Little Medusa.nes 
     0x4F6FBA72, //  Modern\Virtual Console\Joy Mech Fight.nes 
     0x7FEAE646, //  Modern\Virtual Console\Metal Max.nes 
     0x3823BDD1, //  Modern\キラキラ Star Night AC.nes 
@@ -6077,7 +6291,28 @@ static const u32 s_crcs[] = {
     0x7414DFD8, //  Modern\キラキラ Star Night DX Tournament Edition.nes 
     0xE1879278, //  Plug-and-Play\extracts\International Cricket.nes 
     0x538FFC02, //  Samples\Creepy Brawlers.nes 
+/**** 298 mapper=4 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 system=SYSTEM_PAL */
+    0x668D1715, //  Licensed PAL\Wario's Woods.nes 
+/**** 299 mapper=4 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 system=SYSTEM_NTSC */
+    0xFC41249E, //  Modern\Little Medusa.nes 
     0x19074D1D, //  Samples\Little Medusa.nes 
+/**** 300 mapper=4 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 system=SYSTEM_NTSC */
+    0x6CEDCA3D, //  Bad Dumps\侠客情꞉ 荆轲刺秦王 (TKROM)[dumper graffiti].nes 
+    0x70026D3F, //  Bad Dumps\匹诺槽的复苏 [dumper graffiti].nes 
+    0x520E93D3, //  Bad Dumps\帝国风暴 - Napoleon's War (980100029)[dumper graffiti].nes 
+    0xCAEAEE6A, //  Bad Dumps\魔域英雄传 - Hero on Devil Lands (TKROM)[dumper graffiti].nes 
+    0xF8690050, //  Bad Dumps\魔神法师 - Demogorgon Monk (TKROM)[dumper graffiti].nes 
+    0x87EA86FD, //  Compatibility Hacks\三十六計 - The Thirty-Six Tricks (970158)[m004].nes 
+    0x0E3B1D39, //  Compatibility Hacks\夺宝小英豪꞉ 光明與黑暗傳説 [m004].nes 
+    0xE13399EC, //  Compatibility Hacks\林則徐禁烟 [SMD132 lockout].nes 
+    0x1B503BC5, //  Compatibility Hacks\林則徐禁烟 [invincibility].nes 
+    0x507982E1, //  Compatibility Hacks\楚留香꞉ 香帥傳奇之血海飘零 [m004].nes 
+    0x352B93D6, //  Compatibility Hacks\水滸傳 - Marsh Outlaws [m004].nes 
+    0xE905A251, //  Compatibility Hacks\魔法门之英雄无敌 (980100295)[m004].nes 
+    0xF31D8F5D, //  Homebrew\Original Mapper Restorations\絶代英雄 - Unrivalled Hero.nes 
+    0x729EF1E3, //  Homebrew\Translations\English\Lin Zexu No Smoking [Pacnsacdave].nes 
+    0x9CDE3036, //  Homebrew\Translations\English\The Recovery of Pinocchio [Pacnsacdave].nes 
+    0x1CD1EAE7, //  Homebrew\Translations\English\The Wizard of Oz [Pacnsacdave].nes 
     0x48EDE7F6, //  Unlicensed China\外星\东周列国志 (960100577).nes 
     0x116E74DB, //  Unlicensed China\外星\争霸世纪.nes 
     0x0DF38D2B, //  Unlicensed China\外星\侠客情꞉ 荆轲刺秦王 (TKROM).nes 
@@ -6105,12 +6340,9 @@ static const u32 s_crcs[] = {
     0x20D5BA91, //  Unlicensed China\福州 Coolboy\光明之神.nes 
     0x58B57FFD, //  Unlicensed China\福州 Coolboy\虎门硝烟.nes 
     0x0C87BBF5, //  Unlicensed China\红楼梦.nes 
-/**** 203 mapper=4 prgrom=256K prgnvram=16K chrrom=256K mirror=H battery=1 */
+/**** 301 mapper=4 prgrom=256K prgnvram=16K chrrom=256K mirror=H battery=1 system=SYSTEM_NTSC */
     0xE92A3B98, //  Homebrew\Translations\English\Tunnel War [Pacnsacdave].nes 
-/**** 204 mapper=4 prgrom=512K prgnvram=8K chrram=8K mirror=H battery=1 */
-    0x33B43FA0, //  Bad Dumps\EverQuest - 无尽的任务 [dumper graffiti].nes 
-    0x30284404, //  Bad Dumps\创世纪英雄 [dumper graffiti].nes 
-    0x6BEA1235, //  Compatibility Hacks\勇者斗恶龙 - Dragon Quest VI [m004].nes 
+/**** 302 mapper=4 prgrom=512K prgnvram=8K chrram=8K mirror=H battery=1 */
     0x1568198B, //  Homebrew\Hacks\Mega Man series\Mega Man CX [pacnsacdave, Himajin].nes 
     0x4FBAB3E1, //  Homebrew\Hacks\Mega Man series\Rockman 4꞉ 新たなる野望!! - Endless.nes 
     0x2D2C99BF, //  Homebrew\Translations\English\Destiny of an Emperor II꞉ The Story of Zhuge Liang [Dark Force, Dynamic Designs, Jair, Taskforce v1.12].nes 
@@ -6130,6 +6362,10 @@ static const u32 s_crcs[] = {
     0x6313EBC7, //  Modern\Virtual Console\Final Fantasy III (rev0).nes 
     0xACAEEE0A, //  Modern\Virtual Console\Final Fantasy III (rev1).nes 
     0x00890F1E, //  Modern\Virtual Console\Final Fantasy III (rev2).nes 
+/**** 303 mapper=4 prgrom=512K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_NTSC */
+    0x33B43FA0, //  Bad Dumps\EverQuest - 无尽的任务 [dumper graffiti].nes 
+    0x30284404, //  Bad Dumps\创世纪英雄 [dumper graffiti].nes 
+    0x6BEA1235, //  Compatibility Hacks\勇者斗恶龙 - Dragon Quest VI [m004].nes 
     0x663F3912, //  Unlicensed China\外星\Age of Empires - 帝国时代 (0100725).nes 
     0xA39543FB, //  Unlicensed China\外星\EverQuest - 无尽的任务.nes 
     0xDA07391E, //  Unlicensed China\外星\三國志꞉ 英杰傳 (Simplified Chinese).nes 
@@ -6141,9 +6377,9 @@ static const u32 s_crcs[] = {
     0x40E9255A, //  Unlicensed China\外星\银河时代.nes 
     0xB5E9E394, //  Unlicensed China\福州 Coolboy\列车奇案.nes 
     0x6C935F22, //  Unlicensed China\福州 Coolboy\吞食天地.nes 
-/**** 205 mapper=4 prgrom=512K prgnvram=8K chrrom=8K mirror=H battery=1 */
+/**** 304 mapper=4 prgrom=512K prgnvram=8K chrrom=8K mirror=H battery=1 */
     0x4C9824C4, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. 2 with Super Mario Bros. Characters.nes 
-/**** 206 mapper=4 prgrom=512K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 305 mapper=4 prgrom=512K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x675619AC, //  Homebrew\Translations\English\God Slayer꞉ Sonata of the Distant Heavens [Stardust Crusaders v1.02].nes 
     0x06539EF4, //  Homebrew\Translations\English\Rainbow Silkroad [Aishsha &amp; Stardust Crusaders].nes 
     0x1AA81F17, //  Homebrew\Translations\English\Sansara Naga [Aishsha &amp; Stardust Crusaders v1.01].nes 
@@ -6151,7 +6387,7 @@ static const u32 s_crcs[] = {
     0xEBBB8C92, //  Homebrew\Translations\English\The Magic Candle [Aishsha, Stardust Crusaders].nes 
     0xCA730971, //  Licensed Japan\Advanced Dungeons &amp; Dragons꞉ Pool of Radiance.nes 
     0x25952141, //  Licensed North America\Advanced Dungeons &amp; Dragons꞉ Pool of Radiance.nes 
-/**** 207 mapper=4 prgrom=512K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 306 mapper=4 prgrom=512K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x8638208B, //  Homebrew\Hacks\Deadpool (2018)[pacnsacdave].nes 
     0x47B758CD, //  Homebrew\Hacks\Deadpool (2019)[pacnsacdave].nes 
     0x09BB565A, //  Homebrew\Hacks\Deadpool - Final [Techmoon].nes 
@@ -6166,26 +6402,28 @@ static const u32 s_crcs[] = {
     0xD7794AFC, //  Licensed North America\Kirby's Adventure (English rev0).nes 
     0x5ED6F221, //  Licensed North America\Kirby's Adventure (English rev1).nes 
     0x37088EFF, //  Licensed North America\Kirby's Adventure (French).nes 
+    0xC52D10AB, //  Modern\8-Bit Adv Steins;Gate.nes 
+    0x95D7B116, //  Modern\Astro Ninja Man.nes 
+/**** 307 mapper=4 prgrom=512K prgnvram=8K chrrom=256K mirror=H battery=1 system=SYSTEM_PAL */
     0x2C088DC5, //  Licensed PAL\Kirby's Adventure (English).nes 
     0xB2EF7F4B, //  Licensed PAL\Kirby's Adventure (French).nes 
     0x127D76F4, //  Licensed PAL\Kirby's Adventure (German).nes 
-    0xC52D10AB, //  Modern\8-Bit Adv Steins;Gate.nes 
-    0x95D7B116, //  Modern\Astro Ninja Man.nes 
-/**** 208 mapper=4 prgrom=1024K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 308 mapper=4 prgrom=1024K prgnvram=8K chrram=8K mirror=H battery=1 */
     0xF011AFD6, //  Homebrew\Hacks\Mega Man series\Rockman 4- Minus Infinity [Infinite Life].nes 
-/**** 209 mapper=4 submapper=1 prgrom=256K prgnvram=1K chrrom=256K mirror=H battery=1 */
+/**** 309 mapper=4 submapper=1 prgrom=256K prgnvram=1K chrrom=256K mirror=H battery=1 */
     0xFCEDB11A, //  Homebrew\Bugfixes, Improvements\Startropics [music synchronization].nes 
     0xD054FFB0, //  Licensed North America\Startropics II꞉ Zoda's Revenge.nes 
     0x889129CB, //  Licensed North America\Startropics.nes 
-    0x998422FC, //  Licensed PAL\Startropics.nes 
     0xE7B34C02, //  Modern\Virtual Console\StarTropics (NTSC).nes 
-    0xF6A64735, //  Modern\Virtual Console\StarTropics (PAL).nes 
     0x33751782, //  Modern\Virtual Console\Startropics II꞉ Zoda's Revenge.nes 
-/**** 210 mapper=4 submapper=2 prgrom=256K chrrom=64K mirror=H */
+/**** 310 mapper=4 submapper=1 prgrom=256K prgnvram=1K chrrom=256K mirror=H battery=1 system=SYSTEM_PAL */
+    0x998422FC, //  Licensed PAL\Startropics.nes 
+    0xF6A64735, //  Modern\Virtual Console\StarTropics (PAL).nes 
+/**** 311 mapper=4 submapper=2 prgrom=256K chrrom=64K mirror=H */
     0x282DA88C, //  Homebrew\Translations\English\Detective Sanma [Ccmar].nes 
-/**** 211 mapper=4 submapper=2 prgrom=256K prgnvram=8K chrrom=64K mirror=V battery=1 */
+/**** 312 mapper=4 submapper=2 prgrom=256K prgnvram=8K chrrom=64K mirror=V battery=1 */
     0x9AE7B722, //  Homebrew\Translations\English\Debias꞉ Legendary Space-Time Hero [Gil Galad].nes 
-/**** 212 mapper=4 submapper=3 prgrom=128K chrrom=128K mirror=H */
+/**** 313 mapper=4 submapper=3 prgrom=128K chrrom=128K mirror=H */
     0x292DF6A2, //  Compatibility Hacks\Everdrive N8\Terminator 2 - Judgment Day [RAM initialization].nes 
     0x25D006F2, //  Homebrew\Hacks\Alien 3 - Lomax Edition.nes 
     0xC527C297, //  Licensed North America\Alien 3.nes 
@@ -6193,7 +6431,7 @@ static const u32 s_crcs[] = {
     0x2370C0A9, //  Licensed North America\Rollerblade Racer.nes 
     0x7E57FBEC, //  Licensed North America\T&amp;C Surf Designs II꞉ Thrilla's Surfari.nes 
     0xEA27B477, //  Licensed North America\Terminator 2꞉ Judgment Day.nes 
-/**** 213 mapper=4 submapper=3 prgrom=128K chrrom=256K mirror=H */
+/**** 314 mapper=4 submapper=3 prgrom=128K chrrom=256K mirror=H */
     0xAF05F37E, //  Licensed North America\George Foreman's KO Boxing.nes 
     0x018A8699, //  Licensed North America\Roger Clemens' MVP Baseball (rev0).nes 
     0x394D6E2F, //  Licensed North America\Roger Clemens' MVP Baseball (rev1).nes 
@@ -6202,61 +6440,64 @@ static const u32 s_crcs[] = {
     0x7B4ED0BB, //  Licensed North America\WWF King of the Ring.nes 
     0xD4611B79, //  Licensed North America\WWF WrestleMania Steel Cage Challenge.nes 
     0xB4FDE978, //  Unreleased\The Incredible Crash Dummies.nes 
-/**** 214 mapper=4 submapper=3 prgrom=256K chrrom=128K mirror=H */
+/**** 315 mapper=4 submapper=3 prgrom=256K chrrom=128K mirror=H */
     0x7416903F, //  Licensed North America\The Simpsons꞉ Bart vs. the World.nes 
     0x5991B9D0, //  Licensed North America\The Simpsons꞉ Bartman Meets Radioactive Man.nes 
-/**** 215 mapper=4 submapper=4 prgrom=256K chrrom=256K mirror=H */
+/**** 316 mapper=4 submapper=4 prgrom=256K chrrom=256K mirror=H */
     0x97B6CB19, //  Bootleg Singles\Aladdin (A-N8).nes 
-/**** 216 mapper=5 prgrom=16K chrrom=8K chrram=8K mirror=H */
+/**** 317 mapper=5 prgrom=16K chrrom=8K chrram=8K mirror=H */
     0x3CBCFC54, //  BIOS\Demo Boy 2.nes 
-/**** 217 mapper=5 prgrom=16K chrrom=16K mirror=H */
+/**** 318 mapper=5 prgrom=16K chrrom=16K mirror=H */
     0x5A265CC1, //  Homebrew\Demos\Cat.nes 
-/**** 218 mapper=5 prgrom=32K prgram=8K chrrom=32K mirror=H */
+/**** 319 mapper=5 prgrom=32K prgram=8K chrrom=32K mirror=H */
     0xCC653CCE, //  Homebrew\Demos\Multi-Layered Scrolling Demo.nes 
-/**** 219 mapper=5 prgrom=64K chrrom=8K mirror=H */
+/**** 320 mapper=5 prgrom=64K chrrom=8K mirror=H */
     0xB93B1326, //  Homebrew\Tests\Color Test.nes 
-/**** 220 mapper=5 prgrom=128K prgram=8K chrrom=64K mirror=H */
+/**** 321 mapper=5 prgrom=128K prgram=8K chrrom=64K mirror=H */
     0x24BB055E, //  Compatibility Hacks\Impossible Mission 2 [m005].nes 
-/**** 221 mapper=5 prgrom=128K chrrom=128K mirror=H */
+/**** 322 mapper=5 prgrom=128K chrrom=128K mirror=H */
     0x0AFB395E, //  Licensed Japan\Gun Sight.nes 
     0xBB7F829A, //  Licensed Japan\宇宙警備隊 SDF.nes 
     0xB0480AE9, //  Licensed North America\Laser Invasion.nes 
-/**** 222 mapper=5 prgrom=256K chrrom=128K mirror=H */
+/**** 323 mapper=5 prgrom=256K chrrom=128K mirror=H */
     0xC4EE22BA, //  Homebrew\Hacks\Castlevania series\Castlevania III꞉ Dracula's Curse - All Bugfixes.nes 
     0xF2A59A7C, //  Homebrew\Hacks\Castlevania series\Castlevania III꞉ Dracula's Curse - Evgeny Edition.nes 
     0x2A2D83D5, //  Homebrew\Hacks\Castlevania series\Castlevania III꞉ Dracula's Curse - Uncensored Edition.nes 
     0xED2465BE, //  Licensed North America\Castlevania III꞉ Dracula's Curse.nes 
-    0x671F23A8, //  Licensed PAL\Castlevania III꞉ Dracula's Curse.nes 
     0x3095A71C, //  Modern\Castlevania III꞉ Dracula's Curse (Castlevania Anniversary Collection).nes 
     0xCD4E7430, //  Modern\Castlevania III꞉ Dracula's Curse (Konami Collector's Series).nes 
     0xE7015A29, //  Modern\Virtual Console\Castlevania III꞉ Dracula's Curse (NTSC).nes 
+/**** 324 mapper=5 prgrom=256K chrrom=128K mirror=H system=SYSTEM_PAL */
+    0x671F23A8, //  Licensed PAL\Castlevania III꞉ Dracula's Curse.nes 
     0x04C2DC72, //  Modern\Virtual Console\Castlevania III꞉ Dracula's Curse (PAL).nes 
-/**** 223 mapper=5 prgrom=512K chrram=8K mirror=H */
+/**** 325 mapper=5 prgrom=512K chrram=8K mirror=H */
     0xB7A640AA, //  Homebrew\Hacks\Mega Man series\Mega Man Origins [RetroRain].nes 
-/**** 224 mapper=5 prgrom=512K chrrom=256K mirror=H */
+/**** 326 mapper=5 prgrom=512K chrrom=256K mirror=H */
     0xD8CF3573, //  Compatibility Hacks\Caltron 9-in-1 [m005].nes 
     0xED53266B, //  Unreleased\Caltron 9-in-1 [m005 WIP].nes 
-/**** 225 mapper=5 prgrom=512K chrrom=512K mirror=H */
+/**** 327 mapper=5 prgrom=512K chrrom=512K mirror=H */
     0xB4735FAC, //  Licensed Japan\Metal Slader Glory.nes 
     0x51D4B441, //  Modern\Virtual Console\Metal Slader Glory.nes 
+/**** 328 mapper=5 prgrom=512K chrrom=512K mirror=H system=SYSTEM_NTSC */
     0xB1C7EB21, //  Samples\Street Fighter II Nostalgic Edition.nes 
-/**** 226 mapper=5 prgrom=1024K prgram=8K chrrom=256K mirror=H */
+/**** 329 mapper=5 prgrom=1024K prgram=8K chrrom=256K mirror=H */
     0x3A49CF82, //  Homebrew\Hacks\Super Mario Bros. series\Reuben.nes 
     0xE08EE48C, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. 3 Raeneske.nes 
-/**** 227 mapper=5 prgrom=1024K chrrom=512K mirror=H */
+/**** 330 mapper=5 prgrom=1024K chrrom=512K mirror=H */
     0xC4FE19F7, //  Homebrew\Translations\English\Metal Slader Glory [Stardust Crusaders].nes 
-/**** 228 mapper=5 prgrom=1024K chrrom=520K mirror=H */
+/**** 331 mapper=5 prgrom=1024K chrrom=520K mirror=H */
     0x186BB7BF, //  Homebrew\Translations\English\Metal Slader Glory [FCandChill, Her-Saki v1.1].nes 
-/**** 229 mapper=5 prgrom=1024K prgram=8K chrrom=1024K mirror=H */
+/**** 332 mapper=5 prgrom=1024K prgram=8K chrrom=1024K mirror=H */
     0xD9B1A41F, //  Homebrew\Hacks\44 Balloons꞉ The Balloon Fight Collection.nes 
+/**** 333 mapper=5 prgrom=1024K prgram=8K chrrom=1024K mirror=H system=SYSTEM_NTSC */
     0xAC9321EF, //  Homebrew\Hacks\Ultimate Mortal Kombat 3 (early).nes 
     0xE2FD1490, //  Homebrew\Hacks\Ultimate Mortal Kombat 3 (final).nes 
-/**** 230 mapper=5 prgrom=128K prgram=8K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 334 mapper=5 prgrom=128K prgram=8K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xE5584D9F, //  Homebrew\Bugfixes, Improvements\Sim City [Санчес 2018-11-06].nes 
     0xFDC7C50B, //  Unreleased\Sim City.nes 
-/**** 231 mapper=5 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 335 mapper=5 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xD532E98F, //  Licensed Japan\新 4人打ち麻雀꞉ 役満天国.nes 
-/**** 232 mapper=5 prgrom=256K prgram=8K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 336 mapper=5 prgrom=256K prgram=8K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x6396B988, //  Licensed Japan\L'Empereur.nes 
     0xEEE9A682, //  Licensed Japan\信長の野望꞉ 戦国群雄伝 (rev0).nes 
     0xF9B4240F, //  Licensed Japan\信長の野望꞉ 戦国群雄伝 (rev1).nes 
@@ -6265,43 +6506,44 @@ static const u32 s_crcs[] = {
     0x15FE6D0F, //  Licensed North America\Bandit Kings of Ancient China.nes 
     0x9C18762B, //  Licensed North America\L'Empereur.nes 
     0x8CE478DB, //  Licensed North America\Nobunaga's Ambition 2.nes 
-/**** 233 mapper=5 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 337 mapper=5 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0xBC80FB52, //  Licensed Japan\Royal Blood.nes 
     0x0EC6C023, //  Licensed North America\Gemfire.nes 
-/**** 234 mapper=5 prgrom=256K prgnvram=32K chrrom=256K mirror=H battery=1 */
+/**** 338 mapper=5 prgrom=256K prgnvram=32K chrrom=256K mirror=H battery=1 */
     0x184C2124, //  Licensed Japan\三國志 II (rev0).nes 
     0xEE8E6553, //  Licensed Japan\三國志 II (rev1).nes 
     0xF011E490, //  Licensed North America\Romance of the Three Kingdoms 2.nes 
-/**** 235 mapper=5 prgrom=512K prgram=8K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 339 mapper=5 prgrom=512K prgram=8K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xFE3488D1, //  Licensed Japan\大航海時代.nes 
     0xACA15643, //  Licensed North America\Uncharted Waters.nes 
-/**** 236 mapper=5 prgrom=512K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 340 mapper=5 prgrom=512K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x735528D8, //  Homebrew\Translations\English\Just Breed [Stealth Translations v1.00].nes 
     0x9CBADC25, //  Licensed Japan\Just Breed.nes 
-/**** 237 mapper=5 prgrom=512K prgnvram=32K chrrom=256K mirror=H battery=1 */
+/**** 341 mapper=5 prgrom=512K prgnvram=32K chrrom=256K mirror=H battery=1 */
     0xF540677B, //  Licensed Japan\信長の野望꞉ 武将風雲録 (rev0).nes 
     0xA1617DFA, //  Licensed Japan\信長の野望꞉ 武将風雲録 (rev1).nes 
     0x6F4E4312, //  Licensed Japan\蒼き狼と白き牝鹿꞉ 元朝秘史.nes 
-/**** 238 mapper=5 prgrom=1024K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 342 mapper=5 prgrom=1024K prgnvram=8K chrram=8K mirror=H battery=1 */
     0x6822DE93, //  Homebrew\Hacks\Mega Man series\Rockman 4 Minus Infinity (v1.01).nes 
     0xD7DBEFDE, //  Homebrew\Translations\English\Final Fantasy III [Chaos Rush 2016 v1.3].nes 
-/**** 239 mapper=5 prgrom=1024K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 343 mapper=5 prgrom=1024K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x8DDD7754, //  Homebrew\Hacks\Teenage Mutant Ninja Turtles - Cowabunga Edition Ultimate [Maggiore, Rockman].nes 
     0x6DC89DF1, //  Homebrew\Hacks\Teenage Mutant Ninja Turtles - Cowabunga Edition [Retrorain].nes 
     0x83E68F3F, //  Homebrew\Hacks\Teenage Mutant Ninja Turtles꞉ Return to New York [guitarpalooz].nes 
-/**** 240 mapper=5 prgrom=1024K prgnvram=32K chrrom=1024K mirror=H battery=1 */
+/**** 344 mapper=5 prgrom=1024K prgnvram=32K chrrom=1024K mirror=H battery=1 */
     0xD430A9EF, //  Homebrew\Hacks\Zelda series\Zelda꞉ The Legend of Link (2018-12-23).nes 
     0x6FC02929, //  Homebrew\Multicarts\Super Mario All-Stars NES (cartridge).nes 
     0x06143FB3, //  Homebrew\Multicarts\Super Mario All-Stars NES (emulator).nes 
-/**** 241 mapper=7 prgrom=128K chrram=8K mirror=H */
+/**** 345 mapper=7 prgrom=128K chrram=8K mirror=H */
     0xC2073301, //  Homebrew\Hacks\Captain Skyhawk - Lomax Edition.nes 
     0x8F3E25F9, //  Homebrew\The Alphabet.nes 
-/**** 242 mapper=7 prgrom=256K chrram=8K mirror=H */
+/**** 346 mapper=7 prgrom=256K chrram=8K mirror=H */
     0x3AF644B6, //  Homebrew\Demos\MOON8 - Dark Side of the Moon (Pink Floyd).nes 
-/**** 243 mapper=7 submapper=1 prgrom=64K chrram=8K mirror=H */
+/**** 347 mapper=7 submapper=1 prgrom=64K chrram=8K mirror=H */
     0xDD062F9C, //  Licensed North America\R.C. Pro-Am (rev0).nes 
+/**** 348 mapper=7 submapper=1 prgrom=64K chrram=8K mirror=H system=SYSTEM_PAL */
     0xE5A972BE, //  Licensed PAL\R.C. Pro-Am (rev0).nes 
-/**** 244 mapper=7 submapper=1 prgrom=128K chrram=8K mirror=H */
+/**** 349 mapper=7 submapper=1 prgrom=128K chrram=8K mirror=H */
     0xC8AD4F32, //  Licensed North America\Cobra Triangle.nes 
     0xB5D10D5C, //  Licensed North America\Jeopardy! (rev0).nes 
     0x2A662AC7, //  Licensed North America\Jeopardy! (rev1).nes 
@@ -6319,23 +6561,24 @@ static const u32 s_crcs[] = {
     0x505F9715, //  Licensed North America\Wizards &amp; Warriors (rev0).nes 
     0x26535EF5, //  Licensed North America\Wizards &amp; Warriors (rev1).nes 
     0xF613A8F9, //  Licensed North America\World Games.nes 
+    0x5DC9BC41, //  Unreleased\Solstice꞉ The Quest for the Staff of Demnos.nes 
+    0xA8B1D1D1, //  Unreleased\The Tale꞉ Elrondの英雄.nes 
+/**** 350 mapper=7 submapper=1 prgrom=128K chrram=8K mirror=H system=SYSTEM_PAL */
     0x898E4232, //  Licensed PAL\Cobra Triangle.nes 
     0x51BF28AF, //  Licensed PAL\Marble Madness.nes 
     0x7CB0D70D, //  Licensed PAL\Solstice꞉ The Quest for the Staff of Demnos.nes 
     0x6C4A9735, //  Licensed PAL\WWF WrestleMania.nes 
     0x5E6D9975, //  Licensed PAL\Wizards &amp; Warriors.nes 
-    0x5DC9BC41, //  Unreleased\Solstice꞉ The Quest for the Staff of Demnos.nes 
-    0xA8B1D1D1, //  Unreleased\The Tale꞉ Elrondの英雄.nes 
-/**** 245 mapper=7 submapper=1 prgrom=256K chrram=8K mirror=H */
+/**** 351 mapper=7 submapper=1 prgrom=256K chrram=8K mirror=H */
     0x670C900A, //  Homebrew\Bugfixes, Improvements\Ironsword꞉ Wizards &amp; Warriors II (NTSC)[status bar position, noise channel][NewRisingSun].nes 
-    0x3F8C48FF, //  Homebrew\Bugfixes, Improvements\Ironsword꞉ Wizards &amp; Warriors II (PAL)[status bar position, noise channel][NewRisingSun].nes 
     0x2B378D11, //  Licensed North America\Double Dare.nes 
     0x2328046E, //  Licensed North America\Ironsword꞉ Wizards &amp; Warriors II.nes 
+/**** 352 mapper=7 submapper=1 prgrom=256K chrram=8K mirror=H system=SYSTEM_PAL */
+    0x3F8C48FF, //  Homebrew\Bugfixes, Improvements\Ironsword꞉ Wizards &amp; Warriors II (PAL)[status bar position, noise channel][NewRisingSun].nes 
     0x694C801F, //  Licensed PAL\Ironsword꞉ Wizards &amp; Warriors II.nes 
-/**** 246 mapper=7 submapper=2 prgrom=64K chrram=8K mirror=H */
+/**** 353 mapper=7 submapper=2 prgrom=64K chrram=8K mirror=H system=SYSTEM_NTSC */
     0x106180D6, //  Samples\Super NeSnake 2.nes 
-/**** 247 mapper=7 submapper=2 prgrom=128K chrram=8K mirror=H */
-    0x4EB77C64, //  Homebrew\Super NeSnake 2.nes 
+/**** 354 mapper=7 submapper=2 prgrom=128K chrram=8K mirror=H */
     0xEB88D662, //  Homebrew\Translations\Russian\NARC.nes 
     0xA91460B8, //  Licensed Japan\Solstice꞉ 三次元迷宮の狂獣.nes 
     0xA72FDE03, //  Licensed Japan\伝説の騎士 Elrond.nes 
@@ -6350,14 +6593,17 @@ static const u32 s_crcs[] = {
     0x4B041B6B, //  Licensed North America\Ivan ''Ironman'' Stewart's Super Off-Road.nes 
     0x0537322A, //  Licensed North America\NARC.nes 
     0x13D5B1A4, //  Licensed North America\Time Lord.nes 
+    0x1248895C, //  Playchoice\Captain Skyhawk.nes 
+/**** 355 mapper=7 submapper=2 prgrom=128K chrram=8K mirror=H system=SYSTEM_PAL */
     0xDB9C072D, //  Licensed PAL\Arch Rivals꞉ A Basketbrawl!.nes 
     0x1EFE38EB, //  Licensed PAL\Captain Skyhawk.nes 
     0x27CA0679, //  Licensed PAL\Danny Sullivan's Indy Heat.nes 
     0x96CFB4D8, //  Licensed PAL\Digger T. Rock꞉ The Legend of the Lost City.nes 
     0x05104517, //  Licensed PAL\Ivan ''Ironman'' Stewart's Super Off-Road.nes 
     0x9198279E, //  Licensed PAL\Time Lord.nes 
-    0x1248895C, //  Playchoice\Captain Skyhawk.nes 
-/**** 248 mapper=7 submapper=2 prgrom=256K chrram=8K mirror=H */
+/**** 356 mapper=7 submapper=2 prgrom=128K chrram=8K mirror=H system=SYSTEM_NTSC */
+    0x4EB77C64, //  Homebrew\Super NeSnake 2.nes 
+/**** 357 mapper=7 submapper=2 prgrom=256K chrram=8K mirror=H */
     0xC0A650F8, //  Bootleg Singles\Battletoads &amp; Double Dragon꞉ The Ultimate Team (NT-672).nes 
     0x2E43FAA7, //  Homebrew\Bugfixes, Improvements\Battletoads [bugfix][Ti].nes 
     0x82E4EBBA, //  Homebrew\Hacks\Battletoads - CO-OP Mod for Famicom [Dushbadge].nes 
@@ -6368,6 +6614,8 @@ static const u32 s_crcs[] = {
     0x9EDD2159, //  Licensed North America\R.C. Pro-Am II.nes 
     0x8111BA08, //  Licensed North America\Solar Jetman꞉ Hunt for the Golden Warpship.nes 
     0xD2562072, //  Licensed North America\Wizards &amp; Warriors III꞉ Kuros꞉ Visions of Power.nes 
+    0x2D417253, //  Playchoice\Solar Jetman꞉ Hunt for the Golden Warpship.nes 
+/**** 358 mapper=7 submapper=2 prgrom=256K chrram=8K mirror=H system=SYSTEM_PAL */
     0x41D32FD7, //  Licensed PAL\Aladdin.nes 
     0x23D7D48F, //  Licensed PAL\Battletoads &amp; Double Dragon꞉ The Ultimate Team.nes 
     0x524A5A32, //  Licensed PAL\Battletoads.nes 
@@ -6375,32 +6623,32 @@ static const u32 s_crcs[] = {
     0x8904149E, //  Licensed PAL\Solar Jetman꞉ Hunt for the Golden Warpship.nes 
     0x89984244, //  Licensed PAL\The Lion King.nes 
     0x806DE21E, //  Licensed PAL\Wizards &amp; Warriors III꞉ Kuros꞉ Visions of Power.nes 
-    0x2D417253, //  Playchoice\Solar Jetman꞉ Hunt for the Golden Warpship.nes 
-/**** 249 mapper=7 submapper=2 prgrom=512K chrram=8K mirror=H */
+/**** 359 mapper=7 submapper=2 prgrom=512K chrram=8K mirror=H */
     0x31CBCD41, //  Bad Dumps\Battletoads &amp; Double Dragon꞉ The Ultimate Team - 4 Players (v0.9)[NakeuD2007].nes 
     0x3FEAFD85, //  Homebrew\Hacks\Battletoads &amp; Double Dragon on Ragnarok (v1.2)]Corpse Grinder].nes 
-/**** 250 mapper=9 prgrom=128K chrrom=128K mirror=H */
+/**** 360 mapper=9 prgrom=128K chrrom=128K mirror=H */
     0x6F5685EA, //  Homebrew\Hacks\Ben Weasel's Punch Out [Punktendo].nes 
     0x9A836761, //  Homebrew\Hacks\Punch-Out!! Kirby [Byrahga].nes 
     0x92A2185C, //  Licensed Japan\Mike Tyson's Punch-Out!! (rev0).nes 
     0x2C818014, //  Licensed Japan\Mike Tyson's Punch-Out!! (rev1).nes 
     0x84382231, //  Licensed Japan\Punch-Out!! Prize Edition.nes 
     0xB95E9E7F, //  Licensed North America\Punch-Out!! Starring Mr. Dream.nes 
+    0xB7BDA5FA, //  Modern\Virtual Console\Punch-Out!! (NTSC).nes 
+/**** 361 mapper=9 prgrom=128K chrrom=128K mirror=H system=SYSTEM_PAL */
     0x3A4D4D10, //  Licensed PAL\Mike Tyson's Punch-Out!! (rev0).nes 
     0x25551F3F, //  Licensed PAL\Mike Tyson's Punch-Out!! (rev1).nes 
     0xD229FD5C, //  Licensed PAL\Punch-Out!! Starring Mr. Dream.nes 
-    0xB7BDA5FA, //  Modern\Virtual Console\Punch-Out!! (NTSC).nes 
     0xDCCAC6D9, //  Modern\Virtual Console\Punch-Out!! (PAL).nes 
-/**** 251 mapper=9 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 362 mapper=9 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x7B837FDE, //  Bad Dumps\Mike Tyson's Punch-Out!! [missing PROM].nes 
     0xB6900E4F, //  Playchoice\Mike Tyson's Punch-Out!!.nes 
-/**** 252 mapper=10 prgrom=128K prgnvram=8K chrrom=64K mirror=H battery=1 */
+/**** 363 mapper=10 prgrom=128K prgnvram=8K chrrom=64K mirror=H battery=1 */
     0x9B547E05, //  Licensed Japan\Famicom Wars.nes 
     0xB6F4E666, //  Modern\Virtual Console\Famicom Wars.nes 
-/**** 253 mapper=10 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 364 mapper=10 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xEE0A9B41, //  Homebrew\Translations\English\Famicom Wars [Aka Translations v1.11, Pacnsacdave v1.0].nes 
     0x40D5FCD1, //  Homebrew\Translations\English\Famicom Wars [Aka Translations v1.11].nes 
-/**** 254 mapper=10 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 365 mapper=10 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x489DE293, //  Homebrew\Translations\English\Fire Emblem Gaiden [Artemis251 v1.01, Gaiden Guy v0.9a].nes 
     0x4EECDBF6, //  Homebrew\Translations\English\Fire Emblem Gaiden [Artemis251 v1.01].nes 
     0xE2CF01D6, //  Homebrew\Translations\English\Fire Emblem꞉ Dark Dragon and the Sword of Light [Quirino v1.0, Megakoopax Beta 4].nes 
@@ -6409,36 +6657,37 @@ static const u32 s_crcs[] = {
     0xA98046B8, //  Licensed Japan\Fire Emblem 外伝.nes 
     0x97CAD370, //  Licensed Japan\Fire Emblem꞉ 暗黒竜と光の剣.nes 
     0xB76DEEBD, //  Modern\Virtual Console\Fire Emblem 外伝.nes 
-/**** 255 mapper=11 prgrom=32K chrrom=16K mirror=H */
+/**** 366 mapper=11 prgrom=32K chrrom=16K mirror=H */
     0x5DA9CEC8, //  Unlicensed North America\Mission Cobra.nes 
-/**** 256 mapper=11 prgrom=32K chrrom=32K mirror=H */
+/**** 367 mapper=11 prgrom=32K chrrom=32K mirror=H */
     0x09C31CD4, //  Unlicensed North America\Galactic Crusader.nes 
-/**** 257 mapper=11 prgrom=128K chrrom=8K mirror=H */
+/**** 368 mapper=11 prgrom=128K chrrom=8K mirror=H system=SYSTEM_NTSC */
     0xEBB56E10, //  Unlicensed Elsewhere\балда.nes 
-/**** 258 mapper=11 prgrom=512K chrrom=128K mirror=H */
+/**** 369 mapper=11 prgrom=512K chrrom=128K mirror=H */
     0x5CCED4EC, //  Homebrew\Mojonian Tales.nes 
-/**** 259 mapper=11 prgrom=32K chrrom=16K mirror=V */
+/**** 370 mapper=11 prgrom=32K chrrom=16K mirror=V */
     0x5231A114, //  Homebrew\Tests\Color Dreams Color Test.nes 
     0x4D527D4A, //  Unlicensed North America\Tagin' Dragon.nes 
-/**** 260 mapper=11 prgrom=32K chrrom=32K mirror=V */
+/**** 371 mapper=11 prgrom=32K chrrom=32K mirror=V */
+    0x3C7E38F5, //  Unlicensed North America\Master Chu &amp; The Drunkard Hu.nes 
+    0x11D08CC6, //  Unlicensed North America\Metal Fighter µ.nes 
+    0xC73B82FC, //  Unlicensed North America\Shockwave.nes 
+/**** 372 mapper=11 prgrom=32K chrrom=32K mirror=V system=SYSTEM_NTSC */
     0xFD9E5DD6, //  Bad Dumps\Chiller [bad PRG+CHR].nes 
     0xD15009CC, //  Bad Dumps\Chiller [bad PRG].nes 
     0x231BC76E, //  Unlicensed Elsewhere\Chiller.nes 
     0xB79F2651, //  Unlicensed North America\Chiller.nes 
-    0x3C7E38F5, //  Unlicensed North America\Master Chu &amp; The Drunkard Hu.nes 
-    0x11D08CC6, //  Unlicensed North America\Metal Fighter µ.nes 
-    0xC73B82FC, //  Unlicensed North America\Shockwave.nes 
-/**** 261 mapper=11 prgrom=64K chrrom=16K mirror=V */
+/**** 373 mapper=11 prgrom=64K chrrom=16K mirror=V */
     0xBBE40DC4, //  Unlicensed North America\Baby Boomer.nes 
     0x72E66392, //  Unlicensed North America\Crystal Mines.nes 
     0xB133CFA7, //  Unlicensed South Korea\Baby Boomer.nes 
-/**** 262 mapper=11 prgrom=64K chrrom=32K mirror=V */
+/**** 374 mapper=11 prgrom=64K chrrom=32K mirror=V */
     0x9AC319E5, //  Modern\Cheetahmen꞉ The Creation.nes 
     0xCB53C523, //  Unlicensed North America\King Neptune's Adventure.nes 
     0x61253D1C, //  Unlicensed North America\Raid 2020.nes 
     0xF1E6F5E8, //  Unlicensed South Korea\Crystal 특공대.nes 
     0xEB4D468B, //  Unreleased\Raid 2020.nes 
-/**** 263 mapper=11 prgrom=64K chrrom=64K mirror=V */
+/**** 375 mapper=11 prgrom=64K chrrom=64K mirror=V */
     0x9CADA174, //  Bad Dumps\Bible Adventures (v7)[Immutable].nes 
     0xCA179DAD, //  Bad Dumps\Free Fall [broken 2].nes 
     0x71EA1872, //  Bad Dumps\Free Fall [broken].nes 
@@ -6474,9 +6723,9 @@ static const u32 s_crcs[] = {
     0xBD139BE7, //  Unreleased\The Escape from Atlantis (v1).nes 
     0x0AEA38F7, //  Unreleased\The Escape from Atlantis (v2).nes 
     0x6025C660, //  Unreleased\Wally Bear &amp; the No Gang.nes 
-/**** 264 mapper=11 prgrom=128K chrram=8K mirror=V */
+/**** 376 mapper=11 prgrom=128K chrram=8K mirror=V */
     0x81ECDA0D, //  Unlicensed North America\Wally Bear &amp; the No Gang.nes 
-/**** 265 mapper=11 prgrom=128K chrrom=128K mirror=V */
+/**** 377 mapper=11 prgrom=128K chrrom=128K mirror=V */
     0xCFD5AC62, //  Unlicensed North America\Bible Buffet.nes 
     0x0AB26DB6, //  Unlicensed North America\Exodus꞉ Journey to the Promised Land (v4.0).nes 
     0x5F5BFA54, //  Unlicensed North America\Exodus꞉ Journey to the Promised Land (v5.0).nes 
@@ -6491,7 +6740,7 @@ static const u32 s_crcs[] = {
     0x86974CCC, //  Unlicensed North America\The King of Kings꞉ The Early Years (v1.3).nes 
     0x7EABDA5C, //  Unlicensed North America\The King of Kings꞉ The Early Years (v5.0).nes 
     0x2AAF0804, //  Unreleased\Spiritual Warfare.nes 
-/**** 266 mapper=16 submapper=4 prgrom=128K chrrom=128K mirror=H */
+/**** 378 mapper=16 submapper=4 prgrom=128K chrrom=128K mirror=H */
     0x84344FF5, //  Homebrew\Translations\English\Charge!! Men's Private School꞉ Number One Student [Pacnsacdave].nes 
     0xD19E3506, //  Homebrew\Translations\English\Devil Boy꞉ Trap of Hell [S. K. Dumbbus v1.0].nes 
     0x92D192CB, //  Homebrew\Translations\English\Devil Boy꞉ Trap of Hell [S. K. Dumbbus v1.1].nes 
@@ -6500,19 +6749,19 @@ static const u32 s_crcs[] = {
     0x7B5206AF, //  Licensed Japan\名門! 第三野球部.nes 
     0x2C4421B2, //  Licensed Japan\悪魔くん꞉ 魔界の罠.nes 
     0x9C04C8D5, //  Licensed Japan\魁! 男塾꞉ 疾風一号生.nes 
-/**** 267 mapper=16 submapper=4 prgrom=128K chrrom=256K mirror=H */
+/**** 379 mapper=16 submapper=4 prgrom=128K chrrom=256K mirror=H */
     0x8341A385, //  Homebrew\Translations\English\Dragon Ball 3꞉ 悟空伝 [Dodgy Translations v0.15].nes 
     0x52EEE276, //  Homebrew\Translations\English\Dragon Ball 3꞉ 悟空伝 [Dodgy Translations v0.xx].nes 
     0x6E68E31A, //  Licensed Japan\Dragon Ball 3꞉ 悟空伝 (rev0).nes 
     0xBFC7A2E9, //  Licensed Japan\Dragon Ball 3꞉ 悟空伝 (rev1).nes 
     0xA851CAE9, //  Licensed Japan\西村京太郎꞉ Blue Train 殺人事件.nes 
-/**** 268 mapper=16 submapper=4 prgrom=256K chrrom=128K mirror=H */
+/**** 380 mapper=16 submapper=4 prgrom=256K chrrom=128K mirror=H */
     0x03E78D60, //  Homebrew\Translations\English\Dragon Ball꞉ Revival of the Dark Lord [Stardust Crusaders].nes 
     0xD343C66A, //  Licensed Japan\Famicom Jump꞉ 英雄列伝.nes 
-/**** 269 mapper=16 submapper=5 prgrom=128K chrrom=128K mirror=H */
+/**** 381 mapper=16 submapper=5 prgrom=128K chrrom=128K mirror=H */
     0xB3E39555, //  Homebrew\Translations\English\Crayon しんちゃん꞉ Ora to Poi Poi [Alcy v0.91].nes 
     0xDB05106E, //  Licensed Japan\Crayon しんちゃん꞉ オラとポイポイ.nes 
-/**** 270 mapper=16 submapper=5 prgrom=256K prgnvram=256B chrrom=256K mirror=H battery=1 */
+/**** 382 mapper=16 submapper=5 prgrom=256K prgnvram=256B chrrom=256K mirror=H battery=1 */
     0xFE52D435, //  Homebrew\Translations\English\Dragon Ball Z Gaiden꞉ Plan to Eliminate the Saiyans [Twilight Translations](Vegeta control).nes 
     0x9D6766E5, //  Homebrew\Translations\English\Dragon Ball Z Gaiden꞉ Plan to Eliminate the Saiyans [Twilight Translations].nes 
     0x5A5B9332, //  Homebrew\Translations\English\Dragon Ball Z III꞉ Killer Androids [Twilight Translations].nes 
@@ -6524,7 +6773,7 @@ static const u32 s_crcs[] = {
     0xB049A8C4, //  Licensed Japan\SD Gundam 外伝 - Knight Gundam 物語 2꞉ 光の騎士.nes 
     0xC2840372, //  Licensed Japan\SD Gundam 外伝 - Knight Gundam 物語 3꞉ 伝説の騎士団.nes 
     0xA262A81F, //  Licensed Japan\ろくでなし Blues.nes 
-/**** 271 mapper=18 prgrom=128K chrrom=128K mirror=H */
+/**** 383 mapper=18 prgrom=128K chrrom=128K mirror=H */
     0xD98745E7, //  Homebrew\Translations\English\Magic John [KingMike's Translations &amp; Video Smash Excellent].nes 
     0xF6230855, //  Homebrew\Translations\English\Ninja Jajamaru꞉ Galactic Battle [HTI].nes 
     0xC31368A0, //  Homebrew\Translations\English\Pizza Pop! [Pacnsacdave].nes 
@@ -6541,22 +6790,22 @@ static const u32 s_crcs[] = {
     0x06F9C714, //  Licensed Japan\忍者じゃじゃ丸꞉ 銀河大作戦.nes 
     0x75B3EB37, //  Licensed Japan\西遊記 World 2 天上界の魔神.nes 
     0x965834BD, //  Unreleased\忍者じゃじゃ丸꞉ 銀河大作戦.nes 
-/**** 272 mapper=18 prgrom=128K chrrom=256K mirror=H */
+/**** 384 mapper=18 prgrom=128K chrrom=256K mirror=H */
     0x3B215AB6, //  Homebrew\Translations\English\Fighting Spirit꞉ Toukon Club [Eric Engel v1.1].nes 
     0xEA3E78DD, //  Licensed Japan\闘魂 Club.nes 
-/**** 273 mapper=18 prgrom=256K chrrom=128K mirror=H */
+/**** 385 mapper=18 prgrom=256K chrrom=128K mirror=H */
     0xA912B6E1, //  Homebrew\Translations\English\Plasma Ball [MrRichard999].nes 
     0x4AE58F5D, //  Licensed Japan\新燃えろ!! Pro 野球.nes 
     0x9DC96EC7, //  Licensed Japan\燃えPro! '90꞉ 感動編.nes 
     0x3F8D6889, //  Licensed Japan\燃えPro! 最強編.nes 
-/**** 274 mapper=18 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 386 mapper=18 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xE5D6773D, //  Homebrew\Translations\English\Ninja Jajamaru꞉ Legend of a Demon's Attack - Castle of Dreams [Aishsha, Stardust Crusaders; Proveaux v1.01].nes 
     0x7DF67642, //  Homebrew\Translations\English\Ninja Jajamaru꞉ Legend of a Demon's Attack - Castle of Dreams [Aishsha, Stardust Crusaders].nes 
     0x0F1BABE7, //  Licensed Japan\じゃじゃ丸撃魔伝꞉ 幻の金魔城.nes 
-/**** 275 mapper=18 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 387 mapper=18 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x41D321D3, //  Homebrew\Translations\English\Aim! Top Pro꞉ Dream in Green [Immutable].nes 
     0x3691C120, //  Licensed Japan\めざせ Top Pro꞉ Greenに賭ける夢.nes 
-/**** 276 mapper=19 submapper=2 prgrom=128K chrrom=128K mirror=H */
+/**** 388 mapper=19 submapper=2 prgrom=128K chrrom=128K mirror=H */
     0x98BADEA1, //  Homebrew\Hacks\Big Trouble in Little China [pacnsacdave].nes 
     0xA86303E2, //  Homebrew\Translations\English\Dragon Ninja (rev0)[Stardust Crusaders].nes 
     0x25FA8D0E, //  Homebrew\Translations\English\Dragon Ninja (rev1)[Stardust Crusaders].nes 
@@ -6565,9 +6814,9 @@ static const u32 s_crcs[] = {
     0x2A7D3ADF, //  Licensed Japan\Dragon Ninja (rev0).nes 
     0x2AE535CA, //  Licensed Japan\Dragon Ninja (rev1).nes 
     0xCA69751B, //  Licensed Japan\Star Wars꞉ A New Hope (Namco).nes 
-/**** 277 mapper=19 submapper=2 prgrom=256K chrrom=256K mirror=H */
+/**** 389 mapper=19 submapper=2 prgrom=256K chrrom=256K mirror=H */
     0x4C5836BD, //  Licensed Japan\Namco Classic.nes 
-/**** 278 mapper=19 submapper=2 prgrom=128K chrrom=128K mirror=H battery=1 */
+/**** 390 mapper=19 submapper=2 prgrom=128K chrrom=128K mirror=H battery=1 */
     0x1C33C23E, //  Homebrew\Translations\English\Famista '90 [MrRichard999, TheMajinZenki, FlashPV v0.91].nes 
     0x1C0B1B63, //  Homebrew\Translations\English\Famista '90 [MrRichard999, TheMajinZenki, FlashPV v0.92].nes 
     0xB5FF71AB, //  Licensed Japan\Battle Fleet.nes 
@@ -6576,34 +6825,34 @@ static const u32 s_crcs[] = {
     0x10C8F2FA, //  Licensed Japan\独眼竜政宗.nes 
     0xBC11E61A, //  Licensed Japan\貝獣物語.nes 
     0x71DE7CCA, //  Modern\Namco Museum Archives\貝獣物語.nes 
-/**** 279 mapper=19 submapper=2 prgrom=256K chrrom=128K mirror=H battery=1 */
+/**** 391 mapper=19 submapper=2 prgrom=256K chrrom=128K mirror=H battery=1 */
     0x55320014, //  Homebrew\Translations\English\Hydlide 3꞉ Visitor from the Dark [Pacnsacdave].nes 
     0x47C2020B, //  Licensed Japan\Hydlide 3꞉ 闇からの訪問者.nes 
-/**** 280 mapper=19 submapper=2 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 392 mapper=19 submapper=2 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xE81DD8F6, //  Homebrew\Translations\English\Shell Monsters Story [KingMike's Translations v1.0beta2].nes 
-/**** 281 mapper=19 submapper=2 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 393 mapper=19 submapper=2 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0xCF23290F, //  Licensed Japan\Juvei Quest (rev0).nes 
     0x716DAEA5, //  Licensed Japan\Juvei Quest (rev1).nes 
-/**** 282 mapper=19 submapper=2 prgrom=512K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 394 mapper=19 submapper=2 prgrom=512K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0xE864AA4F, //  Homebrew\Translations\English\Jubei Quest [Aishsha &amp; Stardust Crusaders v1.01].nes 
-/**** 283 mapper=19 submapper=3 prgrom=128K chrrom=128K mirror=H */
+/**** 395 mapper=19 submapper=3 prgrom=128K chrrom=128K mirror=H */
     0x5746A461, //  Licensed Japan\Final Lap.nes 
-/**** 284 mapper=19 submapper=3 prgrom=256K chrrom=256K mirror=H */
+/**** 396 mapper=19 submapper=3 prgrom=256K chrrom=256K mirror=H */
     0x99B90FA5, //  Homebrew\Translations\English\Namco Classic II [MrRichard999 v0.80].nes 
     0x684B292F, //  Licensed Japan\Namco Classic II.nes 
     0xCB88D71D, //  Modern\Namco Museum Archives\Namco Classic II.nes 
-/**** 285 mapper=19 submapper=3 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 397 mapper=19 submapper=3 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xFF5FB7D2, //  Modern\Namco Museum Archives\Pac-Man Championship Edition (Japan).nes 
     0x7D39449C, //  Modern\Namco Museum Archives\Pac-Man Championship Edition (World).nes 
-/**** 286 mapper=19 submapper=3 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 398 mapper=19 submapper=3 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x5E9DF982, //  Homebrew\Translations\English\Digital Devil Story꞉ 女神転生 II [Dushbadge v5.0].nes 
     0x96773F32, //  Licensed Japan\Digital Devil Story꞉ 女神転生 II (rev0).nes 
     0x10C9A789, //  Licensed Japan\Digital Devil Story꞉ 女神転生 II (rev1).nes 
     0x098C672A, //  Licensed Japan\三国志 II꞉ 覇王の大陸.nes 
-/**** 287 mapper=19 submapper=4 prgrom=128K chrrom=128K mirror=H */
+/**** 399 mapper=19 submapper=4 prgrom=128K chrrom=128K mirror=H */
     0x9EDBE2E2, //  Licensed Japan\Rolling Thunder.nes 
     0x6DACA23A, //  Modern\Namco Museum Archives\Rolling Thunder.nes 
-/**** 288 mapper=19 submapper=5 prgrom=128K chrrom=128K mirror=H */
+/**** 400 mapper=19 submapper=5 prgrom=128K chrrom=128K mirror=H */
     0x3C38637D, //  Homebrew\Translations\English\Mappy Kids [Zynk Oxhyde].nes 
     0x6903F6BC, //  Homebrew\Translations\English\Phantom Travel Journal [Jackic v0.9].nes 
     0x35D8C961, //  Licensed Japan\Mappy Kids.nes 
@@ -6611,54 +6860,55 @@ static const u32 s_crcs[] = {
     0xC811DC7A, //  Licensed Japan\妖怪道中記.nes 
     0x87E00045, //  Modern\Namco Museum Archives\妖怪道中記.nes 
     0xEB190367, //  Modern\Virtual Console\妖怪道中記.nes 
-/**** 289 mapper=19 submapper=5 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 401 mapper=19 submapper=5 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x4CB2A50E, //  Homebrew\Translations\English\King of Kings [MrRichard999 v0.99b].nes 
     0x1A04C23B, //  Homebrew\Translations\English\Three Kingdoms꞉ Champion of the Center [Green Dark Software v0.1].nes 
     0x369DA42D, //  Licensed Japan\King of Kings.nes 
     0xE64B8975, //  Licensed Japan\三国志꞉ 中原の覇者.nes 
     0x35E2518A, //  Modern\Namco Museum Archives\King of Kings.nes 
-/**** 290 mapper=21 submapper=1 prgrom=256K chrrom=128K mirror=H */
+/**** 402 mapper=21 submapper=1 prgrom=256K chrrom=128K mirror=H */
     0xA7AF0BB9, //  Homebrew\Translations\English\Wai Wai World 2꞉ S.O.S. from Parsley Castle [Vice Translations v1.01, Proveaux v1.0].nes 
     0x79C5987D, //  Homebrew\Translations\English\Wai Wai World 2꞉ S.O.S. from Parsley Castle [Vice Translations v1.01].nes 
     0x2520408A, //  Homebrew\Translations\English\Wai Wai World 2꞉ SOS!! Parsley Castle [Vice Translations v1.01, Chronix v1.0].nes 
     0x8B03F74D, //  Licensed Japan\ワイワイ World 2꞉ S.O.S.!! Parsley城.nes 
     0x4B9ECFB2, //  Modern\Virtual Console\ワイワイ World 2꞉ S.O.S.!! Parsley城.nes 
-/**** 291 mapper=21 submapper=2 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 403 mapper=21 submapper=2 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0xB8109B0E, //  Homebrew\Translations\English\Ganbare Goemon Gaiden 2꞉ Treasures of the World [Adventurous Translations v1.01].nes 
     0x286FCD20, //  Licensed Japan\がんばれゴエモン外伝 2꞉ 天下の財宝.nes 
-/**** 292 mapper=23 submapper=1 prgrom=32K chrrom=40K mirror=H */
+/**** 404 mapper=23 submapper=1 prgrom=32K chrrom=40K mirror=H */
     0x67C1A27D, //  Homebrew\Demos\Axelay.nes 
-/**** 293 mapper=23 submapper=1 prgrom=128K prgram=2K chrrom=128K mirror=H */
+/**** 405 mapper=23 submapper=1 prgrom=128K prgram=2K chrrom=128K mirror=H */
     0xF6036ED8, //  Samples\Crisis Force.nes 
-/**** 294 mapper=23 submapper=1 prgrom=128K chrrom=512K mirror=H */
+/**** 406 mapper=23 submapper=1 prgrom=128K chrrom=512K mirror=H */
     0x335E6339, //  Homebrew\Copyright Restorations\英雄傳 - Kung Fu Legend (rev0).nes 
-    0x1A8D767B, //  Homebrew\Copyright Restorations\英雄傳 - Kung Fu Legend (rev1).nes 
     0xE4A291CE, //  Unlicensed Taiwan&amp;Hong Kong\英雄傳 - World Hero (rev0).nes 
+/**** 407 mapper=23 submapper=1 prgrom=128K chrrom=512K mirror=H system=SYSTEM_NTSC */
+    0x1A8D767B, //  Homebrew\Copyright Restorations\英雄傳 - Kung Fu Legend (rev1).nes 
     0x0E263D47, //  Unlicensed Taiwan&amp;Hong Kong\英雄傳 - World Hero (rev1).nes 
-/**** 295 mapper=23 submapper=2 prgrom=128K chrrom=128K mirror=H */
+/**** 408 mapper=23 submapper=2 prgrom=128K chrrom=128K mirror=H */
     0xD83879C9, //  Homebrew\Translations\English\Castlevania Special꞉ Kid Dracula [Chronix].nes 
     0xF526B000, //  Homebrew\Translations\English\Castlevania꞉ Kid Dracula [Kalas].nes 
     0xCFE0FF2C, //  Homebrew\Translations\English\Demon Castle Special꞉ I'm Kid Dracula! [Vice Translations].nes 
     0x91328C1D, //  Licensed Japan\Tiny Toon Adventures.nes 
     0xC1FBF659, //  Licensed Japan\悪魔城 Special꞉ ぼく Dracula君.nes 
-/**** 296 mapper=23 submapper=2 prgrom=128K prgram=2K chrrom=128K mirror=H */
+/**** 409 mapper=23 submapper=2 prgrom=128K prgram=2K chrrom=128K mirror=H */
     0xB2E81F64, //  Homebrew\Translations\English\Crisis Force (v1.0)[Stardust Crusaders].nes 
     0xFCBF28B1, //  Licensed Japan\Crisis Force.nes 
     0xD467C0CC, //  Licensed Japan\Parodius だ! 神話からお笑いへ.nes 
-/**** 297 mapper=23 submapper=2 prgrom=128K prgram=8K chrrom=128K mirror=H */
+/**** 410 mapper=23 submapper=2 prgrom=128K prgram=8K chrrom=128K mirror=H */
     0x927DD49F, //  Bad Dumps\Kid Dracula (Castlevania Anniversary Collection)[SRAM initialize fix with glitched ending][missing PRG banks].nes 
     0x8281C50F, //  Modern\悪魔城 Special꞉ ぼくDracula君 (Castlevania Anniversary Collection).nes 
-/**** 298 mapper=23 submapper=2 prgrom=256K chrrom=128K mirror=H */
+/**** 411 mapper=23 submapper=2 prgrom=256K chrrom=128K mirror=H */
     0xA24C6E22, //  Homebrew\Translations\English\Parodius꞉ From Myth to Laughter [Stardust Crusaders].nes 
-/**** 299 mapper=23 submapper=2 prgrom=256K prgram=8K chrrom=128K mirror=H */
+/**** 412 mapper=23 submapper=2 prgrom=256K prgram=8K chrrom=128K mirror=H */
     0x166C2418, //  Homebrew\Bugfixes, Improvements\Kid Dracula (Castlevania Anniversary Collection)[SRAM initialize fix with fixed ending].nes 
     0xE3A1CE4D, //  Homebrew\Bugfixes, Improvements\Kid Dracula (Castlevania Anniversary Collection)[SRAM initialize fix with glitched ending].nes 
     0xEB6A29D6, //  Homebrew\Bugfixes, Improvements\Kid Dracula (Castlevania Anniversary Collection)[SRAM initialize fix with glitched ending][Manji restored].nes 
     0x394AC7B2, //  Homebrew\Bugfixes, Improvements\Kid Dracula (Castlevania Anniversary Collection)[SRAM initialize fix with glitched ending][Manji restored][Lemmy removed].nes 
-/**** 300 mapper=23 submapper=2 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 413 mapper=23 submapper=2 prgrom=128K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xC74871BD, //  Homebrew\Bugfixes, Improvements\Kid Dracula (Castlevania Anniversary Collection)[WRAM enable].nes 
     0x64AFD592, //  Modern\Kid Dracula (Castlevania Anniversary Collection).nes 
-/**** 301 mapper=23 submapper=3 prgrom=128K chrrom=128K mirror=H */
+/**** 414 mapper=23 submapper=3 prgrom=128K chrrom=128K mirror=H */
     0x599B6378, //  Bad Dumps\がんばれゴエモン 2 (Virtual Console)[PRG corrupt].nes 
     0x06145246, //  Bootleg Hacks\Super Mario Bros. 13.nes 
     0xC4DCBB18, //  Homebrew\Translations\English\Contra [MadHacker].nes 
@@ -6683,27 +6933,27 @@ static const u32 s_crcs[] = {
     0xCB35FA90, //  Samples\魂斗羅.nes 
     0xAA9F9765, //  Unreleased\Mad City.nes 
     0xE6C94541, //  Unreleased\月風魔伝.nes 
-/**** 302 mapper=23 submapper=3 prgrom=128K chrrom=256K mirror=H */
+/**** 415 mapper=23 submapper=3 prgrom=128K chrrom=256K mirror=H */
     0x39B68AA3, //  Licensed Japan\じゃりン子チエ꞉ ばくだん娘の幸せさがし.nes 
-/**** 303 mapper=23 submapper=3 prgrom=256K chrrom=128K mirror=H */
+/**** 416 mapper=23 submapper=3 prgrom=256K chrrom=128K mirror=H */
     0x0889A5B1, //  Homebrew\Translations\English\The Legend of Fuma [Nebulous Translations].nes 
-/**** 304 mapper=23 submapper=3 prgrom=128K chrrom=128K mirror=H battery=1 */
+/**** 417 mapper=23 submapper=3 prgrom=128K chrrom=128K mirror=H battery=1 */
     0x24C66CC4, //  Homebrew\Translations\English\Dragon Scroll꞉ Resurrection of the Demon Dragon [KingMike].nes 
-/**** 305 mapper=24 prgrom=32K chrrom=8K mirror=H */
+/**** 418 mapper=24 prgrom=32K chrrom=8K mirror=H */
     0xEDC84DF3, //  Homebrew\Demos\Mind Control Trilogy Preview [Bilotrip].nes 
-/**** 306 mapper=24 prgrom=64K chrrom=8K mirror=H */
+/**** 419 mapper=24 prgrom=64K chrrom=8K mirror=H system=SYSTEM_NTSC */
     0xA8A6FFEB, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (Two Simultaneous Players)[Corpse Grinder].nes 
-/**** 307 mapper=24 prgrom=128K chrrom=8K mirror=H */
+/**** 420 mapper=24 prgrom=128K chrrom=8K mirror=H system=SYSTEM_NTSC */
     0x5ADB9474, //  Homebrew\Demos\Rudeboy.nes 
-/**** 308 mapper=24 prgrom=128K chrrom=32K mirror=H */
+/**** 421 mapper=24 prgrom=128K chrrom=32K mirror=H system=SYSTEM_NTSC */
     0x99D867FB, //  Homebrew\DENDY Compo II.nes 
-/**** 309 mapper=24 prgrom=256K chrrom=8K mirror=H */
+/**** 422 mapper=24 prgrom=256K chrrom=8K mirror=H */
     0xCF91588A, //  Homebrew\Demos\VGM player 2011 Mic - 1 Ultra.nes 
     0x71B986A5, //  Homebrew\Demos\VGM player 2011 Mic - FF3 Battle.nes 
     0x502575D1, //  Homebrew\Demos\VGM player 2011 Mic - Gunstar Heroes - 02 - Legend of the Gunstars.nes 
     0x31708C32, //  Homebrew\Demos\VGM player 2011 Mic - Tintin.nes 
     0x982DA55F, //  Homebrew\Tools\VGM player 2011 Mic.nes 
-/**** 310 mapper=24 prgrom=256K chrrom=128K mirror=H */
+/**** 423 mapper=24 prgrom=256K chrrom=128K mirror=H */
     0x5137BC52, //  Homebrew\Frog [Boston Breams].nes 
     0x27D15629, //  Homebrew\Hacks\Castlevania series\悪魔城伝説 (Improved Controls)(v1.4)[NaOH].nes 
     0xE38B017B, //  Homebrew\Translations\English\Castlevania III꞉ Dracula's Curse [ShadowOne333 v7.1](new Alucard sprite).nes 
@@ -6712,31 +6962,31 @@ static const u32 s_crcs[] = {
     0xE349AF38, //  Licensed Japan\悪魔城伝説.nes 
     0x1ED3CAA3, //  Modern\Virtual Console\悪魔城伝説.nes 
     0xF27D873B, //  Modern\悪魔城伝説 (Castlevania Anniversary Collection).nes 
-/**** 311 mapper=24 prgrom=256K chrrom=256K mirror=H */
+/**** 424 mapper=24 prgrom=256K chrrom=256K mirror=H */
     0x41E2825B, //  Homebrew\Hacks\Castlevania series\Castlevania Resurrection.nes 
-/**** 312 mapper=24 prgrom=256K prgram=8K chrrom=256K mirror=H */
+/**** 425 mapper=24 prgrom=256K prgram=8K chrrom=256K mirror=H */
     0x4D476097, //  Homebrew\Bugfixes, Improvements\Dizzy꞉ Melanchony of Existance Chapter 0 (beta)[WRAM enable].nes 
     0x1F8E0403, //  Homebrew\Dizzy꞉ Melanchony of Existance Chapter 0 (beta).nes 
-/**** 313 mapper=25 submapper=1 prgrom=32K chrrom=16K mirror=H */
+/**** 426 mapper=25 submapper=1 prgrom=32K chrrom=16K mirror=H system=SYSTEM_NTSC */
     0xEC9BBC11, //  Homebrew\Guardian 5.nes 
-/**** 314 mapper=25 submapper=1 prgrom=128K chrrom=128K mirror=H */
+/**** 427 mapper=25 submapper=1 prgrom=128K chrrom=128K mirror=H */
     0xF880E010, //  Bootleg Hacks\蠟筆小新 (JY-035).nes 
     0xB960B13C, //  Homebrew\Translations\English\Bio Miracle Baby Upa!! [Vice Translations].nes 
     0x6DC28B5A, //  Licensed Japan\Bio Miracle ぼくってUpa (Re-release).nes 
     0xF6271A51, //  Licensed Japan\Racer Mini 四駆꞉ Japan Cup.nes 
-/**** 315 mapper=25 submapper=1 prgrom=128K prgram=2K chrrom=128K mirror=H */
+/**** 428 mapper=25 submapper=1 prgrom=128K prgram=2K chrrom=128K mirror=H */
     0xBB0DB1F1, //  Homebrew\Bugfixes, Improvements\Gradius II꞉ Goferの野望 [DPCM bit order, DPCM clicking].nes 
     0x5ADBF660, //  Licensed Japan\Gradius II꞉ Goferの野望.nes 
     0x7F7AB2E2, //  Modern\Virtual Console\Gradius II.nes 
-/**** 316 mapper=25 submapper=2 prgrom=128K chrrom=128K mirror=H */
+/**** 429 mapper=25 submapper=2 prgrom=128K chrrom=128K mirror=H */
     0x2EA914FA, //  Bootleg Hacks\FIFA International 2 96.nes 
     0x7075BF5E, //  Bootleg Hacks\Pizza Pop! Mario.nes 
-/**** 317 mapper=25 submapper=2 prgrom=128K prgram=8K chrrom=256K mirror=H */
+/**** 430 mapper=25 submapper=2 prgrom=128K prgram=8K chrrom=256K mirror=H */
     0x5E153659, //  Bootleg Hacks\Batman 4.nes 
-/**** 318 mapper=25 submapper=2 prgrom=256K chrrom=256K mirror=H */
+/**** 431 mapper=25 submapper=2 prgrom=256K chrrom=256K mirror=H */
     0x490E8A4C, //  Licensed Japan\Teenage Mutant Ninja Turtles 2꞉ The Manhattan Project.nes 
     0x4A601A2C, //  Licensed Japan\Teenage Mutant Ninja Turtles꞉ Super 亀忍者.nes 
-/**** 319 mapper=25 submapper=3 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 432 mapper=25 submapper=3 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x089B6CCE, //  Bad Dumps\がんばれゴエモン外伝꞉ きえた黄金キセル (Virtual Console)[PRG corrupt].nes 
     0x3F43AC2E, //  Homebrew\Translations\English\Ganbare Goemon Gaiden꞉ The Missing Golden Pipe [Adventurous Translations v0.99c, FlashPV].nes 
     0x577BC924, //  Homebrew\Translations\English\Ganbare Goemon Gaiden꞉ The Missing Golden Pipe [Adventurous Translations v0.99c].nes 
@@ -6744,74 +6994,78 @@ static const u32 s_crcs[] = {
     0x4C53A5F1, //  Homebrew\Translations\English\Mystical Ninja꞉ Saga of the Golden Pipe [Adventurous Translations v0.99c, El Duderino v1.0].nes 
     0xEB92B32A, //  Licensed Japan\がんばれゴエモン外伝꞉ きえた黄金キセル (rev0).nes 
     0x36D22AD5, //  Licensed Japan\がんばれゴエモン外伝꞉ きえた黄金キセル (rev1).nes 
-/**** 320 mapper=26 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 433 mapper=26 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0xDB84361B, //  Homebrew\Translations\English\Esper Dream 2 [Aeon Genesis].nes 
     0x209B4BED, //  Licensed Japan\Esper Dream 2꞉ 新たなる戦い.nes 
-/**** 321 mapper=26 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 434 mapper=26 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x7289042B, //  Homebrew\Translations\English\Madara [Aeon Genesis].nes 
     0xE1383DEB, //  Licensed Japan\魍魎戦記 Madara.nes 
-/**** 322 mapper=28 prgrom=32K chrram=16K mirror=H */
+/**** 435 mapper=28 prgrom=32K chrram=16K mirror=H system=SYSTEM_NTSC */
     0xA9392746, //  Homebrew\Nalle Land (v0.3.4).nes 
-/**** 323 mapper=28 prgrom=64K chrram=32K mirror=H */
+/**** 436 mapper=28 prgrom=64K chrram=32K mirror=H */
     0x44AA2039, //  Homebrew\Filthy Kitchen.nes 
-    0x1D09FF55, //  Homebrew\Twin Dragons (NESdev 2016).nes 
     0x93F4E749, //  Samples\Witch n' Wiz.nes 
-/**** 324 mapper=28 prgrom=512K chrram=32K mirror=H */
+/**** 437 mapper=28 prgrom=64K chrram=32K mirror=H system=SYSTEM_NTSC */
+    0x1D09FF55, //  Homebrew\Twin Dragons (NESdev 2016).nes 
+/**** 438 mapper=28 prgrom=512K chrram=32K mirror=H */
     0xD665D531, //  Homebrew\Multicarts\Action 53 Function 16 Volume 1 (R.C.#1).nes 
     0x6441E8F6, //  Homebrew\Multicarts\Action 53 Function 16 Volume 1 (R.C.#2).nes 
     0x6E61971F, //  Homebrew\Multicarts\Action 53 Volume 2꞉ Double Action (R.C.#2).nes 
     0xF0D58EEC, //  Homebrew\Multicarts\Action 53 Volume 2꞉ Double Action (R.C.#4a).nes 
-/**** 325 mapper=28 prgrom=1024K chrram=32K mirror=H */
+/**** 439 mapper=28 prgrom=1024K chrram=32K mirror=H */
     0x660F8E82, //  Homebrew\Multicarts\Action 53 Volume 3꞉ Revenge of the Twins.nes 
-/**** 326 mapper=30 prgrom=512K chrram=32K mirror=1 */
+/**** 440 mapper=30 prgrom=512K chrram=32K mirror=1 */
     0xF8253658, //  Modern\Basse Def Adventures.nes 
+/**** 441 mapper=30 prgrom=512K chrram=32K mirror=1 system=SYSTEM_NTSC */
     0x4E8B051B, //  Modern\Twin Dragons.nes 
-/**** 327 mapper=30 prgrom=512K chrram=32K mirror=1 battery=1 */
+/**** 442 mapper=30 prgrom=512K chrram=32K mirror=1 battery=1 system=SYSTEM_NTSC */
     0x31BE333B, //  Modern\Larry and the Long Look for a Luscious Lover (alt 1).nes 
     0x8BC0340C, //  Modern\Larry and the Long Look for a Luscious Lover (alt 2).nes 
-/**** 328 mapper=30 prgrom=512K chrram=32K mirror=4 battery=1 */
+/**** 443 mapper=30 prgrom=512K chrram=32K mirror=4 battery=1 */
     0x57C68295, //  Homebrew\Black Box Challenge.nes 
-/**** 329 mapper=30 prgrom=32K chrram=32K mirror=H */
+/**** 444 mapper=30 prgrom=32K chrram=32K mirror=H system=SYSTEM_NTSC */
     0x78156E3C, //  Homebrew\Quadralords.nes 
-/**** 330 mapper=30 prgrom=64K chrram=32K mirror=H */
+/**** 445 mapper=30 prgrom=64K chrram=32K mirror=H */
     0x318C0A59, //  Homebrew\Mystic Pillars.nes 
-/**** 331 mapper=30 prgrom=512K chrram=8K mirror=H */
+/**** 446 mapper=30 prgrom=512K chrram=8K mirror=H */
     0x74B823A1, //  Modern\Battle Kid 2꞉ Mountain of Torment (v1.000).nes 
     0xFA5D5A4D, //  Modern\Battle Kid꞉ Fortress of Peril (v2.000).nes 
-/**** 332 mapper=30 prgrom=512K chrram=32K mirror=H */
-    0x0D71192B, //  Homebrew\Power Coloring.nes 
+/**** 447 mapper=30 prgrom=512K chrram=32K mirror=H */
     0x330F6838, //  Homebrew\Twelve Seconds.nes 
     0x46AF36EB, //  Modern\Mystic Pillars.nes 
     0x32AEA02F, //  Modern\Quadralords.nes 
+/**** 448 mapper=30 prgrom=512K chrram=32K mirror=H system=SYSTEM_NTSC */
+    0x0D71192B, //  Homebrew\Power Coloring.nes 
     0x583C7C22, //  Modern\Tapeworm Disco Puzzle.nes 
-/**** 333 mapper=30 prgrom=2048K chrram=8K mirror=H */
+/**** 449 mapper=30 prgrom=2048K chrram=8K mirror=H system=SYSTEM_NTSC */
     0x2E86704D, //  Modern\Polygondwanaland - 2nd_Edition.nes 
-/**** 334 mapper=30 prgrom=128K chrram=8K mirror=H battery=1 */
+/**** 450 mapper=30 prgrom=128K chrram=8K mirror=H battery=1 */
     0x35FC9101, //  Homebrew\Study Hall [khan].nes 
-/**** 335 mapper=30 prgrom=128K chrram=32K mirror=H battery=1 */
+/**** 451 mapper=30 prgrom=128K chrram=32K mirror=H battery=1 */
     0xCD35F4C6, //  Modern\8 Bit Xmas 2012꞉ Santa's Biplane (8 Bit Xmas 2017 extract).nes 
     0x0ABC7758, //  Modern\8 Bit Xmas 2013꞉ Santa vs. the Aliens (8 Bit Xmas 2017 extract).nes 
     0x4BA368D6, //  Modern\8 Bit Xmas 2014꞉ Squish Everyone! (8 Bit Xmas 2017 extract).nes 
     0x05C89787, //  Modern\8 Bit Xmas 2015꞉ Twelve Seconds 'til Xmas (8 Bit Xmas 2017 extract).nes 
-/**** 336 mapper=30 prgrom=512K chrram=32K mirror=H battery=1 */
-    0xE5BD8692, //  Homebrew\Super Tilt Bro. (v2.α1).nes 
+/**** 452 mapper=30 prgrom=512K chrram=32K mirror=H battery=1 */
     0xF9B944CF, //  Homebrew\The Adventures of Panzer (v1.3)[PixelCraft].nes 
-/**** 337 mapper=30 prgrom=256K chrram=8K mirror=V */
+/**** 453 mapper=30 prgrom=512K chrram=32K mirror=H battery=1 system=SYSTEM_NTSC */
+    0xE5BD8692, //  Homebrew\Super Tilt Bro. (v2.α1).nes 
+/**** 454 mapper=30 prgrom=256K chrram=8K mirror=V */
     0x675BD9CB, //  Modern\Nomolos꞉ Storming the CATsle (v1.00).nes 
     0x20E7A49E, //  Modern\Nomolos꞉ Storming the CATsle (v1.00D #1).nes 
     0x78A81C0B, //  Modern\Nomolos꞉ Storming the CATsle (v1.00D #2).nes 
-/**** 338 mapper=30 prgrom=256K chrram=32K mirror=V */
+/**** 455 mapper=30 prgrom=256K chrram=32K mirror=V */
     0xE41220D8, //  Homebrew\Assimilate (2015).nes 
-/**** 339 mapper=30 prgrom=512K chrram=8K mirror=V */
+/**** 456 mapper=30 prgrom=512K chrram=8K mirror=V */
     0x222B13A0, //  Modern\Nomolos꞉ Storming the CATsle (v1.01).nes 
-/**** 340 mapper=30 prgrom=512K chrram=32K mirror=V */
+/**** 457 mapper=30 prgrom=512K chrram=32K mirror=V */
     0x45493D2D, //  Homebrew\Mystic Origins.nes 
     0x7145F667, //  Modern\Assimilate.nes 
     0x95DFC71C, //  Modern\The Legends of Owlia.nes 
     0x02F215CB, //  Samples\The Legends of Owlia.nes 
-/**** 341 mapper=30 prgrom=32K chrram=8K mirror=V battery=1 */
+/**** 458 mapper=30 prgrom=32K chrram=8K mirror=V battery=1 */
     0x3AE2A150, //  Modern\8 Bit Xmas 2008꞉ Christmas Songs (cartridge).nes 
-/**** 342 mapper=30 prgrom=128K chrram=32K mirror=V battery=1 */
+/**** 459 mapper=30 prgrom=128K chrram=32K mirror=V battery=1 */
     0x19EB1773, //  Bad Dumps\8 Bit Xmas 2016 [bad PRG].nes 
     0x9E8ECA2C, //  Homebrew\E.T. [Khan Games].nes 
     0x9ED5BE48, //  Modern\8 Bit Xmas 2008꞉ Christmas Songs (8 Bit Xmas 2017 extract).nes 
@@ -6822,14 +7076,13 @@ static const u32 s_crcs[] = {
     0x6ACF425D, //  Modern\8 Bit Xmas 2016 (cartridge).nes 
     0xBAD62C7B, //  Modern\8 Bit Xmas 2020꞉ Dr. Covio.nes 
     0x2543CEE8, //  Modern\8 Bit Xmas 2021꞉ Exciteduck (cartridge).nes 
-/**** 343 mapper=30 prgrom=512K chrram=8K mirror=V battery=1 */
+/**** 460 mapper=30 prgrom=512K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x9383C016, //  Unreleased\Dungeons and DoomKnights (ROM 240).nes 
     0x4371849D, //  Unreleased\Dungeons and DoomKnights (ROM 241).nes 
     0x0C5BAF4B, //  Unreleased\Dungeons and DoomKnights (ROM 243).nes 
-/**** 344 mapper=30 prgrom=512K chrram=32K mirror=V battery=1 */
+/**** 461 mapper=30 prgrom=512K chrram=32K mirror=V battery=1 */
     0x122C1413, //  Homebrew\AES_Atlas (0_00w).nes 
     0x67F7EF59, //  Homebrew\Alex Adventure.nes 
-    0x0BA0737B, //  Homebrew\Babel Blox.nes 
     0x36C360FA, //  Homebrew\Carver's Epic Quest!.nes 
     0x2FE9559A, //  Homebrew\Chrono Knight [Artix Games].nes 
     0x8B7D802A, //  Homebrew\Copter Bot.nes 
@@ -6845,7 +7098,6 @@ static const u32 s_crcs[] = {
     0x52533F56, //  Homebrew\Harry Dwarf [Byte-off].nes 
     0x778E803E, //  Homebrew\Haunted House Adventure [M. Stave].nes 
     0x28FB3277, //  Homebrew\Jood the Adventurer (Demo).nes 
-    0xF5FDD0EF, //  Homebrew\Kubo.nes 
     0xA5B23471, //  Homebrew\Labyrinth of Yggdrasil.nes 
     0x1BF1BBAE, //  Homebrew\Leggite Luta Livre [John Vanderhoef].nes 
     0xBB033B3C, //  Homebrew\Mermay's Den꞉ Deep Sea Escape.nes 
@@ -6856,8 +7108,6 @@ static const u32 s_crcs[] = {
     0x68370478, //  Homebrew\My NESmaker Game.nes 
     0x85B6ADEF, //  Homebrew\Narman.nes 
     0x4D8B01FF, //  Homebrew\Nessy!! The NES Robot (v1.25)[Daniel T. Gaming].nes 
-    0x7C982E51, //  Homebrew\Nix꞉ The Paradox Relic v0.2 [Dustin Huddleston].nes 
-    0x6F13574F, //  Homebrew\Nix꞉ The Paradox Relic v1.9 [Dustin Huddleston].nes 
     0x30FFF6EB, //  Homebrew\Omega Driver.nes 
     0x601B54A1, //  Homebrew\Ploid (v2.0)[NAPE Games].nes 
     0xD98E4BDC, //  Homebrew\Plummet Challenge Game [Fista Productions].nes 
@@ -6865,7 +7115,6 @@ static const u32 s_crcs[] = {
     0xC4850BD0, //  Homebrew\Shadow꞉ An Adventure In Monochrome.nes 
     0xF6DF51D1, //  Homebrew\Skateboard vs. Aliens 3.nes 
     0x4D916209, //  Homebrew\Slow Mole (v1.1)[Erik Rosenlund].nes 
-    0x3D095DC7, //  Homebrew\Solaris.nes 
     0xB41FB3CD, //  Homebrew\Stellarator (Demo).nes 
     0x2B5951AC, //  Homebrew\Super Beta Bros. 3.nes 
     0xD9CC183A, //  Homebrew\Super G!  The good one.nes 
@@ -6874,90 +7123,102 @@ static const u32 s_crcs[] = {
     0x2E86F4C2, //  Homebrew\The Tower of Turmoil (v1.03).nes 
     0x7BB4D931, //  Homebrew\Tobey the Turtle in Turtle Rescue (Demo).nes 
     0x1CE7E290, //  Homebrew\Trollburner (Demo).nes 
-    0x4DBB5CAB, //  Homebrew\Underground Adventure [Dale Coop].nes 
-    0x0FC7D1FE, //  Homebrew\Underground Adventure.nes 
     0x1A3234F7, //  Homebrew\Untitled (Kidnapped By Aliens).nes 
     0xE34E720F, //  Homebrew\Vector Run - A DJ LCM Game.nes 
     0xF90B5433, //  Homebrew\Vector Run - The Trilogy.nes 
     0x67CA0BA9, //  Homebrew\Vector Run.nes 
     0xCE423562, //  Homebrew\Wampus DX [John Vanderhoef].nes 
     0x51300A20, //  Homebrew\Wampus [John Vanderhoef].nes 
-    0x2CD0A4A5, //  Homebrew\Wart Worm Wingding [John Vanderhoef].nes 
     0x61751839, //  Homebrew\Witches Weed 3.nes 
     0xDC877532, //  Homebrew\Witches Weed.nes 
     0xE355DC71, //  Modern\Bat Lizard Bonanza.nes 
     0xFE52AFFC, //  Modern\Battery Chad꞉ Shock the World.nes 
     0x2DF8DE62, //  Modern\Carpet Shark.nes 
-    0xE22284A8, //  Modern\Dungeons &amp; DoomKnights.nes 
     0x7545EA58, //  Modern\Flea!.nes 
     0x921A09AC, //  Modern\Ghoul Grind Night of the Necromancer.nes 
     0xE797AB97, //  Modern\Shera &amp; the 40 Thieves [CGT Games].nes 
     0xB322A3EE, //  Modern\Spirit Impel.nes 
     0xC8B95138, //  Modern\The Magnilo Case.nes 
-    0x7835083C, //  Samples\Dungeons and DoomKnights (Beta).nes 
     0xCA55DB46, //  Samples\Flea!.nes 
     0xDE342FED, //  Unreleased\Flea!.nes 
-/**** 345 mapper=30 submapper=1 prgrom=256K chrram=8K mirror=H */
+/**** 462 mapper=30 prgrom=512K chrram=32K mirror=V battery=1 system=SYSTEM_PAL */
+    0xF5FDD0EF, //  Homebrew\Kubo.nes 
+    0x0FC7D1FE, //  Homebrew\Underground Adventure.nes 
+/**** 463 mapper=30 prgrom=512K chrram=32K mirror=V battery=1 system=SYSTEM_NTSC */
+    0x0BA0737B, //  Homebrew\Babel Blox.nes 
+    0x7C982E51, //  Homebrew\Nix꞉ The Paradox Relic v0.2 [Dustin Huddleston].nes 
+    0x6F13574F, //  Homebrew\Nix꞉ The Paradox Relic v1.9 [Dustin Huddleston].nes 
+    0x3D095DC7, //  Homebrew\Solaris.nes 
+    0x4DBB5CAB, //  Homebrew\Underground Adventure [Dale Coop].nes 
+    0x2CD0A4A5, //  Homebrew\Wart Worm Wingding [John Vanderhoef].nes 
+    0xE22284A8, //  Modern\Dungeons &amp; DoomKnights.nes 
+    0x7835083C, //  Samples\Dungeons and DoomKnights (Beta).nes 
+/**** 464 mapper=30 submapper=1 prgrom=256K chrram=8K mirror=H */
     0x891C14BC, //  Modern\Mega Man II (30th Anniversary Edition).nes 
-/**** 346 mapper=34 prgrom=128K chrram=8K mirror=V */
+/**** 465 mapper=34 prgrom=128K chrram=8K mirror=V system=SYSTEM_NTSC */
     0xAE1A88A9, //  Educational Computers\2合1 小百科 精选教育启思卡꞉  嘟嘟哇哇大冒险 &amp; 智力拼图.nes 
-/**** 347 mapper=34 prgrom=128K prgram=8K chrrom=32K mirror=V */
+/**** 466 mapper=34 prgrom=128K prgram=8K chrrom=32K mirror=V */
     0x2B95E895, //  Compatibility Hacks\Nesticle\Dragon Ball꞉ Dragon Mystery (v1.11)[TransBRC].nes 
     0xBDBC6E8F, //  Compatibility Hacks\Nesticle\Dragon Ball꞉ Dragon's Mystery (Goku Gi)[pacnsacdave].nes 
     0x393FE0C2, //  Compatibility Hacks\Nesticle\Dragon Ball꞉ Dragon's Mystery (Roshi Gi)[pacnsacdave].nes 
     0x1E2CB8CC, //  Compatibility Hacks\Nesticle\Dragon Ball꞉ 神龍の謎.nes 
-/**** 348 mapper=34 prgrom=512K chrram=8K mirror=V */
+/**** 467 mapper=34 prgrom=512K chrram=8K mirror=V */
     0x043E2545, //  Modern\Haunted Halloween '85.nes 
+/**** 468 mapper=34 prgrom=512K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x68546B2F, //  Modern\Lizard (English).nes 
     0x0F9333BD, //  Modern\Lizard (French).nes 
     0x4FE78041, //  Samples\Lizard (Demo 2).nes 
-/**** 349 mapper=34 submapper=1 prgrom=64K prgram=8K chrrom=64K mirror=V */
+/**** 469 mapper=34 submapper=1 prgrom=64K prgram=8K chrrom=64K mirror=V */
     0x92A3D007, //  Unlicensed North America\Impossible Mission 2.nes 
-/**** 350 mapper=34 submapper=2 prgrom=128K chrram=8K mirror=H */
+/**** 470 mapper=34 submapper=2 prgrom=128K chrram=8K mirror=H */
     0xA21E675C, //  Licensed Japan\魔鐘.nes 
     0xC2730C30, //  Licensed North America\Deadly Towers.nes 
-/**** 351 mapper=34 submapper=2 prgrom=32K chrram=8K mirror=V */
+/**** 471 mapper=34 submapper=2 prgrom=32K chrram=8K mirror=V */
     0x5B8D4378, //  Homebrew\Nnnnnn.nes 
-/**** 352 mapper=34 submapper=2 prgrom=64K chrram=8K mirror=V */
+/**** 472 mapper=34 submapper=2 prgrom=64K chrram=8K mirror=V */
     0x3446EAE7, //  Homebrew\Super Homebrew War (BNROM, 2018-11-08).nes 
     0x274FAE3E, //  Homebrew\Super Homebrew War (BNROM, 2018-11-21).nes 
     0x9E7590BA, //  Homebrew\Super Homebrew War (BNROM, 2019-01-04).nes 
-/**** 353 mapper=34 submapper=2 prgrom=128K chrram=8K mirror=V */
+/**** 473 mapper=34 submapper=2 prgrom=128K chrram=8K mirror=V */
     0x58011551, //  Compatibility Hacks\TV System Conversions\西天取经 - Journey to the West (NTSC)[NewRisingSun].nes 
+/**** 474 mapper=34 submapper=2 prgrom=128K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x368C19A8, //  Educational Computers\Три в одной на английском и русском.nes 
     0x162F1311, //  Unlicensed Taiwan&amp;Hong Kong\西天取经 - Journey to the West.nes 
-/**** 354 mapper=34 submapper=2 prgrom=128K chrram=32K mirror=V */
+/**** 475 mapper=34 submapper=2 prgrom=128K chrram=32K mirror=V system=SYSTEM_NTSC */
     0xAC5C1840, //  Homebrew\2-in-1 Geminim-Siamond.nes 
-/**** 355 mapper=34 submapper=2 prgrom=256K chrram=8K mirror=V */
+/**** 476 mapper=34 submapper=2 prgrom=256K chrram=8K mirror=V */
     0x1E36D20A, //  Homebrew\Multicarts\Action 53 Games (Build 0.02).nes 
     0xE645B187, //  Homebrew\Multicarts\Action 53 Games Midwest Gaming Classic 2012 (2 Mbit).nes 
     0xF407377E, //  Samples\Lizard (Demo 1).nes 
-/**** 356 mapper=34 submapper=2 prgrom=512K chrram=8K mirror=V */
+/**** 477 mapper=34 submapper=2 prgrom=512K chrram=8K mirror=V */
     0xCDF55296, //  Homebrew\Multicarts\Action 53 Games (Build 0.03).nes 
     0xAD9F8ED6, //  Homebrew\Multicarts\Action 53 Games Midwest Gaming Classic 2012 (4 Mbit).nes 
+/**** 478 mapper=34 submapper=2 prgrom=512K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x0C48BADE, //  Modern\Project Blue.nes 
-/**** 357 mapper=66 prgrom=64K chrrom=8K mirror=H */
+/**** 479 mapper=66 prgrom=64K chrrom=8K mirror=H system=SYSTEM_NTSC */
     0xC03B9077, //  Homebrew\Journey to the Center of the Alien [Mojon Twins].nes 
-/**** 358 mapper=66 prgrom=64K chrrom=32K mirror=H */
+/**** 480 mapper=66 prgrom=64K chrrom=32K mirror=H */
     0xE128E92D, //  Compatibility Hacks\迷魂車 - Jovial Race [m066].nes 
     0x5B1CDD48, //  Homebrew\Hacks\The Real Ghostbusters Remastered [Nesrocks].nes 
     0x14F477C3, //  Unlicensed Taiwan&amp;Hong Kong\工藤ひとみ、紺野麻美のA.V. 麻雀 Club.nes 
-/**** 359 mapper=66 prgrom=128K chrrom=32K mirror=H */
+/**** 481 mapper=66 prgrom=128K chrrom=32K mirror=H */
     0x9F056212, //  Bootleg Singles\Bung Game Doctor\(H001) Mobile Suit Z Gundam꞉ Hot Scramble.nes 
     0x0BB5B3A0, //  Licensed Japan\Family Block.nes 
     0xCE07194F, //  Licensed Japan\Mobile Suit Z Gundam꞉ Hot Scramble.nes 
     0xD80B44BC, //  Licensed North America\Thunder &amp; Lightning.nes 
-/**** 360 mapper=66 prgrom=32K chrrom=32K mirror=V */
+/**** 482 mapper=66 prgrom=32K chrrom=32K mirror=V */
     0xD996AB4E, //  Bootleg Singles\U-Force Power Games (NintendoAge).nes 
     0xB459EDC4, //  Unreleased\U-Force Power Games.nes 
-/**** 361 mapper=66 prgrom=64K chrrom=16K mirror=V */
-    0xFD6C31AF, //  Homebrew\Lala the Magical.nes 
+/**** 483 mapper=66 prgrom=64K chrrom=16K mirror=V */
     0xD26EFD78, //  Licensed North America\NES Action Set.nes 
+/**** 484 mapper=66 prgrom=64K chrrom=16K mirror=V system=SYSTEM_PAL */
     0x91B4B1D7, //  Licensed PAL\NES Action Set.nes 
-/**** 362 mapper=66 prgrom=64K chrrom=64K mirror=V */
+/**** 485 mapper=66 prgrom=64K chrrom=16K mirror=V system=SYSTEM_NTSC */
+    0xFD6C31AF, //  Homebrew\Lala the Magical.nes 
+/**** 486 mapper=66 prgrom=64K chrrom=64K mirror=V */
     0x63D78AA7, //  Compatibility Hacks\Policeman [m066].nes 
     0x5AECC042, //  Unlicensed Taiwan&amp;Hong Kong\Magic Bubble.nes 
-/**** 363 mapper=66 prgrom=128K chrrom=32K mirror=V */
+/**** 487 mapper=66 prgrom=128K chrrom=32K mirror=V */
     0x738275D9, //  Bootleg Singles\Bung Game Doctor\(H002) Dragon Ball꞉ 神龍の謎.nes 
     0xD538669C, //  Bootleg Singles\Bung Game Doctor\(H003) ドラえもん.nes 
     0x9FBBB70B, //  Bootleg Singles\Bung Game Doctor\(H006) 妖怪 Club.nes 
@@ -6977,15 +7238,17 @@ static const u32 s_crcs[] = {
     0x336093EF, //  Licensed Japan\ドラえもん (rev1).nes 
     0x2526C943, //  Licensed Japan\高橋名人のBugってHoney.nes 
     0x811F06D9, //  Licensed North America\Dragon Power.nes 
-    0xBEB8AB01, //  Licensed North America\Gumshoe.nes 
+/**** 488 mapper=66 prgrom=128K chrrom=32K mirror=V system=SYSTEM_PAL */
     0x4F3B2E57, //  Licensed PAL\Dragon Ball꞉ Le Secret du Dragon (rev0).nes 
     0xB0BC46D1, //  Licensed PAL\Dragon Ball꞉ Le Secret du Dragon (rev1).nes 
-/**** 364 mapper=66 prgrom=128K chrrom=128K mirror=V */
+/**** 489 mapper=66 prgrom=128K chrrom=32K mirror=V system=SYSTEM_NTSC */
+    0xBEB8AB01, //  Licensed North America\Gumshoe.nes 
+/**** 490 mapper=66 prgrom=128K chrrom=128K mirror=V system=SYSTEM_NTSC */
     0xC49F6407, //  Compatibility Hacks\Strike Wolf [m066].nes 
     0xD5BCF1E5, //  Compatibility Hacks\Strike Wolf [m066][h Zapper Detection].nes 
-/**** 365 mapper=69 prgrom=128K mirror=H */
+/**** 491 mapper=69 prgrom=128K mirror=H */
     0xFCF799D3, //  Bad Dumps\Forple [no CHR].nes 
-/**** 366 mapper=69 prgrom=128K chrrom=128K mirror=H */
+/**** 492 mapper=69 prgrom=128K chrrom=128K mirror=H */
     0x93EE763F, //  Homebrew\Hacks\Batman꞉ The Video Game (unknown hack).nes 
     0x0236EA28, //  Homebrew\Translations\English\Pyokotan's Big Maze [MrRichard999].nes 
     0x4D7859A9, //  Licensed Japan\Batman꞉ The Video Game.nes 
@@ -6993,37 +7256,40 @@ static const u32 s_crcs[] = {
     0x4339865C, //  Licensed Japan\ぴょこたんの大迷路.nes 
     0x37A0C0E5, //  Modern\Virtual Console\Hebereke.nes 
     0x1A15E253, //  Unreleased\Forple.nes 
-/**** 367 mapper=69 prgrom=128K chrrom=256K mirror=H */
+/**** 493 mapper=69 prgrom=128K chrrom=256K mirror=H */
     0xA59467AC, //  Homebrew\Translations\English\Dan's Dodgeball [TransGen v1.0b].nes 
     0x0897021B, //  Licensed Japan\Gremlins 2꞉ 新種誕生.nes 
     0x4C049CFE, //  Licensed Japan\炎の闘球児꞉ Dodge 弾平.nes 
-/**** 368 mapper=69 prgrom=128K prgram=8K chrrom=256K mirror=H */
+/**** 494 mapper=69 prgrom=128K prgram=8K chrrom=256K mirror=H */
     0xB06ADBC8, //  Bootleg Hacks\Batman 2.nes 
     0x0FF6A3B5, //  Licensed Japan\Dynamite Batman.nes 
     0x03EC46AF, //  Licensed North America\Batman꞉ Return of The Joker.nes 
-    0xBA327FD9, //  Licensed PAL\Batman꞉ Return of The Joker.nes 
     0x29DD37F4, //  Unreleased\Batman꞉ Return of The Joker.nes 
-/**** 369 mapper=69 prgrom=256K chrrom=128K mirror=H */
+/**** 495 mapper=69 prgrom=128K prgram=8K chrrom=256K mirror=H system=SYSTEM_PAL */
+    0xBA327FD9, //  Licensed PAL\Batman꞉ Return of The Joker.nes 
+/**** 496 mapper=69 prgrom=256K chrrom=128K mirror=H */
     0xC35497E4, //  Bad Dumps\Gimmick! (Memorial Series)[PRG bad].nes 
     0x0A00EF55, //  Homebrew\Translations\English\Gimmick! [LucianoTheWindowsFan].nes 
     0x4FFD424C, //  Homebrew\Translations\English\Hebereke [BMF54123].nes 
     0x0D65E7C7, //  Licensed Japan\Gimmick!.nes 
-    0xA713DD30, //  Licensed PAL\Mr. Gimmick.nes 
     0xE661918C, //  Unreleased\Gimmick!.nes 
     0x67FC2E40, //  Unreleased\Mr. Gimmick.nes 
-/**** 370 mapper=69 prgrom=128K prgnvram=32K chrram=8K mirror=H battery=1 */
+/**** 497 mapper=69 prgrom=256K chrrom=128K mirror=H system=SYSTEM_PAL */
+    0xA713DD30, //  Licensed PAL\Mr. Gimmick.nes 
+/**** 498 mapper=69 prgrom=128K prgnvram=32K chrram=8K mirror=H battery=1 */
     0xD8D39A25, //  Homebrew\Böbl (v1.2).nes 
-/**** 371 mapper=69 prgrom=128K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 499 mapper=69 prgrom=128K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x48CA0EE1, //  Licensed Japan\Barcode World.nes 
-/**** 372 mapper=69 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
+/**** 500 mapper=69 prgrom=256K prgnvram=8K chrrom=256K mirror=H battery=1 */
     0x55C9C5B4, //  Homebrew\Translations\English\Dan's Dodgeball 2 [TransGen v1.0a].nes 
     0xA4E935DF, //  Licensed Japan\炎の闘球児꞉ Dodge 弾平 2.nes 
-/**** 373 mapper=71 prgrom=64K chrram=8K mirror=V */
+/**** 501 mapper=71 prgrom=64K chrram=8K mirror=V */
+    0x9D03A5B9, //  Multicarts\extracts\Baseball Pro's (Quattro Sports).nes 
+/**** 502 mapper=71 prgrom=64K chrram=8K mirror=V system=SYSTEM_NTSC */
     0xBD75ED79, //  Bootleg Singles\BMX Simulator (B-S2).nes 
     0xC469EC55, //  Compatibility Hacks\BMX Simulator (B-S2)[multicart check removed].nes 
     0x40E1F09E, //  Compatibility Hacks\BMX Simulator [controller read].nes 
     0x514770A0, //  Multicarts\extracts\BMX Simulator (Quattro Sports).nes 
-    0x9D03A5B9, //  Multicarts\extracts\Baseball Pro's (Quattro Sports).nes 
     0xD27F6A2A, //  Multicarts\extracts\Boomerang Kid (Quattro Adventure).nes 
     0xF3086346, //  Multicarts\extracts\C.J.'s Elephant Antics (Quattro Arcade).nes 
     0x14003573, //  Multicarts\extracts\F-16 Renegade (Quattro Arcade).nes 
@@ -7035,7 +7301,7 @@ static const u32 s_crcs[] = {
     0x20B20C18, //  Multicarts\extracts\Treasure Island Dizzy (Quattro Adventure).nes 
     0x6C93377C, //  Unlicensed North America\Bee 52.nes 
     0x98430F49, //  Unreleased\Panic! Dizzy.nes 
-/**** 374 mapper=71 prgrom=128K chrram=8K mirror=V */
+/**** 503 mapper=71 prgrom=128K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x210EFCDC, //  Bootleg Singles\Super Robin Hood.nes 
     0xDB99D0CB, //  Unlicensed North America\Aladdin Compact Cartridge\Dizzy the Adventurer.nes 
     0xE62E3382, //  Unlicensed North America\MiG-29 Soviet Fighter.nes 
@@ -7044,9 +7310,12 @@ static const u32 s_crcs[] = {
     0xA9630578, //  Unreleased\Dreamworld Pogie (2016).nes 
     0x2735FB3F, //  Unreleased\Dreamworld Pogie (2017).nes 
     0x4F299FC8, //  Unreleased\Dreamworld Pogie (xxxx).nes 
-/**** 375 mapper=71 prgrom=256K chrram=8K mirror=V */
-    0x767F468C, //  Bootleg Singles\Bung Game Doctor\Ultimate Stuntman.nes 
+/**** 504 mapper=71 prgrom=256K chrram=8K mirror=V */
     0x96F1A437, //  Homebrew\Bugfixes, Improvements\Big Nose Freaks Out (rev1)[expansion controller].nes 
+    0x9235B57B, //  Unlicensed North America\Micro Machines.nes 
+    0xF62B0327, //  Unreleased\Big Nose and the Witchdoctor.nes 
+/**** 505 mapper=71 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
+    0x767F468C, //  Bootleg Singles\Bung Game Doctor\Ultimate Stuntman.nes 
     0x4F74E236, //  Modern\Wonderland Dizzy.nes 
     0x70F31D2C, //  Unlicensed Elsewhere\Cosmic Spacehead.nes 
     0xDB1FD64E, //  Unlicensed Elsewhere\Micro Machines (rev1).nes 
@@ -7057,32 +7326,28 @@ static const u32 s_crcs[] = {
     0x5B2B72CB, //  Unlicensed North America\Big Nose Freaks Out (rev0).nes 
     0xCCDCBFC6, //  Unlicensed North America\Big Nose Freaks Out (rev1).nes 
     0xBD154C3E, //  Unlicensed North America\Big Nose the Caveman.nes 
-    0x9235B57B, //  Unlicensed North America\Micro Machines.nes 
     0x38FBCC85, //  Unlicensed North America\The Fantastic Adventures of Dizzy.nes 
     0x892434DD, //  Unlicensed North America\Ultimate Stuntman.nes 
-    0xF62B0327, //  Unreleased\Big Nose and the Witchdoctor.nes 
     0xF520845F, //  Unreleased\Mystery World Dizzy (alt).nes 
     0x2EAFD5A9, //  Unreleased\Mystery World Dizzy.nes 
     0x2C7440EF, //  Unreleased\Wonderland Dizzy.nes 
-/**** 376 mapper=71 submapper=1 prgrom=128K chrram=8K mirror=H */
+/**** 506 mapper=71 submapper=1 prgrom=128K chrram=8K mirror=H system=SYSTEM_NTSC */
     0x1BC686A8, //  Unlicensed North America\Fire Hawk.nes 
-/**** 377 mapper=71 submapper=1 prgrom=128K chrram=8K mirror=V */
+/**** 507 mapper=71 submapper=1 prgrom=128K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x7ABB81FD, //  Unlicensed Elsewhere\Fire Hawk.nes 
-/**** 378 mapper=78 submapper=1 prgrom=128K chrrom=128K mirror=H */
+/**** 508 mapper=78 submapper=1 prgrom=128K chrrom=128K mirror=H */
     0xCDEBA71E, //  Homebrew\Translations\English\宇宙船 - Cosmo Carrier [Gil Galad v0.25].nes 
     0x3D1C3137, //  Licensed Japan\宇宙船 - Cosmo Carrier.nes 
-/**** 379 mapper=78 submapper=3 prgrom=128K chrrom=128K mirror=H */
+/**** 509 mapper=78 submapper=3 prgrom=128K chrrom=128K mirror=H */
     0x564F7161, //  Homebrew\Translations\English\Holy Diver [Monaco].nes 
     0xBA51AC6F, //  Licensed Japan\Holy Diver.nes 
-/**** 380 mapper=79 prgrom=16K chrrom=16K mirror=H */
+/**** 510 mapper=79 prgrom=16K chrrom=16K mirror=H system=SYSTEM_NTSC */
     0xA2D074F5, //  Unlicensed Elsewhere\Lucky 777.nes 
     0xF5350410, //  Unlicensed Elsewhere\Sidewinder.nes 
-/**** 381 mapper=79 prgrom=32K chrrom=16K mirror=H */
+/**** 511 mapper=79 prgrom=32K chrrom=16K mirror=H */
     0xA62B79E1, //  Bad Dumps\Sidewinder [PRG overdump].nes 
     0xDC8E49BF, //  Unlicensed Taiwan&amp;Hong Kong\Colorful Dragon.nes 
-/**** 382 mapper=79 prgrom=32K chrrom=32K mirror=H */
-    0xF597E3B4, //  Unlicensed Elsewhere\75 Bingo.nes 
-    0x3F2450EA, //  Unlicensed Elsewhere\Galactic Crusader.nes 
+/**** 512 mapper=79 prgrom=32K chrrom=32K mirror=H */
     0xBD29178A, //  Unlicensed North America\Dudes with Attitude (rev0).nes 
     0x0955B54C, //  Unlicensed North America\Dudes with Attitude (rev1).nes 
     0x88A6B192, //  Unlicensed North America\F-15 City War (rev0).nes 
@@ -7092,33 +7357,34 @@ static const u32 s_crcs[] = {
     0xD360D5F9, //  Unlicensed Taiwan&amp;Hong Kong\75 賓果.nes 
     0x80F39D59, //  Unreleased\Poke Block.nes 
     0x492FC509, //  Unreleased\Stakk'm.nes 
-/**** 383 mapper=79 prgrom=32K chrrom=64K mirror=H */
+/**** 513 mapper=79 prgrom=32K chrrom=32K mirror=H system=SYSTEM_NTSC */
+    0xF597E3B4, //  Unlicensed Elsewhere\75 Bingo.nes 
+    0x3F2450EA, //  Unlicensed Elsewhere\Galactic Crusader.nes 
+/**** 514 mapper=79 prgrom=32K chrrom=64K mirror=H */
     0x3BA4D2BB, //  Homebrew\Copyright Restorations\マリ・アヤミ・ルカのA.V. Poker.nes 
     0x22F8E680, //  Unlicensed Elsewhere\Futebol.nes 
-    0xFFFDC310, //  Unlicensed Elsewhere\Ultimate League Soccer.nes 
     0xB6A727FA, //  Unlicensed Japan\Papillion Gals.nes 
     0xC594E134, //  Unlicensed Japan\マリ・アヤミ・ルカのA.V. Poker (rev0).nes 
     0x831F9C1A, //  Unlicensed North America\Ultimate League Soccer.nes 
     0xB790864C, //  Unlicensed Taiwan&amp;Hong Kong\マリ・アヤミ・ルカのA.V. Poker.nes 
-/**** 384 mapper=79 prgrom=64K chrrom=64K mirror=H */
+/**** 515 mapper=79 prgrom=32K chrrom=64K mirror=H system=SYSTEM_NTSC */
+    0xFFFDC310, //  Unlicensed Elsewhere\Ultimate League Soccer.nes 
+/**** 516 mapper=79 prgrom=64K chrrom=64K mirror=H */
     0xD114F544, //  Unlicensed Japan\A.V. Super Real Pachinko.nes 
     0x850F25B3, //  Unlicensed Japan\工藤ひとみ、紺野麻美のA.V. 麻雀 Club (rev0).nes 
     0xC829007E, //  Unlicensed Japan\工藤ひとみ、紺野麻美のA.V. 麻雀 Club (rev1).nes 
     0x3D3FF543, //  Unlicensed Japan\風間ジュンと浅間夕子のA.V. Dragon 麻雀.nes 
     0x48239B42, //  Unlicensed Japan\麻雀 Companion (聖謙 3015 PCB).nes 
     0xB8DAD5D2, //  Unlicensed Japan\麻雀 Summit꞉ 歌舞伎町篇.nes 
-/**** 385 mapper=79 prgrom=128K chrrom=128K mirror=H */
+/**** 517 mapper=79 prgrom=128K chrrom=128K mirror=H */
     0xA863645C, //  Bad Dumps\麻雀 Summit꞉ 歌舞伎町篇 [has data from other game].nes 
-/**** 386 mapper=79 prgrom=16K chrrom=16K mirror=V */
+/**** 518 mapper=79 prgrom=16K chrrom=16K mirror=V */
     0x31AC927A, //  Unlicensed Taiwan&amp;Hong Kong\777 幸運輪盤.nes 
-/**** 387 mapper=79 prgrom=32K chrrom=16K mirror=V */
+/**** 519 mapper=79 prgrom=32K chrrom=16K mirror=V system=SYSTEM_NTSC */
     0xF8C358D7, //  Unlicensed Taiwan&amp;Hong Kong\Millionaire.nes 
     0x68379FDB, //  Unlicensed Taiwan&amp;Hong Kong\Pipe V.nes 
-/**** 388 mapper=79 prgrom=32K chrrom=32K mirror=V */
+/**** 520 mapper=79 prgrom=32K chrrom=32K mirror=V */
     0xC682E53C, //  Bad Dumps\Double Strike꞉ Aerial Attack Force (rev1) [bad CHR].nes 
-    0xEB4CCA31, //  Unlicensed Elsewhere\Master Chu &amp; The Drunkard Hu.nes 
-    0x7739672E, //  Unlicensed Elsewhere\Metal Fighter µ.nes 
-    0xDDA190F9, //  Unlicensed Elsewhere\Twin Eagle.nes 
     0x0554394F, //  Unlicensed Japan\Metal Fighter µ.nes 
     0xC2A4612E, //  Unlicensed North America\Blackjack.nes 
     0x36B35988, //  Unlicensed North America\Double Strike꞉ Aerial Attack Force (rev0).nes 
@@ -7132,41 +7398,47 @@ static const u32 s_crcs[] = {
     0xC1B79B14, //  Unlicensed Taiwan&amp;Hong Kong\双鷹 - Twin Eagle.nes 
     0x5E16861D, //  Unreleased\Rad Racket - Deluxe Tennis II.nes 
     0xC226157D, //  Unreleased\Venice Beach Volleyball.nes 
-/**** 389 mapper=79 prgrom=64K chrrom=16K mirror=V */
+/**** 521 mapper=79 prgrom=32K chrrom=32K mirror=V system=SYSTEM_PAL */
+    0xDDA190F9, //  Unlicensed Elsewhere\Twin Eagle.nes 
+/**** 522 mapper=79 prgrom=32K chrrom=32K mirror=V system=SYSTEM_NTSC */
+    0xEB4CCA31, //  Unlicensed Elsewhere\Master Chu &amp; The Drunkard Hu.nes 
+    0x7739672E, //  Unlicensed Elsewhere\Metal Fighter µ.nes 
+/**** 523 mapper=79 prgrom=64K chrrom=16K mirror=V system=SYSTEM_NTSC */
     0x58152B42, //  Bad Dumps\Pipe 5 [PRG overdump, bad PRG].nes 
     0xBBF464EB, //  Unlicensed Taiwan&amp;Hong Kong\Pyramid 2.nes 
-/**** 390 mapper=79 prgrom=64K chrrom=32K mirror=V */
+/**** 524 mapper=79 prgrom=64K chrrom=32K mirror=V */
     0x6BD7047A, //  Unreleased\Robert Byrnes Pool Challenge.nes 
-/**** 391 mapper=79 prgrom=64K chrrom=64K mirror=V */
-    0x1488E95F, //  Unlicensed Elsewhere\Silent Assault.nes 
+/**** 525 mapper=79 prgrom=64K chrrom=64K mirror=V */
     0xBEE54426, //  Unlicensed North America\Deathbots (rev0).nes 
     0x8EAB381C, //  Unlicensed North America\Deathbots (rev1).nes 
     0xF05870D5, //  Unlicensed North America\Mermaids of Atlantis꞉ The Riddle of the Magic Bubble.nes 
     0x257D09C5, //  Unlicensed Taiwan&amp;Hong Kong\突擊 - Raid (rev0).nes 
     0x3F5C53AD, //  Unlicensed Taiwan&amp;Hong Kong\突擊 - Raid (rev1).nes 
-/**** 392 mapper=85 prgrom=128K chrrom=128K mirror=H */
+/**** 526 mapper=79 prgrom=64K chrrom=64K mirror=V system=SYSTEM_NTSC */
+    0x1488E95F, //  Unlicensed Elsewhere\Silent Assault.nes 
+/**** 527 mapper=85 prgrom=128K chrrom=128K mirror=H */
     0xB3FA69A9, //  Bootleg Hacks\Mario Bros. 14 Adventures.nes 
-/**** 393 mapper=85 submapper=1 prgrom=128K chrrom=128K mirror=H */
+/**** 528 mapper=85 submapper=1 prgrom=128K chrrom=128K mirror=H */
     0xE4362167, //  Licensed Japan\Tiny Toon Adventures 2꞉ Montana Landへようこそ.nes 
-/**** 394 mapper=85 submapper=1 prgrom=128K chrrom=256K mirror=H */
+/**** 529 mapper=85 submapper=1 prgrom=128K chrrom=256K mirror=H */
     0xA608DE02, //  Bootleg Singles\餓狼伝説 2.nes 
-/**** 395 mapper=85 submapper=1 prgrom=256K chrrom=256K mirror=H */
+/**** 530 mapper=85 submapper=1 prgrom=256K chrrom=256K mirror=H */
     0x4933E97F, //  Bootleg Singles\Mortal Kombat V Pro.nes 
-/**** 396 mapper=85 submapper=2 prgrom=512K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 531 mapper=85 submapper=2 prgrom=512K prgnvram=8K chrram=8K mirror=H battery=1 */
     0x00F49381, //  Homebrew\Translations\English\Lagrange Point [Aeon Genesis v1.01].nes 
     0x743387FF, //  Licensed Japan\Lagrange Point.nes 
-/**** 397 mapper=87 prgrom=32K chrrom=16K mirror=H */
+/**** 532 mapper=87 prgrom=32K chrrom=16K mirror=H */
     0xA4928409, //  Bootleg Hacks\Inventor\Van-1.nes 
     0x985B1D05, //  Licensed Japan\TwinBee.nes 
     0xBDA7925E, //  Licensed Japan\影の伝説.nes 
     0xC12E5842, //  Modern\Virtual Console\影の伝説.nes 
-/**** 398 mapper=87 prgrom=16K chrrom=16K mirror=V */
+/**** 533 mapper=87 prgrom=16K chrrom=16K mirror=V */
     0xCF0A5C48, //  Homebrew\Translations\English\Ninja Jajamaru [Aishsha &amp; Stardust Crusaders].nes 
     0x20F98977, //  Licensed Japan\City Connection.nes 
     0xD97595A3, //  Licensed Japan\忍者じゃじゃ丸くん.nes 
     0x88EC55F0, //  Modern\じゃじゃ丸 Jr. 伝承記꞉ Jalecoもあり候う\City Connection.nes 
     0xA3369B82, //  Modern\じゃじゃ丸 Jr. 伝承記꞉ Jalecoもあり候う\忍者じゃじゃ丸くん.nes 
-/**** 399 mapper=87 prgrom=32K chrrom=16K mirror=V */
+/**** 534 mapper=87 prgrom=32K chrrom=16K mirror=V */
     0x16221014, //  Bootleg Hacks\Futbol Colombiano.nes 
     0x656FA3B5, //  Licensed Japan\Argus.nes 
     0x883454EA, //  Licensed Japan\Choplifter! (rev0).nes 
@@ -7176,35 +7448,36 @@ static const u32 s_crcs[] = {
     0xD20775DA, //  Modern\Virtual Console\City Connection (Japan).nes 
     0xEDF60D23, //  Modern\Virtual Console\忍者じゃじゃ丸くん.nes 
     0xAD0B71E2, //  Playchoice\The Goonies.nes 
-/**** 400 mapper=87 prgrom=32K chrrom=32K mirror=V */
+/**** 535 mapper=87 prgrom=32K chrrom=32K mirror=V */
     0xC34E9802, //  Homebrew\Translations\English\Ninja Jajamaru's Big Adventure [Aishsha &amp; Stardust Crusaders].nes 
     0xD740B35C, //  Homebrew\Translations\English\Urusei Yatsura꞉ Lum's Wedding Bell [Stardust Crusaders].nes 
     0x0DA5E32E, //  Licensed Japan\うる星やつら꞉ LumのWedding Bell.nes 
     0x61B4295A, //  Licensed Japan\じゃじゃ丸の大冒険.nes 
     0x2B750BF9, //  Unreleased\うる星やつら꞉ LumのWedding Bell.nes 
-/**** 401 mapper=118 prgrom=128K chrrom=128K mirror=H */
+/**** 536 mapper=118 prgrom=128K chrrom=128K mirror=H */
     0x0A90D4A3, //  Homebrew\Translations\English\Major League [FlashPV].nes 
     0x90C773C1, //  Licensed North America\Goal! Two.nes 
     0xB9B4D9E0, //  Licensed North America\NES Play Action Football.nes 
     0x41F9E0AA, //  Licensed North America\Pro Sport Hockey.nes 
+/**** 537 mapper=118 prgrom=128K chrrom=128K mirror=H system=SYSTEM_PAL */
     0xD20BB617, //  Licensed PAL\Goal! 2.nes 
-/**** 402 mapper=118 prgrom=128K chrrom=256K mirror=H */
+/**** 538 mapper=118 prgrom=128K chrrom=256K mirror=H */
     0x23F33D22, //  Modern\Virtual Console\NES Play Action Football.nes 
-/**** 403 mapper=118 prgrom=256K chrrom=128K mirror=H */
+/**** 539 mapper=118 prgrom=256K chrrom=128K mirror=H */
     0xC4F9251A, //  Bootleg Hacks\超級兄弟 IV.nes 
     0xB3D92E78, //  Homebrew\Translations\English\Armadillo [Vice Translations].nes 
     0x78B657AC, //  Licensed Japan\Armadillo.nes 
-/**** 404 mapper=118 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 540 mapper=118 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x5C565F25, //  Homebrew\Translations\English\The Game of Life RPG [Nebulous Translations].nes 
     0x68064D76, //  Homebrew\Translations\English\Ys III꞉ Wanderers from Ys [Vice Translations].nes 
     0x07D92C31, //  Licensed Japan\RPG人生Game.nes 
     0x37B62D04, //  Licensed Japan\Ys III꞉ Wanderers from Ys.nes 
-/**** 405 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=H battery=1 */
+/**** 541 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_NTSC */
     0x3869DB94, //  Bad Dumps\梁山英雄 [wrong PRG bank order].nes 
-/**** 406 mapper=163 prgrom=512K prgnvram=8K chrram=8K mirror=V battery=1 */
+/**** 542 mapper=163 prgrom=512K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x4CE082F8, //  Bad Dumps\拳皇R-1꞉ 最强格斗王 [wrong PRG bank order].nes 
     0xBBAB3A61, //  Unlicensed China\南晶\拳皇R-1꞉ 最强格斗王.nes 
-/**** 407 mapper=163 prgrom=1024K prgnvram=8K chrram=8K mirror=V battery=1 */
+/**** 543 mapper=163 prgrom=1024K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x9D8AA034, //  Bad Dumps\Final Fantasy IV - 最终幻想4꞉ 光与暗 水晶纷争 [wrong PRG bank order].nes 
     0x63C41F82, //  Bad Dumps\World of Warcraft꞉ Demon Hunter [pacnsacdave][wrong PRG bank order].nes 
     0x9DE10A91, //  Bad Dumps\七龙珠大冒险 - Dragon Ball [wrong PRG bank order].nes 
@@ -7232,7 +7505,7 @@ static const u32 s_crcs[] = {
     0x4E3EDF88, //  Unlicensed China\南晶\超级机器人大战 A.nes 
     0xDA47B05A, //  Unlicensed China\南晶\隋唐英雄.nes 
     0xE08AB52E, //  Unlicensed China\南晶\魔兽世界꞉ 恶魔猎人.nes 
-/**** 408 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=V battery=1 */
+/**** 544 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x5E66E6C4, //  Bad Dumps\Naruto RPG - 火影忍者 [wrong PRG bank order].nes 
     0x696D98E3, //  Bad Dumps\三国志꞉ 吕布传 [wrong PRG bank order].nes 
     0x9F197F2B, //  Bad Dumps\三国群侠传 [wrong PRG bank order].nes 
@@ -7301,35 +7574,35 @@ static const u32 s_crcs[] = {
     0x85FA53E1, //  Unlicensed China\南晶\魔界塔士.nes 
     0x2121DAB2, //  Unlicensed China\南晶\魔界霸主.nes 
     0xE3EF9739, //  Unlicensed China\南晶\黄金の太陽.nes 
-/**** 409 mapper=206 prgrom=64K prgram=2K chrrom=32K mirror=4 */
+/**** 545 mapper=206 prgrom=64K prgram=2K chrrom=32K mirror=4 */
     0xE45485A5, //  Vs. System\Atari R.B.I. Baseball (set 1).nes 
     0x8337E123, //  Vs. System\Atari R.B.I. Baseball (set 2).nes 
-/**** 410 mapper=206 prgrom=64K prgram=2K chrrom=64K mirror=4 */
+/**** 546 mapper=206 prgrom=64K prgram=2K chrrom=64K mirror=4 */
     0x52C501D0, //  Vs. System\Vs. T.K.O. Boxing.nes 
-/**** 411 mapper=206 prgrom=128K prgram=2K chrrom=32K mirror=4 */
+/**** 547 mapper=206 prgrom=128K prgram=2K chrrom=32K mirror=4 */
     0x12012CD9, //  Vs. System\Super Xevious꞉ Gampの謎.nes 
-/**** 412 mapper=206 prgrom=128K chrrom=64K mirror=4 */
+/**** 548 mapper=206 prgrom=128K chrrom=64K mirror=4 */
     0xCD50A092, //  Unlicensed North America\Gauntlet.nes 
-/**** 413 mapper=206 prgrom=128K prgram=2K chrrom=64K mirror=4 */
+/**** 549 mapper=206 prgrom=128K prgram=2K chrrom=64K mirror=4 */
     0x832CF592, //  Vs. System\Freedom Force.nes 
-/**** 414 mapper=206 prgrom=32K chrrom=16K mirror=H */
+/**** 550 mapper=206 prgrom=32K chrrom=16K mirror=H */
     0xDB1131F0, //  Bootleg Singles\TouchGamePlayer\Super Chinese.nes 
     0x540B04EE, //  Multicarts\extracts\Space Shuttle Exploration (CB-4035).nes 
-/**** 415 mapper=206 prgrom=32K chrrom=32K mirror=H */
+/**** 551 mapper=206 prgrom=32K chrrom=32K mirror=H */
     0x559DE7CA, //  Bootleg Singles\TouchGamePlayer\Babelの塔.nes 
     0x8AF25130, //  Licensed Japan\Babelの塔.nes 
     0xE9990228, //  Modern\Namco Museum Archives\Babelの塔.nes 
     0x55463622, //  Modern\Namco Museum Archives\Family Jockey.nes 
     0x145FEE2E, //  Modern\Namco Museum Archives\Valkyrieの冒険꞉ 時の鍵伝説.nes 
     0x2457A912, //  Modern\Virtual Console\Valkyrieの冒険꞉ 時の鍵伝説.nes 
-/**** 416 mapper=206 prgrom=64K chrrom=64K mirror=H */
+/**** 552 mapper=206 prgrom=64K chrrom=64K mirror=H */
     0x0FFDE258, //  Unlicensed North America\Fantasy Zone.nes 
-/**** 417 mapper=206 prgrom=128K chrrom=32K mirror=H */
+/**** 553 mapper=206 prgrom=128K chrrom=32K mirror=H */
     0x3CFEB4E1, //  Homebrew\Translations\English\Super Xevious꞉ The Riddle of GAMP [Psyklax].nes 
     0xF7762A20, //  Licensed Japan\Side Pocket.nes 
     0x7BB5664F, //  Licensed Japan\Super Xevious꞉ Gampの謎.nes 
     0x1A77388B, //  Modern\Namco Museum Archives\Super Xevious꞉ Gampの謎.nes 
-/**** 418 mapper=206 prgrom=128K chrrom=64K mirror=H */
+/**** 554 mapper=206 prgrom=128K chrrom=64K mirror=H */
     0x56E0E6C6, //  Homebrew\Translations\English\Family Pinball [Suicidal Translations].nes 
     0x87C5CF7C, //  Homebrew\Translations\English\Karnov [Eien Ni Hen &amp; Vice Translations v1.10].nes 
     0x491D8CDB, //  Licensed Japan\Family Pinball.nes 
@@ -7345,19 +7618,19 @@ static const u32 s_crcs[] = {
     0x139EB5B5, //  Unlicensed North America\Indiana Jones and the Temple of Doom.nes 
     0x5800BE2D, //  Unlicensed North America\Toobin'.nes 
     0x10D17B9B, //  Unlicensed South Korea\Toobin'.nes 
-/**** 419 mapper=206 prgrom=32K chrrom=16K mirror=V */
+/**** 555 mapper=206 prgrom=32K chrrom=16K mirror=V system=SYSTEM_NTSC */
     0x4FF561BB, //  Homebrew\Hacks\Super Mario Bros. series\Randomize [Dot].nes 
     0xF558F82D, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ 2014-12 Beta.nes 
-/**** 420 mapper=206 prgrom=32K chrrom=32K mirror=V */
+/**** 556 mapper=206 prgrom=32K chrrom=32K mirror=V */
     0x235B71ED, //  Modern\Namco Museum Archives\Metro-Cross.nes 
     0x26CB086B, //  Modern\Namco Museum Archives\Sky Kid.nes 
     0xF49EBCFE, //  Modern\Virtual Console\Sky Kid.nes 
     0x48FD2FB7, //  Multicarts\extracts\Super City Tank.nes 
-/**** 421 mapper=206 prgrom=64K chrrom=8K mirror=V */
+/**** 557 mapper=206 prgrom=64K chrrom=8K mirror=V system=SYSTEM_NTSC */
     0x5E25F869, //  Homebrew\Hacks\Super Mario Bros. series\Power Peach Sis. [SiWu].nes 
-/**** 422 mapper=206 prgrom=64K chrrom=24K mirror=V */
+/**** 558 mapper=206 prgrom=64K chrrom=24K mirror=V system=SYSTEM_NTSC */
     0x7F5A6B56, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (animated background).nes 
-/**** 423 mapper=206 prgrom=64K chrrom=32K mirror=V */
+/**** 559 mapper=206 prgrom=64K chrrom=32K mirror=V */
     0x5C5D8F8C, //  Homebrew\Hacks\R.B.I. Baseball (R.B.I Players' Circuit).nes 
     0x1300A8B7, //  Licensed Japan\Pro 野球꞉ Family Stadium '87.nes 
     0xDCDF06DE, //  Licensed Japan\Pro 野球꞉ Family Stadium.nes 
@@ -7365,20 +7638,20 @@ static const u32 s_crcs[] = {
     0xE73E7260, //  Unlicensed North America\Pac-Mania.nes 
     0x2E326A1D, //  Unlicensed North America\R.B.I. Baseball.nes 
     0xA8F5C2AB, //  Unlicensed North America\Vindicators.nes 
-/**** 424 mapper=206 prgrom=64K chrrom=64K mirror=V */
+/**** 560 mapper=206 prgrom=64K chrrom=64K mirror=V */
     0xA8B7D027, //  Compatibility Hacks\Vs. TKO Boxing [home console v0.9b].nes 
     0xBD3D4EA8, //  Homebrew\Translations\English\Family Tennis [Goldenband v10-05-2015].nes 
     0x5B4C6146, //  Licensed Japan\Family Boxing.nes 
     0xA49253C6, //  Licensed Japan\Family Tennis.nes 
     0x5BB62688, //  Licensed North America\Ring King.nes 
     0x5F2C3195, //  Unlicensed North America\Super Sprint.nes 
-/**** 425 mapper=206 prgrom=128K chrrom=32K mirror=V */
+/**** 561 mapper=206 prgrom=128K chrrom=32K mirror=V */
     0xCDB3424D, //  Homebrew\Translations\English\Family Circuit [MrRichard999 v0.95].nes 
     0x9CBC8253, //  Licensed Japan\Family Circuit.nes 
     0x2E563C66, //  Licensed Japan\Mappy-Land.nes 
     0x7C38CF24, //  Modern\Namco Museum Archives\Family Circuit.nes 
     0x2A4F30CA, //  Modern\Namco Museum Archives\Mappy-Land.nes 
-/**** 426 mapper=206 prgrom=128K chrrom=64K mirror=V */
+/**** 562 mapper=206 prgrom=128K chrrom=64K mirror=V */
     0xAD66557F, //  Bootleg Singles\Lupin 三世꞉ Pandoraの遺産 (Cocot).nes 
     0x0955D16B, //  Homebrew\Hacks\Pokémon꞉ Pikachuの冒険 [Yuifa].nes 
     0x97C28E04, //  Homebrew\Translations\English\Dragon Buster II꞉ Seal of Darkness [PentarouZero].nes 
@@ -7407,33 +7680,33 @@ static const u32 s_crcs[] = {
     0x22D1427A, //  Modern\Namco Museum Archives\天下一武士꞉ ケルナグール.nes 
     0x96DFC776, //  Unlicensed North America\R.B.I. Baseball 2.nes 
     0xFD63E7AC, //  Unlicensed North America\R.B.I. Baseball 3.nes 
-/**** 427 mapper=206 submapper=1 prgrom=32K prgram=2K chrrom=32K mirror=4 */
+/**** 563 mapper=206 submapper=1 prgrom=32K prgram=2K chrrom=32K mirror=4 */
     0x21A653C7, //  Vs. System\Super Sky Kid.nes 
-/**** 428 mapper=206 submapper=1 prgrom=32K chrrom=16K mirror=H */
+/**** 564 mapper=206 submapper=1 prgrom=32K chrrom=16K mirror=H */
     0x711C2B0E, //  Licensed Japan\Super Chinese.nes 
-/**** 429 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=H */
+/**** 565 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=H */
     0xE03329D0, //  Homebrew\Translations\English\Family Jockey [MrRichard999].nes 
     0xCD527549, //  Homebrew\Translations\English\Valkyrie's Adventure꞉ Legend of the Time Key [DvD Translations revA].nes 
     0x3719A26D, //  Licensed Japan\Family Jockey.nes 
     0xC6ADD8C5, //  Licensed Japan\Valkyrieの冒険꞉ 時の鍵伝説.nes 
-/**** 430 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=V */
+/**** 566 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=V */
     0xE40B4973, //  Licensed Japan\Metro-Cross.nes 
     0xCA6A7BF1, //  Licensed Japan\Sky Kid.nes 
-/**** 431 mapper=210 submapper=1 prgrom=256K chrrom=256K mirror=H */
+/**** 567 mapper=210 submapper=1 prgrom=256K chrrom=256K mirror=H */
     0xBD523011, //  Licensed Japan\Dream Master.nes 
-/**** 432 mapper=210 submapper=1 prgrom=512K chrrom=256K mirror=H */
+/**** 568 mapper=210 submapper=1 prgrom=512K chrrom=256K mirror=H */
     0x1696354C, //  Homebrew\Translations\English\Namco Prism Zone꞉ Dream Master [Aishsha v1.01].nes 
-/**** 433 mapper=210 submapper=1 prgrom=128K chrrom=128K mirror=V */
+/**** 569 mapper=210 submapper=1 prgrom=128K chrrom=128K mirror=V */
     0xB9B2E109, //  Homebrew\Translations\English\Famista '91 [MrRichard999, TheMajinZenki, Jink640, FlashPV v0.991].nes 
     0x077A9F0E, //  Homebrew\Translations\English\Famista '91 [MrRichard999, TheMajinZenki, Jink640, FlashPV v0.99].nes 
     0x808606F0, //  Licensed Japan\Famista '91.nes 
     0x0C47946D, //  Licensed Japan\ちびまる子ちゃん꞉ うきうき Shopping.nes 
     0x81B7F1A8, //  Licensed Japan\平成天才バカボン.nes 
-/**** 434 mapper=210 submapper=1 prgrom=256K chrrom=128K mirror=V */
+/**** 570 mapper=210 submapper=1 prgrom=256K chrrom=128K mirror=V */
     0x71C8243B, //  Homebrew\Translations\English\The Genius Bakabon [KingMike's Translations].nes 
-/**** 435 mapper=210 submapper=1 prgrom=512K prgnvram=2K chrrom=128K mirror=V battery=1 */
+/**** 571 mapper=210 submapper=1 prgrom=512K prgnvram=2K chrrom=128K mirror=V battery=1 */
     0xC247CC80, //  Licensed Japan\Family Circuit '91.nes 
-/**** 436 mapper=210 submapper=2 prgrom=128K chrrom=128K mirror=V */
+/**** 572 mapper=210 submapper=2 prgrom=128K chrrom=128K mirror=V */
     0xB94C2CA8, //  Homebrew\Hacks\Evil Dead Ash Lives! [Crying Onion].nes 
     0x164C86A3, //  Homebrew\Translations\English\Famista '92 [MrRichard999, TheMajinZenki, Jink640, FlashPV v1.01].nes 
     0x370C849B, //  Homebrew\Translations\English\Famista '93 [MrRichard999, TheMajinZenki, Jink640, FlashPV v0.991].nes 
@@ -7445,56 +7718,66 @@ static const u32 s_crcs[] = {
     0x46FD7843, //  Licensed Japan\Splatterhouse꞉ わんぱくGraffiti.nes 
     0x2447E03B, //  Licensed Japan\Top Striker.nes 
     0x1595B7D5, //  Modern\Namco Museum Archives\Splatterhouse꞉ わんぱくGraffiti.nes 
-/**** 437 mapper=210 submapper=2 prgrom=256K chrrom=128K mirror=V */
+/**** 573 mapper=210 submapper=2 prgrom=256K chrrom=128K mirror=V */
     0x97267E45, //  Homebrew\Translations\English\Wagyan Land 2 [Abstract Crouton Productions, Terminus Traduction].nes 
     0x7431D203, //  Homebrew\Translations\English\Wagyan Land 2 [Abstract Crouton Productions].nes 
     0x1DC0F740, //  Licensed Japan\ワギャン Land 2.nes 
     0x162B85B6, //  Modern\Virtual Console\ワギャン Land 2.nes 
-/**** 438 mapper=210 submapper=2 prgrom=256K chrrom=256K mirror=V */
+/**** 574 mapper=210 submapper=2 prgrom=256K chrrom=256K mirror=V */
     0xD323B806, //  Licensed Japan\ワギャン Land 3.nes 
-/**** 439 mapper=232 prgrom=256K chrram=8K mirror=V */
+/**** 575 mapper=232 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
     0xB462718E, //  Unlicensed Elsewhere\Super Sports Challenge (rev1).nes 
     0xB89888C9, //  Unlicensed North America\Quattro Adventure.nes 
     0x792070A9, //  Unlicensed North America\Quattro Arcade.nes 
     0xCCCAF368, //  Unlicensed North America\Quattro Sports.nes 
-/**** 440 mapper=232 submapper=1 prgrom=256K chrram=8K mirror=V */
+/**** 576 mapper=232 submapper=1 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x4B40CBD9, //  Unlicensed Elsewhere\Pegasus 4-in-1.nes 
     0x6A7BF037, //  Unlicensed Elsewhere\Super Adventure Quests.nes 
     0xA045FE1D, //  Unlicensed Elsewhere\Super Sports Challenge (rev0).nes 
 };
 
 static const u32 s_cart_crc_count[] = {
-  /*   0 */  1,   2,  25, 236,  46,   4, 256,   2,   4,   3,   2,   3,  30, 222, 
-  /*  14 */  1,   1,  17,   2, 514,  10,   4,   1,   1,   6,   1,   6,   1,   1, 
-  /*  28 */  1,   1,   1,   1,   1,   2,   2,   8,   1,   3,   2,   1,   3,   1, 
-  /*  42 */  9,  33,  33,  34,   6,   4,   1, 463,  15, 105,  11,   3,   2,   5, 
-  /*  56 */  3,  13,   2,   8,   1,   1,   1,   1,   3,   3,   1,   1,   5,   2, 
-  /*  70 */ 30,   4,   1,   2,   2,  10,   3,   2,  96, 122,   3,   8,   1,  10, 
-  /*  84 */ 12,   2,   4,  39,   1,   4,   5,   1,   1,   2,   6,   1,   1,  14, 
-  /*  98 */  1,   6,   1,   2,   1,   1,  14,  85,   1,  13,   1,   1,  24,   1, 
-  /* 112 */475,  22,   1,   2,   1,   1,   1,   1,   3,   1,   1,   1,   8,   1, 
-  /* 126 */  1,  21,   1, 102,   3,   1,   1,   1,   1,  44, 230,   2,   3,   1, 
-  /* 140 */  2,   2,   2,   1,   2,   3,   1,   1,  20,   3,  11,  23,   1,   1, 
-  /* 154 */  2,   1,   1,   1,   2,   2,   5,  10,   3,   4,   1,   2,   5,  24, 
-  /* 168 */  2,   1, 582,  91,   1,  96,   5,   4,   3, 184,  60, 165,   6,  50, 
-  /* 182 */  3,   1,   1,   1,   8,   4,   1,   1,   1,   1,   3,   3,   4,  57, 
-  /* 196 */  1,   2,  24,   7,  85,   1, 132,   1,  33,   1,   7,  19,   1,   7, 
-  /* 210 */  1,   1,   7,   8,   2,   1,   1,   1,   1,   1,   1,   3,   9,   1, 
-  /* 224 */  2,   3,   2,   1,   1,   3,   2,   1,   8,   2,   3,   2,   2,   3, 
-  /* 238 */  2,   3,   3,   2,   1,   2,  24,   5,   1,  22,  18,   2,  11,   2, 
-  /* 252 */  2,   2,   8,   1,   1,   1,   1,   2,   7,   3,   5,  35,   1,  14, 
-  /* 266 */  8,   5,   2,   2,  11,  16,   2,   4,   3,   2,   8,   1,   8,   2, 
-  /* 280 */  1,   2,   1,   1,   3,   2,   4,   2,   7,   5,   5,   2,   1,   1, 
-  /* 294 */  4,   5,   3,   2,   1,   4,   2,  24,   1,   1,   1,   1,   1,   1, 
-  /* 308 */  1,   5,   8,   1,   2,   1,   4,   3,   2,   1,   2,   7,   2,   2, 
-  /* 322 */  1,   3,   4,   1,   2,   2,   1,   1,   1,   2,   5,   1,   1,   4, 
-  /* 336 */  2,   3,   1,   1,   4,   1,  10,   3,  70,   1,   1,   4,   4,   1, 
-  /* 350 */  2,   1,   3,   3,   1,   3,   3,   1,   3,   4,   2,   3,   2,  22, 
-  /* 364 */  2,   1,   7,   3,   5,   7,   1,   1,   2,  16,   8,  19,   1,   1, 
-  /* 378 */  2,   2,   2,   2,  11,   7,   6,   1,   1,   2,  17,   2,   1,   6, 
-  /* 392 */  1,   1,   1,   1,   2,   4,   5,   9,   5,   5,   1,   3,   4,   1, 
-  /* 406 */  2,  27,  68,   2,   1,   1,   1,   1,   2,   6,   1,   4,  15,   2, 
-  /* 420 */  4,   1,   1,   7,   6,   5,  28,   1,   1,   4,   2,   1,   1,   5, 
-  /* 434 */  1,   1,  11,   4,   1,   4,   3, 
+  /*   0 */  1,   2,  20,   5, 196,  12,  27,   1,  45,   1,   4, 206,   7,  40, 
+  /*  14 */  3,   2,   4,   3,   2,   3,  22,   7,   1, 176,   3,  41,   2,   1, 
+  /*  28 */  1,  10,   6,   1,   2, 300,  17, 192,   5,   2,   6,   2,   4,   1, 
+  /*  42 */  1,   6,   1,   5,   1,   1,   1,   1,   1,   1,   1,   1,   2,   1, 
+  /*  56 */  1,   7,   1,   1,   1,   2,   1,   1,   1,   3,   1,   7,   2,  30, 
+  /*  70 */  3,  24,   4,   5,  30,   4,   4,   2,   4,   1, 381,  80,   2,  15, 
+  /*  84 */ 96,   9,  11,   2,   1,   2,   5,   1,   2,  11,   2,   2,   6,   2, 
+  /*  98 */  1,   1,   1,   1,   3,   3,   1,   1,   5,   2,  25,   5,   4,   1, 
+  /* 112 */  2,   2,  10,   3,   2,  88,   7,   1, 114,   8,   3,   8,   1,  10, 
+  /* 126 */ 12,   2,   3,   1,  33,   6,   1,   3,   1,   5,   1,   1,   2,   6, 
+  /* 140 */  1,   1,  14,   1,   6,   1,   2,   1,   1,  13,   1,  74,  11,   1, 
+  /* 154 */ 10,   1,   2,   1,   1,  11,  13,   1, 418,  47,   8,   2,  18,   1, 
+  /* 168 */  2,   1,   1,   2,   1,   1,   1,   1,   3,   1,   1,   1,   8,   1, 
+  /* 182 */  1,  18,   3,   1,  84,   9,   9,   3,   1,   1,   1,   1,  39,   5, 
+  /* 196 */200,   8,  22,   2,   3,   1,   2,   2,   2,   1,   2,   3,   1,   1, 
+  /* 210 */ 17,   1,   2,   3,  11,  19,   4,   1,   1,   2,   1,   1,   1,   2, 
+  /* 224 */  1,   1,   4,   1,   8,   1,   1,   3,   4,   1,   2,   4,   1,  21, 
+  /* 238 */  2,   1,   2,   1, 489,  80,   3,  10,  68,  22,   1,   1,  79,  14, 
+  /* 252 */  1,   2,   5,   3,   1,   3, 176,   7,   1,  57,   3, 116,  13,   6, 
+  /* 266 */ 30,   6,  48,   2,   3,   1,   1,   1,   8,   4,   1,   1,   1,   1, 
+  /* 280 */  3,   3,   2,   2,  50,   5,   2,   1,   2,  19,   1,   2,   2,   2, 
+  /* 294 */  5,  85,   1,  86,   1,   2,  43,   1,  19,  14,   1,   7,  16,   3, 
+  /* 308 */  1,   5,   2,   1,   1,   7,   8,   2,   1,   1,   1,   1,   1,   1, 
+  /* 322 */  3,   7,   2,   1,   2,   2,   1,   2,   1,   1,   1,   2,   2,   1, 
+  /* 336 */  8,   2,   3,   2,   2,   3,   2,   3,   3,   2,   1,   1,   1,  19, 
+  /* 350 */  5,   3,   2,   1,  15,   6,   1,  11,   7,   2,   7,   4,   2,   2, 
+  /* 364 */  2,   8,   1,   1,   1,   1,   2,   3,   4,   3,   5,  35,   1,  14, 
+  /* 378 */  8,   5,   2,   2,  11,  16,   2,   4,   3,   2,   8,   1,   8,   2, 
+  /* 392 */  1,   2,   1,   1,   3,   2,   4,   2,   7,   5,   5,   2,   1,   1, 
+  /* 406 */  2,   2,   5,   3,   2,   1,   4,   2,  24,   1,   1,   1,   1,   1, 
+  /* 420 */  1,   1,   5,   8,   1,   2,   1,   4,   3,   2,   1,   2,   7,   2, 
+  /* 434 */  2,   1,   2,   1,   4,   1,   1,   1,   2,   1,   1,   1,   2,   3, 
+  /* 448 */  2,   1,   1,   4,   1,   1,   3,   1,   1,   4,   1,  10,   3,  60, 
+  /* 462 */  2,   8,   1,   1,   4,   1,   3,   1,   2,   1,   3,   1,   2,   1, 
+  /* 476 */  3,   2,   1,   1,   3,   4,   2,   1,   1,   1,   2,  19,   2,   1, 
+  /* 490 */  2,   1,   7,   3,   4,   1,   6,   1,   1,   1,   2,   1,  15,   8, 
+  /* 504 */  3,  16,   1,   1,   2,   2,   2,   2,   9,   2,   6,   1,   6,   1, 
+  /* 518 */  1,   2,  14,   1,   2,   2,   1,   5,   1,   1,   1,   1,   1,   2, 
+  /* 532 */  4,   5,   9,   5,   4,   1,   1,   3,   4,   1,   2,  27,  68,   2, 
+  /* 546 */  1,   1,   1,   1,   2,   6,   1,   4,  15,   2,   4,   1,   1,   7, 
+  /* 560 */  6,   5,  28,   1,   1,   4,   2,   1,   1,   5,   1,   1,  11,   4, 
+  /* 574 */  1,   4,   3, 
 };
 

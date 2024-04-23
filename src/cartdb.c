@@ -82,6 +82,7 @@ bool cartdb_info_from_file(const FileData* file_data, CartDbInfo* info) {
       info->chrnvram = s_sizes[cart->chrnvram];
       info->mapper = cart->mapper;
       info->submapper = cart->submapper;
+      info->system = cart->system;
       info->mirror = cart->mirror;
       info->battery = cart->battery;
       return true;
