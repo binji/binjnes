@@ -164,7 +164,6 @@ static void sched_init(E* e) {
     e->s.sc.when[i] = ~0;
   }
   e->s.sc.next = ~0;
-  e->s.sc.ppu_clk = 1;
 }
 
 static void sched_update_next(E* e) {
@@ -183,7 +182,7 @@ static void sched_at(E* e, Sched sched, u64 cy, const char* reason) {
     fflush(stdout);
     abort();
   }
-#if 1
+#if 0
   printf("%s: '%s' (%s) at %"PRIu64"\n", __func__, s_sched_names[sched], reason, cy);
   fflush(stdout);
 #endif
@@ -203,7 +202,7 @@ static inline u32 ppu_dot(E* e) { return e->s.p.state % 341; }
 static inline u32 ppu_line(E* e) { return e->s.p.state / 341; }
 
 static void sched_occurred(E* e, Sched sched, Ticks cy) {
-#if 1
+#if 0
   printf("%s: '%s' occurred at %" PRIu64 "\n", __func__, s_sched_names[sched], cy);
 #endif
   if (e->s.sc.when[sched] - cy > e->ppu_divider) {
@@ -220,18 +219,20 @@ static void sched_occurred(E* e, Sched sched, Ticks cy) {
 
 static void sched_run(E* e) {
   S* s = &e->s;
-  u64 next_cy = s->cy + e->cpu_divider - s->cy % e->cpu_divider;
-  while (next_cy <= s->sc.next) {
+  u64 next_cpu_cy = s->c.cy + e->cpu_divider - s->c.cy % e->cpu_divider;
+  assert(e->s.c.cy % e->cpu_divider == 0);
+  assert(next_cpu_cy % e->cpu_divider == 0);
+  while (next_cpu_cy < s->sc.next) {
+    s->c.cy = s->cy = next_cpu_cy;
+    next_cpu_cy += e->cpu_divider;
     cpu_step(e);
-    s->cy = next_cy;
-    next_cy = s->cy + e->cpu_divider;
   }
+  s->cy = s->sc.next;
   if (s->sc.when[SCHED_NMI] == s->cy ||
       s->sc.when[SCHED_EVENT] == s->cy ||
       s->sc.when[SCHED_MAPPER_IRQ] == s->cy) {
     ppu_sync(e, "sched_run");
   }
-  s->cy = s->sc.next;
   if (s->sc.when[SCHED_DMC_FETCH] == s->cy ||
       s->sc.when[SCHED_FRAME_IRQ] == s->cy) {
     apu_sync(e);
@@ -240,6 +241,7 @@ static void sched_run(E* e) {
              " (astate=%u seq=%u timer=%u dmcbufstate=%u)\n",
              s->cy, s->a.state, s->a.seq.au16[4], s->a.timer.au16[4],
              s->a.dmcbufstate);
+      sched_clear(e, SCHED_DMC_FETCH);
       abort();
     }
     if(s->sc.when[SCHED_FRAME_IRQ] == s->cy) {
@@ -253,7 +255,7 @@ static void sched_run(E* e) {
     e->s.event |= EMULATOR_EVENT_RESET_CHANGE;
   }
   for (int i = 0; i < SCHED_COUNT; ++i) {
-    if (s->sc.when[i] < s->cy - e->ppu_divider) {
+    if (s->sc.when[i] < s->cy) {
       printf("!!! Prediction too early '%s' [%u:%u] (predicted: %" PRIu64
              " but didn't occur).\n",
              s_sched_names[i], ppu_dot(e), ppu_line(e), s->sc.when[i]);
@@ -359,7 +361,7 @@ static void ppu_write(E *e, u16 addr, u8 val) {
     case 8: case 9: case 10: case 11:  // 0x2000..0x2fff
     case 12: case 13: case 14:         // 0x3000..0x3bff
       e->ppu_map_write[(addr >> 10) & 15][addr & 0x3ff] = val;
-      DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%3u:%3u)\n", e->s.cy / 4,
+      DEBUG("     [%" PRIu64 "] ppu_write(%04x) = %02x (%3u:%3u)\n", e->s.cy,
             addr, val, ppu_dot(e), ppu_line(e));
       break;
   }
@@ -532,11 +534,12 @@ static void sched_at_ppu(E* e, Sched sched, u32 dot, u32 line, Ticks cy,
             (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
     next_state -= will_skip_cycle;
   }
+  Ticks next_cy = cy + (next_state + 1) * e->ppu_divider;
   DEBUG("    [%" PRIu64 "] sched_at_ppu %s for %" PRIu64
         " (state=%u skip=%u) diff=%u (%s)\n",
-        cy, s_sched_names[sched], cy + next_state, p->state, will_skip_cycle,
+        cy, s_sched_names[sched], next_cy, p->state, will_skip_cycle,
         next_state, reason);
-  sched_at(e, sched, cy + next_state, reason);
+  sched_at(e, sched, next_cy, reason);
 }
 
 static void sched_next_nmi(E* e, Ticks cy, bool from_cpu, const char* reason) {
@@ -553,9 +556,6 @@ static void ppu1(E *e, Ticks cy) {
   e->s.p.ppustatus = 0;
 }
 static void ppu2(E *e, Ticks cy) {
-  if (cy - e->s.p.read_status_cy >= e->ppu_divider) {
-    e->s.p.ppustatus |= 0x80;
-  }
   if (!e->s.c.read_input) {
     e->s.c.lag_frames++;
   }
@@ -569,13 +569,16 @@ static void ppu2(E *e, Ticks cy) {
   last_frame = e->s.cy;
 #endif
   sched_next_frame(e, cy, false, "new frame");
-  DEBUG("(%" PRIu64 "): [#%u] ppustatus = %02x\n", cy, e->s.p.frame,
+#if 0
+  printf("(%" PRIu64 "): [#%u] ppustatus = %02x\n", cy, e->s.p.frame,
         e->s.p.ppustatus);
+#endif
 }
 static void ppu3(E *e, Ticks cy) {
+  e->s.p.nmi_cy = cy;
+  e->s.p.ppustatus |= 0x80;
   if (e->s.p.ppuctrl & 0x80) {
     e->s.c.req_nmi = true;
-    e->s.p.nmi_cy = cy;
 #if 0
     static Ticks last_nmi = 0;
     printf(
@@ -619,7 +622,7 @@ static void ppu29(E *e, Ticks cy) { spr_step(e, cy); ppu_t_to_v(&e->s.p, 0x7be0)
 static void ppu30(E *e, Ticks cy) { sprclear(e); }
 static void ppu31(E *e, Ticks cy) {
   sprclear(e);
-  DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", cy / 4, e->s.p.frame,
+  DEBUG("(%" PRIu64 "): [#%u] ppustatus = 0 (odd=%u)\n", cy, e->s.p.frame,
         !(e->s.p.frame & 1));
   e->s.p.fbidx = 0;
   e->s.p.frame++;
@@ -805,32 +808,28 @@ static void init_ppu_steps(E* e) {
   }
 }
 
-static void ppu_step(E* e, Ticks cy) {
-  if (e->s.sc.ppu_clk++ == e->ppu_divider) {
-    e->s.sc.ppu_clk = 0;
-    PPUStepFunc f = e->ppu_steps[e->s.p.state * 2 + e->s.p.enabled];
-    e->s.p.enabled = e->s.p.next_enabled;
-    printf("ppu_step: state=%u [%3u:%3u]\n", e->s.p.state, ppu_dot(e),
-           ppu_line(e));
-    if (f) f(e, cy);
-    e->s.p.state++;
-  }
-}
-
 static void ppu_sync(E* e, const char* reason) {
   P* p = &e->s.p;
   if (p->cy == e->s.cy) {
-    printf("ignoring ppu_sync(%s) cy=%"PRIu64"\n", reason, p->cy);
+    DEBUG("ignoring ppu_sync(%s) cy=%"PRIu64"\n", reason, p->cy);
     return;
   }
   // Update p->cy immediately so ppu_sync() isn't called recursively.
-  printf("ppu_sync(\"%s\") %" PRIu64 " => %" PRIu64 "(delta=%" PRIu64
+  DEBUG("ppu_sync(\"%s\") %" PRIu64 " => %" PRIu64 "(delta=%" PRIu64
         ") state=%u\n",
         reason, p->cy, e->s.cy, e->s.cy - p->cy, p->state);
   u64 cy = p->cy;
   p->cy = e->s.cy;
-  while (cy < e->s.cy) {
-    ppu_step(e, cy++);
+  u64 next_ppu_cy = cy + e->ppu_divider - cy % e->ppu_divider;
+  while (next_ppu_cy <= e->s.cy) {
+    cy = next_ppu_cy;
+    next_ppu_cy += e->ppu_divider;
+    PPUStepFunc f = e->ppu_steps[e->s.p.state * 2 + e->s.p.enabled];
+    e->s.p.enabled = e->s.p.next_enabled;
+    DEBUG("(%" PRIu64 ") ppu_step: state=%u [%3u:%3u]\n", cy, e->s.p.state,
+           ppu_dot(e), ppu_line(e));
+    if (f) f(e, cy);
+    e->s.p.state++;
   }
 }
 
@@ -1075,7 +1074,7 @@ static void sched_next_dmc_fetch(E* e, Ticks cy, const char* reason) {
       cy +
           ((a->period.au16[4] + 1) * (7 - a->seq.au16[4]) + a->timer.au16[4]) *
               e->apu_divider +
-          !(a->state & 1) * e->cpu_divider,
+          (!(a->state & 1) + 1) * e->cpu_divider,
       reason);
 }
 
@@ -1152,7 +1151,7 @@ static void apu_tick(E *e, u64 cy, bool odd) {
 
   if (odd && a->dmcfetch) {
     sched_occurred(e, SCHED_DMC_FETCH, cy);
-    sched_next_dmc_fetch(e, cy + 6, "dmc fetch occurred");
+    sched_next_dmc_fetch(e, cy + e->cpu_divider, "dmc fetch occurred");
     u16 step = e->s.c.step - 1;
     if (step < STEP_DMC) {
       e->s.c.dmc_step = step; // TODO: Should finish writes first?
@@ -1338,6 +1337,10 @@ static void apu_half(A *a) {
 
 static void apu_sync(E* e) {
   A* a = &e->s.a;
+  if (a->cy == e->s.cy) {
+    DEBUG("ignoring apu_sync cy=%" PRIu64 "\n", a->cy);
+    return;
+  }
 #if 0
   printf("> apu sync %" PRIu64 " -> %" PRIu64 " (%" PRId64 ")\n", a->cy,
          e->s.cy, e->s.cy - a->cy);
@@ -1345,6 +1348,7 @@ static void apu_sync(E* e) {
   u64 cy = a->cy;
   u64 cpu_divider = e->cpu_divider;
   u64 apu_divider = e->apu_divider;
+  u64 next_apu_cy = cy + e->cpu_divider - cy % e->cpu_divider;
 #if 0
   printf("apu_sync() cy=%" PRIu64 " e->s.cy=%" PRIu64 " (FRAME_IRQ=%" PRIu64
          " DMC_FETCH=%" PRIu64 ")\n",
@@ -1354,7 +1358,9 @@ static void apu_sync(E* e) {
   switch (e->ci.system) {
     case SYSTEM_NTSC:
     case SYSTEM_DENDY:
-      while (cy <= e->s.cy) {
+      while (next_apu_cy <= e->s.cy) {
+        cy += cpu_divider;
+        next_apu_cy += e->cpu_divider;
         apu_tick(e, cy, a->state & 1);
         switch (a->state++) {
           case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(a); } break;
@@ -1367,7 +1373,7 @@ static void apu_sync(E* e) {
           case 37283:
           irq_ntsc:
             if (!(a->reg[0x17] & 0xc0)) {
-              DEBUG("     [%" PRIu64 "] frame irq\n", cy / 4);
+              DEBUG("     [%" PRIu64 "] frame irq\n", cy);
               e->s.c.irq |= IRQ_FRAME;
               sched_occurred(e, SCHED_FRAME_IRQ, cy);
               sched_at(
@@ -1380,10 +1386,11 @@ static void apu_sync(E* e) {
           case 37284: apu_quarter(a); apu_half(a); goto irq_ntsc;
           case 37285: a->state = 4; goto irq_ntsc;
         }
-        cy += cpu_divider;
       }
       break;
     case SYSTEM_PAL:
+      assert(false);
+#if 0
       while (cy <= e->s.cy) {
         apu_tick(e, cy, a->state & 1);
         switch (a->state++) {
@@ -1419,6 +1426,7 @@ static void apu_sync(E* e) {
         }
         cy += cpu_divider;
       }
+#endif
       break;
   }
   a->cy = cy;
@@ -1452,7 +1460,7 @@ static void print_byte(u16 addr, u8 val, int channel, const char chrs[8]) {
 
 static inline void inc_ppu_addr(E* e) {
   P* p = &e->s.p;
-  if (p->enabled && p->state < 320 * 240 + 1) {
+  if (p->enabled && p->state < 341 * 241 + 1) {
     incv(p);
     inch(p);
   } else {
@@ -1566,31 +1574,40 @@ static u8 cpu_read(E *e, u16 addr) {
 
   case 2: case 3: { // PPU
     P *p = &e->s.p;
-    ppu_sync(e, "$2xxx read");
     switch (addr & 7) {
       case 0: case 1: case 3: case 5: case 6:
         return c->open_bus = p->ppulast;
 
       case 2: {
+        ppu_sync(e, "$2002 read");
+        if (e->s.c.cy - p->nmi_cy < e->ppu_divider) {
+          p->ppustatus &= ~0x80;
+        }
         u8 result = (p->ppustatus & 0xe0) | (p->ppulast & 0x1f);
         p->ppustatus &= ~0x80;  // Clear NMI flag.
         p->w = 0;
-        p->read_status_cy = e->s.cy;
-        if (e->s.cy - p->nmi_cy <= 3 * e->ppu_divider) {
+        if (e->s.c.cy - p->nmi_cy < 3 * e->ppu_divider) {
           e->s.c.req_nmi = false;
         }
-        DEBUG("     [%" PRIu64
-              "] ppu:status=%02hhx w=0 fbx=%d fby=%d dot=%d line=%d\n",
-              e->s.cy / 4, result, scanx(p), scany(p), ppu_dot(e), ppu_line(e));
+#if 0
+        if (e->s.c.opcode == 0xac || e->s.c.opcode == 0xae) {
+          printf("     [%" PRIu64 "] ppu:status=%02hhx [%3u:%3u] (%+" PRId64
+                 ")\n",
+                 e->s.c.cy, result, ppu_dot(e), ppu_line(e),
+                 e->s.c.cy - p->nmi_cy);
+        }
+#endif
         return c->open_bus = result;
       }
       case 4:
+        ppu_sync(e, "$2004 read");
         return c->open_bus = p->oam[p->oamaddr];
       case 7: {
+        ppu_sync(e, "$2007 read");
         u8 result = p->ppulast = ppu_read(e, p->v);
         inc_ppu_addr(e);
         if (e->mapper_on_ppu_addr_updated)
-          e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy, true);
+          e->mapper_on_ppu_addr_updated(e, p->v, e->s.c.cy, true);
         return c->open_bus = result;
       }
     }
@@ -1606,7 +1623,7 @@ static u8 cpu_read(E *e, u16 addr) {
                     ((a->len.au16[1] > 0) << 1) | (a->len.au16[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
         DEBUG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
-              e->s.cy / 4, (e->s.cy - a->resetcy) / e->cpu_divider);
+              e->s.cy, (e->s.cy - a->resetcy) / e->cpu_divider);
         return result;
       }
       case 0x16: return c->open_bus = read_joyp(e, 0, false, 0);  // JOY1
@@ -1641,18 +1658,18 @@ static void cpu_write(E *e, u16 addr, u8 val) {
     switch (addr & 0x7) {
     case 0:
       if ((p->ppuctrl ^ val) & 0x80) {
-        DEBUG("[%" PRIu64 "] $2000 = %02x -> %02x (state=%u)\n", e->s.cy / 4,
+        DEBUG("[%" PRIu64 "] $2000 = %02x -> %02x (state=%u)\n", e->s.cy,
               p->ppuctrl, val, e->s.p.state);
         if (p->ppustatus & val & 0x80) {
             c->req_nmi = true;
-            DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy / 4);
+            DEBUG("     [%" PRIu64 "] NMI from write\n", e->s.cy);
         }
         if (val & 0x80) {
-          sched_next_nmi(e, e->s.cy, true, "$2000 write");
+          sched_next_nmi(e, e->s.c.cy, true, "$2000 write");
         } else {
           sched_clear(e, SCHED_NMI);
-          if (e->s.cy - p->nmi_cy <= 3 * e->ppu_divider) {
-            DEBUG("     [%" PRIu64 "] canceling NMI from write\n", e->s.cy / 4);
+          if (e->s.c.cy - p->nmi_cy < 3 * e->ppu_divider) {
+            DEBUG("     [%" PRIu64 "] canceling NMI from write\n", e->s.cy);
             c->req_nmi = false;
           }
         }
@@ -1660,20 +1677,20 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       // TODO: figure out proper state here for PAL+Dendy
       if (p->state == 89003) {
         printf("     [%" PRIu64 "] canceling NMI from write w/ clear\n",
-               e->s.cy / 4);
+               e->s.cy);
         c->req_nmi = false;
       }
       p->ppuctrl = val;
       // t: ...BA.. ........ = d: ......BA
       p->t = (p->t & 0xf3ff) | ((val & 3) << 10);
       if (e->mapper_reschedule_irq)
-        e->mapper_reschedule_irq(e, e->s.p.state, e->s.cy);
-      DEBUG("(%" PRIu64 ") [%3u:%3u]: ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy / 4,
+        e->mapper_reschedule_irq(e, e->s.p.state, e->s.c.cy);
+      DEBUG("(%" PRIu64 ") [%3u:%3u]: ppu:t=%04hx  (ctrl=%02x)\n", e->s.cy,
             ppu_dot(e), ppu_line(e), p->t, val);
       goto io;
     case 1:
       if ((val ^ p->ppumask) & 0x18) {
-        DEBUG("[%" PRIu64 "] $2001 = %02x -> %02x (state=%u)\n", e->s.cy / 4,
+        DEBUG("[%" PRIu64 "] $2001 = %02x -> %02x (state=%u)\n", e->s.cy,
               p->ppumask, val, e->s.p.state);
         if (p->state > 89340) {
           p->toggled_rendering_near_skipped_cycle = true;
@@ -1686,11 +1703,11 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       }
       p->ppumask = val;
       if (p->ppuctrl & 0x80) {
-        sched_next_nmi(e, e->s.cy, true, "$2001 write");
+        sched_next_nmi(e, e->s.c.cy, true, "$2001 write");
       }
-      sched_next_frame(e, e->s.cy, true, "$2001 write");
+      sched_next_frame(e, e->s.c.cy, true, "$2001 write");
       if (e->mapper_reschedule_irq)
-        e->mapper_reschedule_irq(e, e->s.p.state, e->s.cy);
+        e->mapper_reschedule_irq(e, e->s.p.state, e->s.c.cy);
       p->bgmask = (p->ppumask & 8) ? 0xf : 0;
       p->next_enabled = !!(val & 0x18);
       p->emphasis = (val << 1) & 0x1c0;
@@ -1709,12 +1726,12 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         p->x = val & 7;
         p->t = (p->t & 0xffe0) | (val >> 3);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx x=%02hhx w=0\n",
-              e->s.cy / 4, ppu_dot(e), ppu_line(e), val, p->t, p->x);
+              e->s.cy, ppu_dot(e), ppu_line(e), val, p->t, p->x);
       } else {
         // w was 1.
         // t: CBA..HG FED..... = d: HGFEDCBA
         p->t = (p->t & 0x8c1f) | ((val & 7) << 12) | ((val & 0xf8) << 2);
-        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx w=1\n", e->s.cy / 4,
+        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2005<=%u  ppu:t=%04hx w=1\n", e->s.cy,
               ppu_dot(e), ppu_line(e), val, p->t);
       }
       goto io;
@@ -1724,7 +1741,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         // t: .FEDCBA ........ = d: ..FEDCBA
         // t: X...... ........ = 0
         p->t = (p->t & 0xff) | ((val & 0x3f) << 8);
-        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:t=%04hx w=0\n", e->s.cy / 4,
+        DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:t=%04hx w=0\n", e->s.cy,
               ppu_dot(e), ppu_line(e), val, p->t);
       } else {
         // w was 1.
@@ -1734,7 +1751,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         if (e->mapper_on_ppu_addr_updated)
           e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy, true);
         DEBUG("(%" PRIu64 ") [%3u:%3u]: $2006<=%u ppu:v=%04hx t=%04hx w=1\n",
-              e->s.cy / 4, ppu_dot(e), ppu_line(e), val, p->v, p->t);
+              e->s.cy, ppu_dot(e), ppu_line(e), val, p->v, p->t);
       }
       goto io;
     case 7: {
@@ -1744,7 +1761,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       if (e->mapper_on_ppu_addr_updated)
         e->mapper_on_ppu_addr_updated(e, p->v, e->s.cy, true);
       DEBUG("  (%" PRIu64 ") [%3u:%3u]: ppu:write(%04hx)=%02hhx, v=%04hx\n",
-            e->s.cy / 4, ppu_dot(e), ppu_line(e), oldv, val, p->v);
+            e->s.cy, ppu_dot(e), ppu_line(e), oldv, val, p->v);
       goto io;
     }
     }
@@ -1785,7 +1802,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
       case 0x10:
         a->period.au16[4] = dmcrate[val & 15];
         if (a->dmcen) {
-          sched_next_dmc_fetch(e, e->s.cy, "$4010 write");
+          sched_next_dmc_fetch(e, e->s.c.cy, "$4010 write");
         } else {
           sched_clear(e, SCHED_DMC_FETCH);
         }
@@ -1803,15 +1820,15 @@ static void cpu_write(E *e, u16 addr, u8 val) {
             if (!a->dmcbufstate) {
               DEBUG("STARTing DMC with fetch (cy: %" PRIu64
                     ") (bufstate=%u) (seq=%u)\n",
-                    e->s.cy / 4, a->dmcbufstate, a->seq.au16[4]);
+                    e->s.cy, a->dmcbufstate, a->seq.au16[4]);
               a->dmcfetch = true;
               sched_at(e, SCHED_DMC_FETCH,
-                       e->s.cy + (!(a->state & 1) + 1) * e->cpu_divider,
+                       e->s.c.cy + (!(a->state & 1) + 1) * e->cpu_divider,
                        "$4015 write !dmcbufstate");
             } else {
               DEBUG("STARTing DMC WITHOUT fetch (cy: %" PRIu64 ") (seq=%u)\n",
-                    e->s.cy / 4, a->seq.au16[4]);
-              sched_next_dmc_fetch(e, e->s.cy, "$4015 write dmcbufstate");
+                    e->s.cy, a->seq.au16[4]);
+              sched_next_dmc_fetch(e, e->s.c.cy, "$4015 write dmcbufstate");
             }
             start_dmc(a);
           }
@@ -1827,8 +1844,8 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         goto apu;
 
       case 0x17: {  // Frame counter
-        u8 odd = (e->s.cy / e->cpu_divider) & 1;
-        DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy / 4,
+        u8 odd = (e->s.c.cy / e->cpu_divider) & 1;
+        DEBUG("Write $4017 => 0x%x (@cy: %" PRIu64 ") (odd=%u)\n", val, e->s.cy,
               (u32)odd);
         if (val & 0x40) { c->irq &= ~IRQ_FRAME; }
         a->state &= 1; // 3/4 cycles
@@ -1837,11 +1854,11 @@ static void cpu_write(E *e, u16 addr, u8 val) {
         } else {
           if (e->ci.system == SYSTEM_PAL) {
             sched_at(e, SCHED_FRAME_IRQ,
-                     e->s.cy + (val & 0x80 ? 20782 : 16626) * e->apu_divider +
+                     e->s.c.cy + (val & 0x80 ? 20782 : 16626) * e->apu_divider +
                          (!a->state + 3) * e->cpu_divider, "$4017 write");
           } else {
             sched_at(e, SCHED_FRAME_IRQ,
-                     e->s.cy + (val & 0x80 ? 18640 : 14914) * e->apu_divider +
+                     e->s.c.cy + (val & 0x80 ? 18640 : 14914) * e->apu_divider +
                          (!a->state + 3) * e->cpu_divider, "$4017 write");
           }
         }
@@ -1875,7 +1892,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
 
       case 0x14: {   // OAMDMA
         c->oam.hi = val;
-        c->next_step = STEP_OAMDMA + !((e->s.cy / e->ppu_divider) & 1);
+        c->next_step = STEP_OAMDMA + !((e->s.c.cy / e->ppu_divider) & 1);
         goto io;
       }
       case 0x16:
@@ -2115,14 +2132,14 @@ static void mapper1_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
   u64 last_write_cy = m->mmc1.last_write_cy;
-  m->mmc1.last_write_cy = e->s.cy;
+  m->mmc1.last_write_cy = e->s.c.cy;
   if (val & 0x80) {
     m->mmc1.bits = 5;
     m->mmc1.data = 0;
     m->mmc1.ctrl |= 0xc;
     return;
   }
-  if (e->s.cy - last_write_cy <= 3) return;
+  if (e->s.c.cy - last_write_cy <= 3) return;
   m->mmc1.data = (m->mmc1.data >> 1) | (val & 1) << 7;
   if (--m->mmc1.bits > 0) return;
   m->mmc1.bits = 5;
@@ -2346,7 +2363,7 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   int dcy =
       mapper4_predict_irq_delta_cy(e, counter, pstate, p->frame & 1);
   DEBUG("  scheduling mapper irq at %" PRIu64 " (%+d)\n", cy + dcy, dcy);
-  sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper4");
+  sched_at(e, SCHED_MAPPER_IRQ, cy + (dcy + 1) * e->ppu_divider, "mapper4");
 }
 
 static void mapper4_write(E *e, u16 addr, u8 val) {
@@ -2419,11 +2436,11 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       if (addr & 1) {
         m->mmc3.irq_reload = true;
         e->s.p.a12_irq_counter = 0;
-        mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
+        mapper4_reschedule_irq(e, e->s.p.state, e->s.c.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
       } else {
         m->mmc3.irq_latch = val;
-        mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
+        mapper4_reschedule_irq(e, e->s.p.state, e->s.c.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq latch = %u\n", e->s.cy, val);
       }
       break;
@@ -2431,13 +2448,13 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       ppu_sync(e, "mapper4_reschedule_irq");
       if (addr & 1) {
         m->mmc3.irq_enable = true;
-        mapper4_reschedule_irq(e, e->s.p.state, e->s.cy);
+        mapper4_reschedule_irq(e, e->s.p.state, e->s.c.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq enable\n", e->s.cy);
       } else {
         m->mmc3.irq_enable = false;
         sched_clear(e, SCHED_MAPPER_IRQ);
         e->s.c.irq &= ~IRQ_MAPPER;
-        DEBUG("     [%" PRIu64 "] mmc3 irq disable\n", e->s.cy);
+        DEBUG("     [%" PRIu64 "] mmc3 irq disable\n", e->s.c.cy);
       }
       break;
   }
@@ -2496,7 +2513,7 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
   p->a12_low = low;
   p->last_vram_access_cy = cy;
   if (reschedule) {
-    mapper4_reschedule_irq(e, e->s.p.state + 1, cy + 1);
+    mapper4_reschedule_irq(e, e->s.p.state + 1, cy + e->ppu_divider);
   }
 }
 
@@ -2518,7 +2535,7 @@ static void mapper4_hkrom_prg_ram_write(E* e, u16 addr, u8 val) {
 
 static void mapper5_update_in_frame(E *e, Ticks cy) {
   M* m = &e->s.m;
-  if (cy - e->s.p.last_vram_access_cy >= 3 * e->cpu_divider) {
+  if (cy - e->s.p.last_vram_access_cy >= 3 * e->ppu_divider) {
     if (m->mmc5.in_frame) {
       DEBUG("✓  [%3u:%3u] MMC5, in_frame = false\n", ppu_dot(e), ppu_line(e));
     }
@@ -2776,7 +2793,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       DEBUG("✓  IRQ scanline compare value = %u\n", val);
       ppu_sync(e, "mapper5_reschedule_irq");
       m->mmc5.scan_cmp = val;
-      mapper5_reschedule_irq(e, e->s.p.state, e->s.cy);
+      mapper5_reschedule_irq(e, e->s.p.state, e->s.c.cy);
       break;
 
     case 0x5204:
@@ -2784,7 +2801,7 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       ppu_sync(e, "mapper5_reschedule_irq");
       m->mmc5.irq_enable = !!(val & 0x80);
       if (m->mmc5.irq_enable) {
-        mapper5_reschedule_irq(e, e->s.p.state, e->s.cy);
+        mapper5_reschedule_irq(e, e->s.p.state, e->s.c.cy);
       } else {
         sched_clear(e, SCHED_MAPPER_IRQ);
       }
@@ -2876,7 +2893,7 @@ static u8 mapper5_read(E* e, u16 addr) {
 
     case 0x5204: {
       ppu_sync(e, "$5204 read");
-      mapper5_update_in_frame(e, e->s.cy);
+      mapper5_update_in_frame(e, e->s.c.cy);
       u8 result = (m->mmc5.irq_pending << 7) | (m->mmc5.in_frame << 6) |
                   (e->s.c.open_bus & 0x3f);
       m->mmc5.irq_pending = false;
@@ -4453,13 +4470,13 @@ static inline void set_next_step(E* e) {
   C* c = &e->s.c;
   if (c->has_reset) {
     c->next_step = STEP_RESET;
-    DEBUG("     [%" PRIu64 "] setting next step for RESET\n", e->s.cy / 4);
+    DEBUG("     [%" PRIu64 "] setting next step for RESET\n", e->s.cy);
   } else if (c->has_nmi) {
     c->next_step = STEP_CALLVEC;
-    DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy / 4);
+    DEBUG("     [%" PRIu64 "] setting next step for NMI\n", e->s.cy);
   } else if (c->has_irq) {
     c->next_step = STEP_CALLVEC;
-    DEBUG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy / 4);
+    DEBUG("     [%" PRIu64 "] settings next step for IRQ\n", e->s.cy);
   }
 }
 
@@ -4498,7 +4515,7 @@ static inline void check_irq(E* e) {
   }
   if (c->has_nmi || c->has_irq || c->has_reset) {
     DEBUG("     [%" PRIu64 "] NMI (%u), IRQ (%u) or RESET (%u) requested\n",
-          e->s.cy / 4, c->has_nmi, c->has_irq, c->has_reset);
+          e->s.cy, c->has_nmi, c->has_irq, c->has_reset);
   }
 }
 
@@ -4991,10 +5008,10 @@ static void cpu63(E* e) {
   cpu_write(e, c->bus.val, c->PC.lo);
   if (c->req_nmi) {
     c->veclo = 0xfa;
-    DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy / 4);
+    DEBUG("     [%" PRIu64 "] using NMI vec\n", e->s.cy);
   } else if (c->opcode == 0 || c->irq) {
     c->veclo = 0xfe;
-    DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy / 4);
+    DEBUG("     [%" PRIu64 "] using IRQ vec\n", e->s.cy);
   }
   c->has_irq = false;
   c->has_nmi = false;
@@ -5356,7 +5373,7 @@ static void cpu118(E* e) {
           !(a->state & 1) * e->cpu_divider;
       DEBUG("!!! [%" PRIu64
             "] dmc read, period=%u seq=%u timer=%u state=%u next=%u\n",
-            e->s.cy / 4, a->period.au16[4], a->seq.au16[4], a->timer.au16[4],
+            e->s.cy, a->period.au16[4], a->seq.au16[4], a->timer.au16[4],
             a->state, next);
       sched_next_dmc_fetch(e, e->s.cy, "dmc read");
     } else {
@@ -5780,12 +5797,7 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->has_bat_ram = (flag6 & 2) != 0;
     ci->has_trainer = (flag6 & 4) != 0 &&
                       (file_data->size & 8191) == kHeaderSize + kTrainerSize;
-    switch (flag10 & 3) {
-      case 0: ci->system = SYSTEM_NTSC; break;
-      case 1: ci->system = SYSTEM_PAL; break;
-      case 2: ci->system = SYSTEM_NTSC; break; // Multi
-      case 3: ci->system = SYSTEM_DENDY; break;
-    }
+    ci->system = SYSTEM_NTSC;
 
     u32 trainer_size = ci->has_trainer ? kTrainerSize : 0;
     u32 ines_prg16k_banks = file_data->data[4];
@@ -5833,6 +5845,12 @@ static Result get_cart_info(E *e, const FileData *file_data) {
       if (ci->mapper == 4 && (flag6 & 8)) {
         ci->mirror = MIRROR_FOUR_SCREEN;
       }
+      switch (file_data->data[12] & 3) {
+        case 0: ci->system = SYSTEM_NTSC; break;
+        case 1: ci->system = SYSTEM_PAL; break;
+        case 2: ci->system = SYSTEM_NTSC; break;  // Multi-region.
+        case 3: ci->system = SYSTEM_DENDY; break;
+      }
     } else if ((flag7 & 0xc) == 0) {
       printf("Found iNES header\n");
       data_size += ines_data_size;
@@ -5878,8 +5896,14 @@ static Result get_cart_info(E *e, const FileData *file_data) {
     ci->chr_data_write = e->s.p.chr_ram;
   }
 
-  printf("system=%u mapper=%u submapper=%u mirror=%u\n", ci->system, ci->mapper,
-         ci->submapper, ci->mirror);
+  static const char* s_system_name[] = {
+    [SYSTEM_NTSC] = "NTSC",
+    [SYSTEM_PAL] = "PAL",
+    [SYSTEM_DENDY] = "DENDY",
+  };
+  printf("system=%s (%u) mapper=%u submapper=%u mirror=%u\n",
+         s_system_name[ci->system], ci->system, ci->mapper, ci->submapper,
+         ci->mirror);
   printf("prgrom: 32k=%u 16k=%u 8k=%u\n", ci->prg32k_banks, ci->prg16k_banks,
       ci->prg8k_banks);
   printf("prgram: 8k=%u 512b=%u b=%u\n", ci->prgram8k_banks,
@@ -6273,17 +6297,15 @@ static Result init_emulator(E *e, const EInit *init) {
   u64 frame_irq = 0;
   switch (e->ci.system) {
     case SYSTEM_NTSC:
-      printf("NTSC\n");
       e->master_ticks_per_second = 21477272;
       e->master_ticks_per_frame = 357366;
       e->cpu_ticks_per_second = 1789773;
       e->ppu_divider = 4;
       e->cpu_divider = 12;
       e->apu_divider = 24;
-      frame_irq = 29827 * e->cpu_divider;
+      frame_irq = 29828 * e->cpu_divider;
       break;
     case SYSTEM_PAL:
-      printf("PAL\n");
       e->master_ticks_per_second = 26601712;
       e->master_ticks_per_frame = 531960;
       e->cpu_ticks_per_second = 1662607;
@@ -6293,7 +6315,6 @@ static Result init_emulator(E *e, const EInit *init) {
       frame_irq = 532032;
       break;
     case SYSTEM_DENDY:
-      printf("DENDY\n");
       e->master_ticks_per_second = 26601712;
       e->master_ticks_per_frame = 531960;
       e->cpu_ticks_per_second = 1773448;
@@ -6322,7 +6343,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.state = 4;
   sched_init(e);
   sched_at(e, SCHED_FRAME_IRQ, frame_irq, "init");
-  sched_next_frame(e, e->s.cy, true, "initial");
+  sched_next_frame(e, e->s.c.cy, true, "initial");
 
   switch (init->ram_init) {
     case RAM_INIT_ZERO: break;

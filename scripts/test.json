@@ -271,7 +271,7 @@
     "tests": [
       ["1.Basics.nes", 16, "51bed09f36efac4455d26e0997e434a75eae34db"],
       ["2.Details.nes", 25, "73b67fa5def3c37b9b28060750237f8d4eb7850c"],
-      ["3.Timing.nes", 135, "66e1359efffb26e2c9fd657c9e71767ec332fb71"],
+      ["3.Timing.nes", 145, "66e1359efffb26e2c9fd657c9e71767ec332fb71"],
       ["4.Obscure.nes", 22, "0b816d680d70dcdfa2d9a514d5072a81e1b19747"],
       ["5.Emulator.nes", 15, "1f0caa4b7ea851f8071cd8063c014c8e784a894d"]
     ]
@@ -295,13 +295,13 @@
     "tests": [
       ["boing2k7/boing2k7.nes", 115, "52469973678cdaa0e215e24d471524454f589713"],
       ["fme7ramtest/fme7ramtest.nes", 15, "6a88102dba53fb8af83481f2a6e25729ea5ac159"],
-      ["test28/test28.nes", 1150, "3c603c8644b625ae97cc1cea22e36bbb40b8fdb4", "test28.joy"],
+      ["test28/test28.nes", 1200, "3c603c8644b625ae97cc1cea22e36bbb40b8fdb4", "test28.joy"],
       ["test78/test78-0h.nes", 10, "1b05996a1d287d77e4a7c866596f8f9b7ebd031a"],
       ["test78/test78-0v.nes", 10, "27537dbb47139aa205945252fc252c63f3b7ed74"],
       ["test78/test78-78ines.nes", 10, "81237ae056abce3377f06f15f1ef630e2ec4b176"],
-      ["test78/test78-submapper0.nes", 10, "1b05996a1d287d77e4a7c866596f8f9b7ebd031a"],
+      ["test78/test78-submapper0.nes", 10, "81237ae056abce3377f06f15f1ef630e2ec4b176"],
       ["test78/test78-submapper1.nes", 10, "dc967a69dc2d58204f5036ea7866c3bac4ef6e05"],
-      ["test78/test78-submapper2.nes", 10, "1b05996a1d287d77e4a7c866596f8f9b7ebd031a"],
+      ["test78/test78-submapper2.nes", 10, "81237ae056abce3377f06f15f1ef630e2ec4b176"],
       ["test78/test78-submapper3.nes", 10, "81237ae056abce3377f06f15f1ef630e2ec4b176"]
     ]
   },

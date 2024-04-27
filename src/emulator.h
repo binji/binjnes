@@ -256,7 +256,7 @@ typedef struct {
   u8 bits, opcode, open_bus, irq;
   bool C, Z, I, D, V, N; // Flags.
   bool req_nmi, req_reset, has_nmi, has_irq, has_reset, reset_active;
-  u64 set_vec_cy;
+  u64 cy, set_vec_cy;
 
   // XXX
   u32 lag_frames;
@@ -281,7 +281,7 @@ typedef struct {
   bool enabled, next_enabled, w, a12_low, toggled_rendering_near_skipped_cycle;
   u8 palram[32], ppuctrl, ppumask, ppustatus, ppulast, oamaddr, bgmask;
   Spr spr;
-  u64 cy, read_status_cy, nmi_cy, last_vram_access_cy, a12_low_count;
+  u64 cy, nmi_cy, last_vram_access_cy, a12_low_count;
   Mirror mirror;
 } P;
 
@@ -312,7 +312,6 @@ typedef struct {
 typedef struct {
   u64 when[SCHED_COUNT];
   u64 next;
-  u32 ppu_clk;
 } Sc;
 
 typedef struct {
