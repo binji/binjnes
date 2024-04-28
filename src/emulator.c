@@ -232,6 +232,24 @@ static void sched_run(E* e) {
       s->sc.when[SCHED_EVENT] == s->cy ||
       s->sc.when[SCHED_MAPPER_IRQ] == s->cy) {
     ppu_sync(e, "sched_run");
+    if(s->sc.when[SCHED_NMI] == s->cy) {
+      printf("!!! ppu_sync() didn't reschedule: nmi => %" PRIu64
+             " (pstate=%u) [%3u:%3u]\n",
+             s->cy, s->p.state, ppu_dot(e), ppu_line(e));
+      abort();
+    }
+    if(s->sc.when[SCHED_EVENT] == s->cy) {
+      printf("!!! ppu_sync() didn't reschedule: event => %" PRIu64
+             " (pstate=%u) [%3u:%3u]\n",
+             s->cy, s->p.state, ppu_dot(e), ppu_line(e));
+      abort();
+    }
+    if(s->sc.when[SCHED_MAPPER_IRQ] == s->cy) {
+      printf("!!! ppu_sync() didn't reschedule: mapper irq => %" PRIu64
+             " (pstate=%u) [%3u:%3u]\n",
+             s->cy, s->p.state, ppu_dot(e), ppu_line(e));
+      abort();
+    }
   }
   if (s->sc.when[SCHED_DMC_FETCH] == s->cy ||
       s->sc.when[SCHED_FRAME_IRQ] == s->cy) {
@@ -267,6 +285,12 @@ static void sched_run(E* e) {
 }
 
 // PPU stuff ///////////////////////////////////////////////////////////////////
+
+static const u32 s_ppu_num_lines[] = {
+  [SYSTEM_NTSC] = 262,
+  [SYSTEM_PAL] = 312,
+  [SYSTEM_DENDY] = 312,
+};
 
 // https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
 static inline u8 reverse(u8 b) {
@@ -526,10 +550,10 @@ static void sched_at_ppu(E* e, Sched sched, u32 dot, u32 line, Ticks cy,
   }
   if (next_state <= 0 || p->state == 0) {
     if (next_state < 0 || (next_state == 0 && !from_cpu)) {
-      next_state += 89342;
+      next_state += 341 * s_ppu_num_lines[e->ci.system];
     }
     will_skip_cycle =
-        !(p->frame & 1) &&
+        e->ci.system == SYSTEM_NTSC && !(p->frame & 1) &&
         !(e->s.p.ppumask & 0x18) ==
             (p->state >= 89341 && e->s.p.toggled_rendering_near_skipped_cycle);
     next_state -= will_skip_cycle;
@@ -648,12 +672,6 @@ static void ppu41(E *e, Ticks cy) { inch(&e->s.p); shift_en(e); }
 static void ppu42(E *e, Ticks cy) { read_ntb(e, cy); shift_en(e); reload(e, false); }
 static void ppu43(E *e, Ticks cy) { read_ntb(e, cy); shift_bg(e); reload(e, true); }
 
-static const u32 s_prerender_line_state[] = {
-  [SYSTEM_NTSC] = 341 * 261 + 1,
-  [SYSTEM_PAL] = 341 * 311 + 1,
-  [SYSTEM_DENDY] = 341 * 311 + 1,
-};
-
 static void init_ppu_steps(E* e) {
   static const u8 s_lines_shared[] = {
       4, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3, 3,
@@ -680,7 +698,7 @@ static void init_ppu_steps(E* e) {
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
       0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 2,
   };
-  static const u8* s_system_lines[3] = {
+  static const u8* s_system_lines[] = {
       [SYSTEM_NTSC] = s_lines_ntsc,
       [SYSTEM_PAL] = s_lines_pal,
       [SYSTEM_DENDY] = s_lines_dendy,
@@ -791,7 +809,7 @@ static void init_ppu_steps(E* e) {
 
   const int num_dots = 341;
   const size_t num_shared_lines = ARRAY_SIZE(s_lines_shared);
-  const size_t num_lines = e->ci.system == SYSTEM_NTSC ? 262 : 312;
+  const size_t num_lines = s_ppu_num_lines[e->ci.system];
   e->ppu_steps = xmalloc(2 * num_lines * num_dots * sizeof(PPUStepFunc));
   for (int enabled = 0; enabled < 2; ++enabled) {
     int offset = enabled ? 0 : 44;
@@ -929,7 +947,8 @@ static void spr12(E *e, Ticks cy) {
     shift_in(&spr->pri, (spr->at & 0x20) ? 0 : 0xff);
     shift_in(&spr->spr0mask, (spr->s == 0 && spr->spr0) ? 0xff : 0);
     spr->counter.au8[idx] = spr->counter.au8[idx + 8] = x;
-    spr->next_any_active = p->state < s_prerender_line_state[e->ci.system];
+    spr->next_any_active =
+        p->state < 341 * (s_ppu_num_lines[e->ci.system] - 1) + 1;
   } else {
     // Dummy read for MMC3 IRQ
     spr_ptb(e, 0xff, 8, cy);
@@ -1341,8 +1360,8 @@ static void apu_sync(E* e) {
     DEBUG("ignoring apu_sync cy=%" PRIu64 "\n", a->cy);
     return;
   }
-#if 0
-  printf("> apu sync %" PRIu64 " -> %" PRIu64 " (%" PRId64 ")\n", a->cy,
+#if 1
+  DEBUG("> apu sync %" PRIu64 " -> %" PRIu64 " (%" PRId64 ")\n", a->cy,
          e->s.cy, e->s.cy - a->cy);
 #endif
   u64 cy = a->cy;
@@ -1389,9 +1408,9 @@ static void apu_sync(E* e) {
       }
       break;
     case SYSTEM_PAL:
-      assert(false);
-#if 0
-      while (cy <= e->s.cy) {
+      while (next_apu_cy <= e->s.cy) {
+        cy += cpu_divider;
+        next_apu_cy += e->cpu_divider;
         apu_tick(e, cy, a->state & 1);
         switch (a->state++) {
           case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(a); } break;
@@ -1405,28 +1424,23 @@ static void apu_sync(E* e) {
           irq_pal:
             if (!(a->reg[0x17] & 0xc0)) {
               static u64 last_irq_cy = 0;
-              printf("     [%" PRIu64 "] frame irq (%" PRIu64 ")\n", cy,
+              DEBUG("     [%" PRIu64 "] frame irq (%" PRIu64 ")\n", cy,
                     cy - last_irq_cy);
               last_irq_cy = cy;
+              (void)last_irq_cy;
               e->s.c.irq |= IRQ_FRAME;
               sched_occurred(e, SCHED_FRAME_IRQ, cy);
               sched_at(
                   e, SCHED_FRAME_IRQ,
-#if 0
                   cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 20782 : 16626) *
-#else
-                  cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 20783 : 16627) *
-#endif
-                                            apu_divider
+                                            apu_divider + cpu_divider
                                       : cpu_divider), "frame irq occurred");
             }
             break;
           case 41569: apu_quarter(a); apu_half(a); goto irq_pal;
           case 41570: a->state = 4; goto irq_pal;
         }
-        cy += cpu_divider;
       }
-#endif
       break;
   }
   a->cy = cy;
@@ -6312,7 +6326,7 @@ static Result init_emulator(E *e, const EInit *init) {
       e->ppu_divider = 5;
       e->cpu_divider = 16;
       e->apu_divider = 32;
-      frame_irq = 532032;
+      frame_irq = 532048;
       break;
     case SYSTEM_DENDY:
       e->master_ticks_per_second = 26601712;
