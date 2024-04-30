@@ -927,7 +927,7 @@ static int emulator_thread(void *arg) {
       mtx_unlock(&s_frame_begin_mtx);
 
       if (s_rewind_state.rewinding) {
-        rewind_by(delta_sec * e->master_ticks_per_frame * REWIND_FACTOR);
+        rewind_by(e->master_ticks_per_frame * REWIND_FACTOR);
       } else if (s_paused) {
         // Clear audio buffer.
         size_t read_head = atomic_load_size(&s_audio_buffer_read);

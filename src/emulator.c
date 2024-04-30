@@ -2280,12 +2280,13 @@ static void mapper4_calculate_a12_high_table(E *e) {
   for (int sl = 0; sl < 240; ++sl) {
     mapper4_calculate_a12_high_scanline(e, sl);
   }
-  mapper4_calculate_a12_high_scanline(e, 261);
+  mapper4_calculate_a12_high_scanline(e, s_ppu_num_lines[e->ci.system] - 1);
 }
 
 static void mapper4_calculate_irq_clock_table(E *e) {
   if (e->mmc3_a12_high_count == 0) return;
-  int last_low = e->mmc3_a12_high[e->mmc3_a12_high_count - 1] - 341 * 262 + 2;
+  const int num_dots = 341 * s_ppu_num_lines[e->ci.system];
+  int last_low = e->mmc3_a12_high[e->mmc3_a12_high_count - 1] - num_dots + 2;
   for (u32 i = 0; i < e->mmc3_a12_high_count; ++i) {
     int cur_high = e->mmc3_a12_high[i];
     if (cur_high - last_low >= 10) {
@@ -2340,7 +2341,9 @@ static int mapper4_predict_irq_delta_cy(E* e, int irq_counter, u32 state,
     u32 next_clock = e->mmc3_irq_clock[index++];
     if (index == e->mmc3_irq_clock_count) index = 0;
     if (next_clock < state) {
-      dcy += next_clock + (341 * 262 - state - (odd_frame ^= 1));
+      const int num_dots = 341 * s_ppu_num_lines[e->ci.system];
+      dcy += next_clock + (num_dots - state -
+                           (e->ci.system == SYSTEM_NTSC && (odd_frame ^= 1)));
     } else {
       dcy += next_clock - state;
     }
@@ -2558,34 +2561,36 @@ static void mapper5_update_in_frame(E *e, Ticks cy) {
   }
 }
 
-// TODO: rename and clean this up since it is only used by mapper5 now.
-static int mapper4_irq_delta_cy(int irq_dot, uint8_t irq_counter, int start_dot,
-                                int line, bool odd_frame) {
+static int mapper5_irq_delta_cy(System system, int irq_dot, uint8_t irq_counter,
+                                int start_dot, int line, bool odd_frame) {
+  const int num_lines = s_ppu_num_lines[system];
+  const int prerender_line = num_lines - 1;
+  const bool is_ntsc = system == SYSTEM_NTSC;
   int dcy = 0;
   if (irq_counter == 0) return 0;
   // Move to irq_dot
   if (line <= 239) {
     if (start_dot <= irq_dot) {
-      if (line == 0 && start_dot == 0 && (odd_frame ^= 1)) {
+      if (line == 0 && start_dot == 0 && is_ntsc && (odd_frame ^= 1)) {
         dcy--;
       }
       dcy += irq_dot - start_dot;
     } else if (line == 239) {
-      dcy += irq_dot - start_dot + 341 * (261 - line);
-      line = 261;
+      dcy += irq_dot - start_dot + 341 * (prerender_line - line);
+      line = prerender_line;
     } else {
       dcy += irq_dot - start_dot + 341;
       ++line;
     }
-  } else if (line < 261) {
-    dcy += irq_dot - start_dot + 341 * (261 - line);
-    line = 261;
+  } else if (line < prerender_line) {
+    dcy += irq_dot - start_dot + 341 * (prerender_line - line);
+    line = prerender_line;
   } else if (start_dot <= irq_dot) {
     dcy += irq_dot - start_dot;
   } else {
-    if (odd_frame ^= 1) dcy--;
+    if (is_ntsc && (odd_frame ^= 1)) dcy--;
     dcy += irq_dot - start_dot + 341;
-    if (++line == 262) line = 0;
+    if (++line == num_lines) line = 0;
   }
   while (--irq_counter > 0) {
     if (line < 239) {
@@ -2593,12 +2598,12 @@ static int mapper4_irq_delta_cy(int irq_dot, uint8_t irq_counter, int start_dot,
       dcy += 341 * left;
       line += left;
       irq_counter -= left - 1;
-    } else if (line == 261) {
-      dcy += 341 - (odd_frame ^= 1);
+    } else if (line == prerender_line) {
+      dcy += 341 - (is_ntsc && (odd_frame ^= 1));
       line = 0;
     } else {
-      dcy += 341 * (261 - line);
-      line = 261;
+      dcy += 341 * (prerender_line - line);
+      line = prerender_line;
     }
   }
   return dcy;
@@ -2623,8 +2628,9 @@ static void mapper5_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   int choice = 0;
   mapper5_update_in_frame(e, cy);
   if (!m->mmc5.in_frame) {
-    counter =
-        m->mmc5.scan_cmp + 1 + (line >= 240 && (line < 261 || dot < irq_dot));
+    const int num_lines = s_ppu_num_lines[e->ci.system];
+    counter = m->mmc5.scan_cmp + 1 +
+              (line >= 240 && (line < num_lines - 1 || dot < irq_dot));
     choice = 1;
   } else if (m->mmc5.scan < m->mmc5.scan_cmp ||
              (m->mmc5.scan == m->mmc5.scan_cmp && dot < irq_dot)) {
@@ -2634,14 +2640,15 @@ static void mapper5_reschedule_irq(E* e, u32 pstate, Ticks cy) {
     counter = m->mmc5.scan_cmp - MIN(m->mmc5.scan, 240) + 241;
     choice = 3;
   }
-  int dcy = mapper4_irq_delta_cy(irq_dot, counter, dot, line, p->frame & 1);
+  int dcy = mapper5_irq_delta_cy(e->ci.system, irq_dot, counter, dot, line,
+                                 p->frame & 1);
   (void)choice;
   DEBUG("[%" PRIu64
         "] scheduling irq [%u:%u] ppumask=%02x frame=%u scan=%u->%u == %u "
         "[#%u] @ %" PRIu64 " (+%u) \n",
         cy, dot, line, p->ppumask, p->frame, m->mmc5.scan, m->mmc5.scan_cmp,
         counter, choice, cy + dcy, dcy);
-  sched_at(e, SCHED_MAPPER_IRQ, cy + dcy, "mapper5");
+  sched_at(e, SCHED_MAPPER_IRQ, cy + (dcy + 1) * e->ppu_divider, "mapper5");
 }
 
 static void mapper5_update_chr(E* e) {
