@@ -44,7 +44,7 @@ def Run(exe, *args, **kwargs):
     raise Error('Error running "%s": %s' % (basename, str(e)))
 
 
-def RunTester(rom, frames=None, out_ppm=None, animate=False,
+def RunTester(rom, frames=None, out_image=None, animate=False,
               controller_input=None, exe=None, timeout_sec=None,
               seed=0):
   exe = exe or TESTER
@@ -53,8 +53,8 @@ def RunTester(rom, frames=None, out_ppm=None, animate=False,
     cmd.extend(['-f', str(frames)])
   if controller_input:
     cmd.extend(['-j', controller_input])
-  if out_ppm:
-    cmd.extend(['-o', out_ppm])
+  if out_image:
+    cmd.extend(['-o', out_image])
   if animate:
     cmd.append('-a')
   if timeout_sec:

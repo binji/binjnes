@@ -24,20 +24,19 @@ OK      = '[OK] '
 FAIL    = '[X]  '
 UNKNOWN = '[?]  '
 
-Test = collections.namedtuple('Test', ['suite', 'rom', 'frames', 'hash', 'joyp'])
+Test = collections.namedtuple('Test', ['json', 'suite', 'index', 'rom', 'frames', 'hash', 'joyp'])
 TestResult = collections.namedtuple('TestResult',
-                                    ['test', 'passed', 'ok', 'message',
-                                     'duration'])
+                                    ['test', 'passed', 'ok', 'message', 'duration'])
 
 
 def RunTest(test, options):
   start_time = time.time()
-  ppm = os.path.join(TEST_RESULT_DIR,
-                     os.path.basename(os.path.splitext(test.rom)[0]) + '.ppm')
+  png = os.path.join(TEST_RESULT_DIR,
+                     os.path.basename(os.path.splitext(test.rom)[0]) + '.png')
   try:
-    common.RunTester(test.rom, test.frames, ppm, controller_input=test.joyp,
+    common.RunTester(test.rom, test.frames, png, controller_input=test.joyp,
                      exe=options.exe)
-    actual = common.HashFile(ppm)
+    actual = common.HashFile(png)
 
     if test.hash.startswith('!'):
       expect_fail = True
@@ -60,6 +59,12 @@ def RunTest(test, options):
         message = FAIL + '%s => %s' % (test.rom, actual)
 
     passed = ok and not expect_fail
+    if not passed and options.rebase:
+      # print(test.rom, test.json[2], actual)
+      if expect_fail:
+        test.json[2] = '!' + actual
+      else:
+        test.json[2] = actual
     duration = time.time() - start_time
     return TestResult(test, passed, ok, message, duration)
   except (common.Error, KeyboardInterrupt) as e:
@@ -198,6 +203,7 @@ def main(args):
   parser = argparse.ArgumentParser()
   parser.add_argument('patterns', metavar='pattern', nargs='*',
                       help='test patterns.')
+  parser.add_argument('-f', '--file', default=TEST_JSON)
   parser.add_argument('-j', '--num-processes',
                       type=int, default=multiprocessing.cpu_count(),
                       help='num processes.')
@@ -206,6 +212,8 @@ def main(args):
                       help='show more info')
   parser.add_argument('-g', '--generate', action='store_true',
                       help='generate test result markdown')
+  parser.add_argument('-r', '--rebase', action='store_true',
+                      help='reset all failing tests to the new hash values')
   options = parser.parse_args(args)
   pattern_re = common.MakePatternRE(options.patterns)
   passed = 0
@@ -213,11 +221,12 @@ def main(args):
     os.makedirs(TEST_RESULT_DIR)
 
   tests = []
-  for suite_name, suite in json.load(open(TEST_JSON)).items():
+  test_json = json.load(open(options.file))
+  for suite_name, suite in test_json.items():
     dir_ = suite['dir']
-    for test in suite['tests']:
+    for index, test in enumerate(suite['tests']):
       joyp = GetPath(dir_, test[3]) if len(test) == 4 else None
-      tests.append(Test(suite_name, GetPath(dir_, test[0]), test[1], test[2], joyp))
+      tests.append(Test(test, suite_name, index, GetPath(dir_, test[0]), test[1], test[2], joyp))
 
   tests = [test for test in tests if pattern_re.match(test.rom)]
 
@@ -225,6 +234,34 @@ def main(args):
   results = RunAllTests(tests, options)
   duration = time.time() - start_time
   PrintReplace('total time: %.3fs' % duration, newline=True)
+
+  if options.rebase:
+    for result in results:
+      test = result.test
+      test_json[test.suite]["tests"][test.index] = test.json
+    with open(options.file, 'wt') as outfile:
+      # Write json with json.dump so it formats it the way I like.
+      outfile.write('{\n')
+      for i, (suite_name, suite) in enumerate(test_json.items()):
+        outfile.write(f'  "{suite_name}": {{\n')
+        outfile.write(f'    "dir": "{suite["dir"]}",\n')
+        outfile.write(f'    "tests": [\n')
+        for j, test in enumerate(suite['tests']):
+          outfile.write(f'      ["{test[0]}", {test[1]}, "{test[2]}"')
+          if len(test) == 4:
+            outfile.write(f', "{test[3]}"')
+          outfile.write(f']')
+          if j != len(suite['tests']) - 1:
+            outfile.write(',')
+          outfile.write('\n')
+        outfile.write('    ]\n')
+        outfile.write('  }')
+        if i != len(test_json) - 1:
+          outfile.write(',')
+        outfile.write('\n')
+      outfile.write('}\n')
+      # json.dump(test_json, outfile, indent=2)
+    pass
 
   ok = sum(1 for result in results if result.ok)
   passed = sum(1 for result in results if result.passed)
