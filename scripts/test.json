@@ -28,6 +28,21 @@
       ["11.len_reload_timing.nes", 20, "!576f2978e584b23af670f71fb4763e9ce9d621c9"]
     ]
   },
+  "pal_apu_test": {
+    "dir": "test/nes-test-roms/pal_apu_tests/",
+    "tests": [
+      ["01.len_ctr.nes", 30, "4da608481f12a7e054d8b6368c881cbabf44898d"],
+      ["02.len_table.nes", 20, "6ec4baf7229aebbc2904b8b04de107add610115a"],
+      ["03.irq_flag.nes", 20, "7d701dcd06a2d60b4bfeb550fd0d4f6ee9cd21a7"],
+      ["04.clock_jitter.nes", 20, "153d8e379571bf8744d398c2625f4ecc9c2929a0"],
+      ["05.len_timing_mode0.nes", 25, "863bcdee004f4f0acf01b7d4ee7a3d1f884fc4be"],
+      ["06.len_timing_mode1.nes", 30, "36b82d845a8094169d96f2e2c167a4935989b36d"],
+      ["07.irq_flag_timing.nes", 20, "39f4dbf497ccc3a067a662554465bf72b3900f3f"],
+      ["08.irq_timing.nes", 20, "8fbad2c03a2201e71b2eadd6f8f31ab033424029"],
+      ["10.len_halt_timing.nes", 20, "!5c9af0a6e452022711d01faab51cb091863221eb"],
+      ["11.len_reload_timing.nes", 20, "!109b041ff968b6bb222bdffad0a6aff7d6aff579"]
+    ]
+  },
   "blargg_nes_cpu_test5": {
     "dir": "test/nes-test-roms/blargg_nes_cpu_test5/",
     "tests": [

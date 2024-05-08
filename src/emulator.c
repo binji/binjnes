@@ -1360,8 +1360,8 @@ static void apu_sync(E* e) {
     DEBUG("ignoring apu_sync cy=%" PRIu64 "\n", a->cy);
     return;
   }
-#if 1
-  DEBUG("> apu sync %" PRIu64 " -> %" PRIu64 " (%" PRId64 ")\n", a->cy,
+#if 0
+  printf("> apu sync %" PRIu64 " -> %" PRIu64 " (%" PRId64 ")\n", a->cy,
          e->s.cy, e->s.cy - a->cy);
 #endif
   u64 cy = a->cy;
@@ -1395,11 +1395,9 @@ static void apu_sync(E* e) {
               DEBUG("     [%" PRIu64 "] frame irq\n", cy);
               e->s.c.irq |= IRQ_FRAME;
               sched_occurred(e, SCHED_FRAME_IRQ, cy);
-              sched_at(
-                  e, SCHED_FRAME_IRQ,
-                  cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 18640 : 14914) *
-                                            apu_divider
-                                      : cpu_divider), "frame irq occurred");
+              sched_at(e, SCHED_FRAME_IRQ,
+                       cy + (a->state == 4 ? 14914 * apu_divider : cpu_divider),
+                       "frame irq occurred");
             }
             break;
           case 37284: apu_quarter(a); apu_half(a); goto irq_ntsc;
@@ -1414,13 +1412,13 @@ static void apu_sync(E* e) {
         apu_tick(e, cy, a->state & 1);
         switch (a->state++) {
           case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(a); } break;
-          case 8316: apu_quarter(a); break;
-          case 16629: apu_quarter(a); apu_half(a); break;
+          case 8313: apu_quarter(a); break;
+          case 16630: apu_quarter(a); apu_half(a); break;
           case 24942:
             apu_quarter(a);
-            if (!(a->reg[0x17] & 0x80)) { a->state += 4156*2; }
+            if (!(a->reg[0x17] & 0x80)) { a->state += 4156 * 2; }
             break;
-          case 41568:
+          case 41567:
           irq_pal:
             if (!(a->reg[0x17] & 0xc0)) {
               static u64 last_irq_cy = 0;
@@ -1430,15 +1428,13 @@ static void apu_sync(E* e) {
               (void)last_irq_cy;
               e->s.c.irq |= IRQ_FRAME;
               sched_occurred(e, SCHED_FRAME_IRQ, cy);
-              sched_at(
-                  e, SCHED_FRAME_IRQ,
-                  cy + (a->state == 4 ? (a->reg[0x17] & 0x80 ? 20782 : 16626) *
-                                            apu_divider + cpu_divider
-                                      : cpu_divider), "frame irq occurred");
+              sched_at(e, SCHED_FRAME_IRQ,
+                       cy + (a->state == 4 ? 16626 * apu_divider : cpu_divider),
+                       "frame irq occurred");
             }
             break;
-          case 41569: apu_quarter(a); apu_half(a); goto irq_pal;
-          case 41570: a->state = 4; goto irq_pal;
+          case 41568: apu_quarter(a); apu_half(a); goto irq_pal;
+          case 41569: a->state = 4; goto irq_pal;
         }
       }
       break;
@@ -6333,7 +6329,7 @@ static Result init_emulator(E *e, const EInit *init) {
       e->ppu_divider = 5;
       e->cpu_divider = 16;
       e->apu_divider = 32;
-      frame_irq = 532048;
+      frame_irq = 532032;
       break;
     case SYSTEM_DENDY:
       e->master_ticks_per_second = 26601712;
