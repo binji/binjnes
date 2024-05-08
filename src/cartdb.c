@@ -91,6 +91,7 @@ bool cartdb_info_from_file(const FileData* file_data, CartDbInfo* info) {
       cart_count = s_cart_crc_count[++carti];
     }
   }
+  info->crc = crc;
   return false;
 }
 

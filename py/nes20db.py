@@ -19,11 +19,8 @@ class CommentedTreeBuilder(ET.TreeBuilder):
 
 def main(args):
   parser = argparse.ArgumentParser()
-  parser.add_argument('file', help='XML file name')
+  parser.add_argument('file', help='XML file name', nargs='+')
   options = parser.parse_args(args)
-
-  with open(options.file, 'rt') as f:
-     tree = ET.parse(f, parser=ET.XMLParser(target=CommentedTreeBuilder()))
 
   crcs = collections.defaultdict(dict)
   carts = set()
@@ -36,56 +33,60 @@ def main(args):
 
   cart_crcs = collections.defaultdict(list)
 
-  for game in tree.findall('game'):
-    name = ""
-    for el in game.iter():
-      if el.tag == ET.Comment:
-        name = el.text
-        break
-    rom = game.find('rom')
-    crc = rom.attrib['crc32']
-    pcb = game.find('pcb')
-    mapper = int(pcb.attrib['mapper'])
+  for fname in options.file:
+    with open(fname, 'rt') as f:
+      tree = ET.parse(f, parser=ET.XMLParser(target=CommentedTreeBuilder()))
 
-    # Don't bother including database entries for mappers we don't support
-    if int(mapper) not in MAPPERS:
-      continue
+      for game in tree.findall('game'):
+        name = ""
+        for el in game.iter():
+          if el.tag == ET.Comment:
+            name = el.text
+            break
+        rom = game.find('rom')
+        crc = rom.attrib['crc32']
+        pcb = game.find('pcb')
+        mapper = int(pcb.attrib['mapper'])
 
-    submapper = int(pcb.attrib['submapper'])
-    mirror = pcb.attrib['mirroring']
-    battery = int(pcb.attrib['battery'])
-    prgrom = game.find('prgrom')
-    prgrom_size = int(prgrom.attrib['size']) if prgrom is not None else 0
-    chrrom = game.find('chrrom')
-    chrrom_size = int(chrrom.attrib['size']) if chrrom is not None else 0
-    prgram = game.find('prgram')
-    prgram_size = int(prgram.attrib['size']) if prgram is not None else 0
-    chrram = game.find('chrram')
-    chrram_size = int(chrram.attrib['size']) if chrram is not None else 0
-    prgnvram = game.find('prgnvram')
-    prgnvram_size = int(prgnvram.attrib['size']) if prgnvram is not None else 0
-    chrnvram = game.find('chrnvram')
-    chrnvram_size = int(chrnvram.attrib['size']) if chrnvram is not None else 0
-    console = game.find('console')
-    region = int(console.attrib['region']) if console is not None else 0
+        # Don't bother including database entries for mappers we don't support
+        if int(mapper) not in MAPPERS:
+          continue
 
-    prgrom_s.add(prgrom_size)
-    prgram_s.add(prgram_size)
-    prgnvram_s.add(prgnvram_size)
-    chrrom_s.add(chrrom_size)
-    chrram_s.add(chrram_size)
-    chrnvram_s.add(chrnvram_size)
+        submapper = int(pcb.attrib['submapper'])
+        mirror = pcb.attrib['mirroring']
+        battery = int(pcb.attrib['battery'])
+        prgrom = game.find('prgrom')
+        prgrom_size = int(prgrom.attrib['size']) if prgrom is not None else 0
+        chrrom = game.find('chrrom')
+        chrrom_size = int(chrrom.attrib['size']) if chrrom is not None else 0
+        prgram = game.find('prgram')
+        prgram_size = int(prgram.attrib['size']) if prgram is not None else 0
+        chrram = game.find('chrram')
+        chrram_size = int(chrram.attrib['size']) if chrram is not None else 0
+        prgnvram = game.find('prgnvram')
+        prgnvram_size = int(prgnvram.attrib['size']) if prgnvram is not None else 0
+        chrnvram = game.find('chrnvram')
+        chrnvram_size = int(chrnvram.attrib['size']) if chrnvram is not None else 0
+        console = game.find('console')
+        region = int(console.attrib['region']) if console is not None else 0
 
-    assert crc not in crcs
-    cart = (
-      mapper,submapper,mirror,battery,
-      prgrom_size,chrrom_size,prgram_size,
-      chrram_size,prgnvram_size,chrnvram_size,
-      region
-    )
-    carts.add(cart)
-    cart_crcs[cart].append((name, crc))
-    # crcs[crc] = { 'name': name, 'cart': cart }
+        prgrom_s.add(prgrom_size)
+        prgram_s.add(prgram_size)
+        prgnvram_s.add(prgnvram_size)
+        chrrom_s.add(chrrom_size)
+        chrram_s.add(chrram_size)
+        chrnvram_s.add(chrnvram_size)
+
+        assert crc not in crcs
+        cart = (
+          mapper,submapper,mirror,battery,
+          prgrom_size,chrrom_size,prgram_size,
+          chrram_size,prgnvram_size,chrnvram_size,
+          region
+        )
+        carts.add(cart)
+        cart_crcs[cart].append((name, crc))
+        # crcs[crc] = { 'name': name, 'cart': cart }
 
   def readable_size(size):
     if size % 1024 == 0:
