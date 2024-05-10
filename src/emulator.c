@@ -1002,7 +1002,11 @@ static void set_vol(A* a, int chan, u8 val) {
 }
 
 static void set_halt(A *a, int chan, u8 val) {
-  a->halt.au16[chan] = (val & (chan == 2 ? 0x80 : 0x20)) ? ~0 : 0;
+  // Halt is only delayed for a CPU cycle, so it's impossible to have two
+  // delayed halts.
+  a->halt = a->next_halt;
+  a->next_halt.au16[chan] = (val & (chan == 2 ? 0x80 : 0x20)) ? ~0 : 0;
+  a->write_halt_cy = a->cy;
 }
 
 static u16x8 get_sweep_target_or_mute(A* a) {
@@ -1333,7 +1337,11 @@ static void apu_quarter(A *a) {
   }
 }
 
-static void apu_half(A *a) {
+static void apu_half(E *e, Ticks cy) {
+  A* a = &e->s.a;
+  if (cy - a->write_halt_cy > e->cpu_divider) {
+    a->halt = a->next_halt;
+  }
   // length counter
   u16x8 len0 = v128_eqz_u16(a->len);
   a->len = v128_sub_u16(
@@ -1382,9 +1390,9 @@ static void apu_sync(E* e) {
         next_apu_cy += e->cpu_divider;
         apu_tick(e, cy, a->state & 1);
         switch (a->state++) {
-          case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(a); } break;
+          case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(e, cy); } break;
           case 7460: apu_quarter(a); break;
-          case 14916: apu_quarter(a); apu_half(a); break;
+          case 14916: apu_quarter(a); apu_half(e, cy); break;
           case 22374:
             apu_quarter(a);
             if (!(a->reg[0x17] & 0x80)) { a->state += 3726 * 2; }
@@ -1400,7 +1408,7 @@ static void apu_sync(E* e) {
                        "frame irq occurred");
             }
             break;
-          case 37284: apu_quarter(a); apu_half(a); goto irq_ntsc;
+          case 37284: apu_quarter(a); apu_half(e, cy); goto irq_ntsc;
           case 37285: a->state = 4; goto irq_ntsc;
         }
       }
@@ -1411,9 +1419,9 @@ static void apu_sync(E* e) {
         next_apu_cy += e->cpu_divider;
         apu_tick(e, cy, a->state & 1);
         switch (a->state++) {
-          case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(a); } break;
+          case 3: if (a->reg[0x17] & 0x80) { apu_quarter(a); apu_half(e, cy); } break;
           case 8313: apu_quarter(a); break;
-          case 16630: apu_quarter(a); apu_half(a); break;
+          case 16630: apu_quarter(a); apu_half(e, cy); break;
           case 24942:
             apu_quarter(a);
             if (!(a->reg[0x17] & 0x80)) { a->state += 4156 * 2; }
@@ -1433,7 +1441,7 @@ static void apu_sync(E* e) {
                        "frame irq occurred");
             }
             break;
-          case 41568: apu_quarter(a); apu_half(a); goto irq_pal;
+          case 41568: apu_quarter(a); apu_half(e, cy); goto irq_pal;
           case 41569: a->state = 4; goto irq_pal;
         }
       }
@@ -6354,6 +6362,7 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.period.au16[4] = 213;
   s->a.len.au16[4] = 1;
   s->a.halt.au16[4] = ~0;
+  s->a.next_halt.au16[4] = ~0;
   s->a.play_mask.au16[4] = ~0;
   // Default to all channels unmuted.
   s->a.swmute_mask = v128_bcast_u16(~0);
