@@ -31,8 +31,8 @@ TestResult = collections.namedtuple('TestResult',
 
 def RunTest(test, options):
   start_time = time.time()
-  png = os.path.join(TEST_RESULT_DIR,
-                     os.path.basename(os.path.splitext(test.rom)[0]) + '.png')
+  png = os.path.relpath(os.path.splitext(test.rom)[0] + '.png', common.ROOT_DIR)
+  png = os.path.join(TEST_RESULT_DIR, png.replace(os.path.sep, '_'))
   try:
     common.RunTester(test.rom, test.frames, png, controller_input=test.joyp,
                      exe=options.exe)
