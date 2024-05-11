@@ -1042,7 +1042,9 @@ static void set_len(A* a, int chan, u8 val) {
   static const u8 lens[] = {10, 254, 20,  2,  40, 4,  80, 6,  160, 8,  60,
                             10, 14,  12,  26, 14, 12, 16, 24, 18,  48, 20,
                             96, 22,  192, 24, 72, 26, 16, 28, 32,  30};
-  a->len.au16[chan] = lens[val >> 3];
+  a->len = a->next_len;
+  a->next_len.au16[chan] = lens[val >> 3];
+  a->write_len_cy = a->cy;
 }
 
 static void update_tri_play_mask(A* a) {
@@ -1339,13 +1341,22 @@ static void apu_quarter(A *a) {
 
 static void apu_half(E *e, Ticks cy) {
   A* a = &e->s.a;
+  // length counter
   if (cy - a->write_halt_cy > e->cpu_divider) {
     a->halt = a->next_halt;
   }
-  // length counter
-  u16x8 len0 = v128_eqz_u16(a->len);
+  u16x8 len0;
+  if (cy - e->cpu_divider == a->write_len_cy) {
+    LOG("    [%"PRIu64"]: update_len diff == cpu_divider\n", cy);
+    len0 = v128_eqz_u16(a->len);
+    a->len = v128_blendv(a->len, a->next_len, v128_eqz_u16(a->len));
+  } else {
+    a->len = a->next_len;
+    len0 = v128_eqz_u16(a->len);
+  }
   a->len = v128_sub_u16(
       a->len, v128_and(v128_bcast_u16(1), v128_not(v128_or(len0, a->halt))));
+  a->next_len = a->len;
   a->play_mask = v128_and(a->play_mask, v128_not(len0));
 
   // sweep unit
@@ -1637,11 +1648,10 @@ static u8 cpu_read(E *e, u16 addr) {
         apu_sync(e);
         u8 result = ((c->irq & (IRQ_FRAME | IRQ_DMC | IRQ_MAPPER)) << 6) |
                     (c->open_bus & 0x20) | (a->dmcen << 4) |
-                    ((a->len.au16[3] > 0) << 3) | ((a->len.au16[2] > 0) << 2) |
-                    ((a->len.au16[1] > 0) << 1) | (a->len.au16[0] > 0);
+                    ((a->next_len.au16[3] > 0) << 3) | ((a->next_len.au16[2] > 0) << 2) |
+                    ((a->next_len.au16[1] > 0) << 1) | (a->next_len.au16[0] > 0);
         c->irq &= ~IRQ_FRAME; // ACK frame interrupt.
-        DEBUG("Read $4015 => %0x (@cy: %" PRIu64 " +%" PRIu64 ")\n", result,
-              e->s.cy, (e->s.cy - a->resetcy) / e->cpu_divider);
+        DEBUG("Read $4015 => %0x (@cy: %" PRIu64 ")\n", result, e->s.cy);
         return result;
       }
       case 0x16: return c->open_bus = read_joyp(e, 0, false, 0);  // JOY1
@@ -1855,7 +1865,7 @@ static void cpu_write(E *e, u16 addr, u8 val) {
           sched_clear(e, SCHED_DMC_FETCH);
         }
         for (int i = 0; i < 4; ++i) {
-          if (!(val & (1 << i))) { a->len.au16[i] = 0; }
+          if (!(val & (1 << i))) { a->len.au16[i] = a->next_len.au16[i] = 0; }
         }
         a->update |= 0x1f;
         c->irq &= ~IRQ_DMC;
@@ -6360,9 +6370,8 @@ static Result init_emulator(E *e, const EInit *init) {
   s->a.noise = 1;
   // DMC channel should never have playback stopped.
   s->a.period.au16[4] = 213;
-  s->a.len.au16[4] = 1;
-  s->a.halt.au16[4] = ~0;
-  s->a.next_halt.au16[4] = ~0;
+  s->a.len.au16[4] = s->a.next_len.au16[4] = 1;
+  s->a.halt.au16[4] = s->a.next_halt.au16[4] = ~0;
   s->a.play_mask.au16[4] = ~0;
   // Default to all channels unmuted.
   s->a.swmute_mask = v128_bcast_u16(~0);

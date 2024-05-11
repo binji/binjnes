@@ -286,7 +286,8 @@ typedef struct {
 } P;
 
 typedef struct {
-  u16x8 timer, period, seq, halt, next_halt, len, play_mask, swmute_mask;
+  u16x8 timer, period, seq, halt, next_halt, len, next_len, play_mask,
+      swmute_mask;
   u32x4 start, cvol, envdiv, envloop, envreload;         // envelope
   u16x8 swen, swperiod, swdiv, swshift, swneg, swreload; // sweep
   f32x4 sample, vol, decay;
@@ -295,7 +296,7 @@ typedef struct {
   u16 state, noise, dmcbytes, dmcaddr;
   u8 reg[0x18], tricnt, dmcout, dmcbuf, dmcshift, dmcbufstate, update;
   bool trireload, dmcen, dmcfetch;
-  u64 cy, resetcy, write_halt_cy;
+  u64 cy, write_halt_cy, write_len_cy;
 } A;
 
 typedef struct {
