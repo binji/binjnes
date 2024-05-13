@@ -22,6 +22,7 @@
 #endif
 
 #define JOYPAD_CHUNK_DEFAULT_CAPACITY 4096
+#define MOVIE_RESET_LATCH 0x80000000
 
 typedef struct {
   Ticks ticks;
@@ -69,6 +70,8 @@ typedef struct {
   u32 current_frame, current_frame_latch;
   u32 current_total_latch, max_latches;
   SystemInput last_input;
+  Ticks current_reset_ticks;
+  u32 current_reset_frame;
 } JoypadMoviePlayback;
 
 typedef struct Joypad {
@@ -229,20 +232,46 @@ void joypad_append_reset(Joypad *joypad, bool set, Ticks ticks) {
 }
 
 Ticks joypad_get_next_reset_change(Joypad *joypad) {
-  if (joypad && joypad->mode == JOYPAD_MODE_PLAYBACK) {
-    Ticks ticks = emulator_get_ticks(joypad->playback.e);
-    JoypadStateIter current = joypad_find_state(joypad->playback.buffer, ticks);
-    bool is_reset = current.state != NULL &&
-                    joypad_unpack_input(current.state->input).reset;
-    if (current.state != NULL) {
-      JoypadStateIter iter = joypad_get_next_state(current);
-      while (iter.state != NULL) {
-        SystemInput input = joypad_unpack_input(iter.state->input);
-        if (input.reset != is_reset) {
-          return iter.state->ticks;
+  if (!joypad) return ~0;
+  switch (joypad->mode) {
+    case JOYPAD_MODE_USER:
+      break;
+    case JOYPAD_MODE_PLAYBACK: {
+      Ticks ticks = emulator_get_ticks(joypad->playback.e);
+      JoypadStateIter current = joypad_find_state(joypad->playback.buffer, ticks);
+      bool is_reset = current.state != NULL &&
+                      joypad_unpack_input(current.state->input).reset;
+      if (current.state != NULL) {
+        JoypadStateIter iter = joypad_get_next_state(current);
+        while (iter.state != NULL) {
+          SystemInput input = joypad_unpack_input(iter.state->input);
+          if (input.reset != is_reset) {
+            return iter.state->ticks;
+          }
+          iter = joypad_get_next_state(iter);
         }
-        iter = joypad_get_next_state(iter);
       }
+      break;
+    }
+
+    case JOYPAD_MODE_MOVIE: {
+      JoypadMoviePlayback* pb = &joypad->movie_playback;
+      for (u32 i = pb->current_reset_frame;
+           i < joypad->movie_buffer->frame_count; ++i) {
+        JoypadMovieFrame* frame = &joypad->movie_buffer->frames[i];
+        if (!(frame->latch & MOVIE_RESET_LATCH)) continue;
+
+        if (pb->e->s.c.reset_active) {
+          pb->current_reset_frame = i + 1;
+          pb->current_reset_ticks += pb->e->cpu_divider;
+        } else {
+          pb->current_reset_frame = i;
+          pb->current_reset_ticks +=
+              (frame->latch & ~MOVIE_RESET_LATCH) * pb->e->cpu_divider;
+        }
+        return pb->current_reset_ticks;
+      }
+      break;
     }
   }
   return ~0;
@@ -547,7 +576,9 @@ static Result joypad_read_movie(const FileData *file_data,
     JoypadMovieFrame *frame = (JoypadMovieFrame *)file_data->data + i;
     CHECK_MSG(frame->latch != 0, "Expected latch to be non-zero at index %zu\n",
               i);
-    total_latches += frame->latch;
+    if (!(frame->latch & MOVIE_RESET_LATCH)) {
+      total_latches += frame->latch;
+    }
   }
 
   JoypadMovieBuffer *buffer = xcalloc(1, sizeof(JoypadMovieBuffer));
@@ -555,6 +586,7 @@ static Result joypad_read_movie(const FileData *file_data,
   buffer->frames = xcalloc(frame_count, sizeof(JoypadMovieFrame));
   memcpy(buffer->frames, file_data->data,
          buffer->frame_count * sizeof(JoypadMovieFrame));
+  total_latches++; // Add one since we always start with 0.
   buffer->tick_count = (u32)total_latches;
   buffer->ticks = xcalloc(total_latches, sizeof(Ticks));
   *out_buffer = buffer;
@@ -572,6 +604,12 @@ static void init_joypad_movie_playback_state(JoypadMoviePlayback *playback,
   playback->current_total_latch = 0;
   playback->max_latches = 0;
   memset(&playback->last_input, 0, sizeof(SystemInput));
+
+  while (playback->current_frame < playback->movie_buffer->frame_count &&
+         (playback->movie_buffer->frames[playback->current_frame].latch &
+          MOVIE_RESET_LATCH)) {
+    ++playback->current_frame;
+  }
 }
 
 static void joypad_movie_playback_callback(struct SystemInput* input,
@@ -579,6 +617,11 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
   JoypadMoviePlayback* playback = user_data;
 
   Ticks ticks = emulator_get_ticks(playback->e);
+  if (playback->current_total_latch >= playback->movie_buffer->tick_count) {
+    *input = playback->last_input;
+    return;
+  }
+
   if (ticks <= playback->movie_buffer->ticks[playback->current_total_latch]) {
 #define GET_TICKS(x) (x)
 #define CMP_LT(x, y) ((x) < (y))
@@ -594,6 +637,7 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
     u32 total_latches = 0;
     for (size_t i = 0; i < playback->movie_buffer->frame_count - 1; ++i) {
       JoypadMovieFrame *frame = &playback->movie_buffer->frames[i];
+      if (frame->latch & MOVIE_RESET_LATCH) continue;
       if (total_latch_index >= total_latches &&
           total_latch_index < total_latches + frame->latch) {
         playback->current_frame = (u32)i;
@@ -615,10 +659,7 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
         playback->current_total_latch);
     assert(playback->movie_buffer->ticks[playback->current_total_latch] == ticks);
   } else if (playback->current_frame < playback->movie_buffer->frame_count &&
-             playback->current_total_latch <
-                 playback->movie_buffer->tick_count &&
              strobe) {
-    assert(playback->current_frame < playback->movie_buffer->frame_count);
     JoypadMovieFrame* frame =
         &playback->movie_buffer->frames[playback->current_frame];
     LOG("[#%u] (%10" PRIu64
@@ -627,8 +668,10 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
         playback->movie_buffer->frame_count, playback->current_frame_latch + 1,
         frame->latch, playback->current_total_latch + 1);
     if (++playback->current_total_latch > playback->max_latches) {
+      assert(playback->max_latches + 1 < playback->movie_buffer->tick_count);
       playback->movie_buffer->ticks[++playback->max_latches] = ticks;
     } else {
+      assert(playback->current_total_latch < playback->movie_buffer->tick_count);
       assert(playback->movie_buffer->ticks[playback->current_total_latch] ==
              ticks);
     }
@@ -640,7 +683,11 @@ static void joypad_movie_playback_callback(struct SystemInput* input,
       playback->last_input.port[1].joyp =
           unpack_joypad((frame->input >> 8) & 0xff);
       playback->last_input.reset = false;
-      ++playback->current_frame;
+      do {
+        ++playback->current_frame;
+      } while (playback->current_frame < playback->movie_buffer->frame_count &&
+               (playback->movie_buffer->frames[playback->current_frame].latch &
+                MOVIE_RESET_LATCH));
       playback->current_frame_latch = 0;
       LOG("0:%c%c%c%c%c%c%c%c 1:%c%c%c%c%c%c%c%c\n",
           playback->last_input.port[0].joyp.down ? 'D' : '_',
