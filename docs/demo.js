@@ -10,7 +10,6 @@ const SCREEN_WIDTH = 256;
 const SCREEN_HEIGHT = 240;
 const AUDIO_FRAMES = 4096;
 const AUDIO_LATENCY_SEC = 0.1;
-const PPU_TICKS_PER_SECOND = 5369318;
 const REWIND_FACTOR = 1.5;
 const REWIND_UPDATE_MS = 16;
 const FAST_FORWARD_FACTOR = 2.0;
@@ -42,7 +41,7 @@ function clamp(x, min, max) { return Math.min(Math.max(x, min), max); }
 
 let data = {
     msPerFrame: 0,
-    ticks: 0,
+    secs: 0,
     loaded: false,
     loadedFile: null,
     paused: false,
@@ -52,8 +51,8 @@ let data = {
         scale: 2,
     },
     rewind: {
-        minTicks: 0,
-        maxTicks: 0,
+        minSecs: 0,
+        maxSecs: 0,
     },
     files: {
         show: true,
@@ -140,11 +139,11 @@ let vm = new Vue({
         },
         rewindTime: function() {
             const zeroPadLeft = (num, width) => ('' + (num | 0)).padStart(width, '0');
-            const ticks = this.ticks;
-            const hr = (ticks / (60 * 60 * PPU_TICKS_PER_SECOND)) | 0;
-            const min = zeroPadLeft((ticks / (60 * PPU_TICKS_PER_SECOND)) % 60, 2);
-            const sec = zeroPadLeft((ticks / PPU_TICKS_PER_SECOND) % 60, 2);
-            const ms = zeroPadLeft((ticks / (PPU_TICKS_PER_SECOND / 1000)) % 1000, 3);
+            const secs = this.secs;
+            const hr = (secs / (60 * 60)) | 0;
+            const min = zeroPadLeft((secs / 60) % 60, 2);
+            const sec = zeroPadLeft(secs % 60, 2);
+            const ms = zeroPadLeft((secs / 1000) % 1000, 3);
             return `${hr}:${min}:${sec}.${ms}`;
         },
         pauseLabel: function() {
@@ -208,8 +207,8 @@ let vm = new Vue({
             }
             this.paused = newPaused;
         },
-        updateTicks: function() {
-            this.ticks = emulator.ticks;
+        updateSecs: function() {
+            this.secs = emulator.secs;
         },
         togglePause: function() {
             if (!this.loaded) return;
@@ -222,7 +221,7 @@ let vm = new Vue({
         },
         rewindTo: function(event) {
             if (!emulator) return;
-            emulator.rewindToTicks(+event.target.value);
+            emulator.rewindToSecs(+event.target.value);
         },
         selectFile: function(index) {
             this.files.selected = index;
@@ -478,16 +477,16 @@ class Emulator {
         this.state = EMULATOR_STATE_RUN;
         this.lastState = EMULATOR_STATE_RUN;
         this.intervalId = 0;
-        this.isRewindingToTicks = false;
-        this.ticks = 0;
+        this.isRewindingToSecs = false;
+        this.secs = 0;
         this.msPerFrame = 0;
         this.gpId = -1;
         this.gpPrev = new Array(vm.input.length);
         this.gpIntervalId = 0;
         this.rewind = {
-            oldestTicks: 0,
-            newestTicks: 0,
-            newestTicks: 0,
+            oldestSecs: 0,
+            newestSecs: 0,
+            newestSecs: 0,
         };
         this.getPrgRamPromise = null;
         this.resolveGetPrgRam = null;
@@ -626,28 +625,28 @@ class Emulator {
     }
 
     autoRewindInterval() {
-        const oldest = this.rewind.oldestTicks;
-        const start = this.ticks;
-        const delta = REWIND_FACTOR * REWIND_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
+        const oldest = this.rewind.oldestSecs;
+        const start = this.secs;
+        const delta = REWIND_FACTOR * REWIND_UPDATE_MS / 1000;
         const rewindTo = Math.max(oldest, start - delta);
-        this.rewindToTicks(rewindTo);
+        this.rewindToSecs(rewindTo);
     }
 
     autoFastForwardInterval() {
-        const delta = FAST_FORWARD_FACTOR * FAST_FORWARD_UPDATE_MS / 1000 * PPU_TICKS_PER_SECOND;
-        this.runUntil(this.ticks + delta);
+        const delta = FAST_FORWARD_FACTOR * FAST_FORWARD_UPDATE_MS / 1000;
+        this.runUntil(this.secs + delta);
     }
 
-    rewindToTicks(ticks) {
+    rewindToSecs(secs) {
         if (!this.isPaused && !this.isAutoRewinding) return;
-        if (!this.isRewindingToTicks) {
-            emulatorWorker.postMessage({msg: 'rewindToTicks', ticks});
-            this.isRewindingToTicks = true;
+        if (!this.isRewindingToSecs) {
+            emulatorWorker.postMessage({msg: 'rewindToSecs', secs});
+            this.isRewindingToSecs = true;
         }
     }
 
-    runUntil(ticks) {
-        emulatorWorker.postMessage({msg: 'runUntil', ticks})
+    runUntil(secs) {
+        emulatorWorker.postMessage({msg: 'runUntil', secs})
     }
 
     setReset(active) {
@@ -690,19 +689,19 @@ class Emulator {
                 this.getPrgRamPromise = null;
                 break;
             case 'runUntil:result':
-                this.ticks = e.data.ticks;
-                vm.updateTicks();
+                this.secs = e.data.secs;
+                vm.updateSecs();
                 vm.prgRamUpdated ||= e.data.prgRamUpdated;
                 this.video.renderTexture();
                 this.msPerFrame = e.data.msPerFrame;
-                vm.rewind.minTicks = this.rewind.oldestTicks = e.data.oldestTicks;
-                vm.rewind.maxTicks = this.rewind.newestTicks = e.data.newestTicks;
+                vm.rewind.minSecs = this.rewind.oldestSecs = e.data.oldestSecs;
+                vm.rewind.maxSecs = this.rewind.newestSecs = e.data.newestSecs;
                 break;
-            case 'rewindToTicks:result':
-                this.ticks = e.data.ticks;
-                vm.updateTicks();
+            case 'rewindToSecs:result':
+                this.secs = e.data.secs;
+                vm.updateSecs();
                 this.video.renderTexture();
-                this.isRewindingToTicks = false;
+                this.isRewindingToSecs = false;
                 break;
         }
     }

@@ -17,7 +17,6 @@ const REWIND_BUFFER_CAPACITY = 4 * 1024 * 1024;
 const CONTROLLER_JOYPAD = 0
 const CONTROLLER_ZAPPER = 1
 const CONTROLLER_SNES_MOUSE = 2
-const PPU_TICKS_PER_SECOND = 5369318;
 const MAX_UPDATE_SEC = 5 / 60;
 
 self.emulator = null;
@@ -41,16 +40,16 @@ onmessage = async function(e) {
             if (emulator) { emulator.cancelAnimationFrame(); }
             break;
         case 'runUntil':
-            if (emulator) { emulator.runUntil(e.data.ticks); }
+            if (emulator) { emulator.runUntil(e.data.secs); }
             break;
         case 'setReset':
-            if (emulator) { emulator.setReset(e.data.ticks); }
+            if (emulator) { emulator.setReset(e.data.secs); }
             break;
         case 'beginRewind':
             if (emulator) { emulator.beginRewind(); }
             break;
-        case 'rewindToTicks':
-            if (emulator) { emulator.rewindToTicks(e.data.ticks); }
+        case 'rewindToSecs':
+            if (emulator) { emulator.rewindToSecs(e.data.secs); }
             break;
         case 'endRewind':
             if (emulator) { emulator.endRewind(); }
@@ -114,7 +113,7 @@ class Emulator {
         this.msPerFrame = 0;
         this.rafCancelToken = null;
         this.lastRafSec = 0;
-        this.leftoverTicks = 0;
+        this.leftoverSecs = 0;
         this.rewind = new Rewind(module, this.e);
         this.mouseFracX = 0;
         this.mouseFracY = 0;
@@ -203,27 +202,27 @@ class Emulator {
         this.rewind.beginRewind();
     }
 
-    rewindToTicks(ticks) {
-        ticks = Math.min(Math.max(ticks, this.rewind.oldestTicks), this.rewind.newestTicks);
-        if (this.rewind.rewindToTicks(ticks)) {
-            this.runUntil(ticks);
+    rewindToSecs(secs) {
+        secs = Math.min(Math.max(secs, this.rewind.oldestSecs), this.rewind.newestSecs);
+        if (this.rewind.rewindToSecs(secs)) {
+            this.runUntil(secs);
         }
-        self.postMessage({msg: 'rewindToTicks:result', ticks: this.ticks});
+        self.postMessage({msg: 'rewindToSecs:result', secs: this.secs});
     }
 
     endRewind() {
         this.rewind.endRewind();
         this.lastRafSec = 0;
-        this.leftoverTicks = 0;
+        this.leftoverSecs = 0;
     }
 
-    get ticks() {
-        return this.module._emulator_get_ticks_f64(this.e);
+    get secs() {
+        return this.module._emulator_get_secs(this.e);
     }
 
-    runUntil(runUntilTicks) {
+    runUntil(runUntilSecs) {
         while (true) {
-            const event = this.module._emulator_run_until_f64(this.e, runUntilTicks);
+            const event = this.module._emulator_run_until_secs(this.e, runUntilSecs);
             if (event & EVENT_NEW_FRAME) {
                 this.rewind.pushBuffer();
                 const buffer = this.videoBuffer.slice();
@@ -237,17 +236,17 @@ class Emulator {
                 break;
             }
         }
-        const ticks = this.ticks;
+        const secs = this.secs;
         const msPerFrame = this.msPerFrame;
         const prgRamUpdated = this.module._emulator_was_prg_ram_updated(this.e);
-        this.leftoverTicks = (ticks - runUntilTicks) | 0;
+        this.leftoverSecs = (secs - runUntilSecs) | 0;
         self.postMessage({
             msg: 'runUntil:result',
-            ticks,
+            secs,
             prgRamUpdated,
             msPerFrame,
-            oldestTicks: this.rewind.oldestTicks,
-            newestTicks: this.rewind.newestTicks,
+            oldestSecs: this.rewind.oldestSecs,
+            newestSecs: this.rewind.newestSecs,
         });
     }
 
@@ -257,12 +256,11 @@ class Emulator {
         const startSec = rafStartMs / 1000;
         deltaSec = Math.max(startSec - (this.lastRafSec || startSec), 0);
         this.lastRafSec = startSec;
-        const startTicks = this.ticks;
-        const deltaTicks =
-            Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
-        const runUntilTicks = startTicks + deltaTicks - this.leftoverTicks;
+        const startSecs = this.secs;
+        const deltaSecs = Math.min(deltaSec, MAX_UPDATE_SEC);
+        const runUntilSecs = startSecs + deltaSecs - this.leftoverSecs;
         const startMs = performance.now();
-        this.runUntil(runUntilTicks);
+        this.runUntil(runUntilSecs);
         const endMs = performance.now();
         const lerp = (from, to, alpha) => alpha * from + (1 - alpha) * to;
         // this.msPerFrame = lerp(this.msPerFrame, deltaSec * 1000, 0.3);
@@ -326,12 +324,12 @@ class Rewind {
       this.module._joypad_delete(this.joypadPtr);
   }
 
-  get oldestTicks() {
-      return this.module._rewind_get_oldest_ticks_f64(this.bufferPtr);
+  get oldestSecs() {
+      return this.module._rewind_get_oldest_secs(this.bufferPtr);
   }
 
-  get newestTicks() {
-      return this.module._rewind_get_newest_ticks_f64(this.bufferPtr);
+  get newestSecs() {
+      return this.module._rewind_get_newest_secs(this.bufferPtr);
   }
 
   pushBuffer() {
@@ -351,10 +349,9 @@ class Rewind {
       this.module._joypad_begin_rewind_playback(this.joypadPtr);
   }
 
-  rewindToTicks(ticks) {
+  rewindToSecs(secs) {
       if (!this.isRewinding) return;
-      return this.module._rewind_to_ticks_wrapper(this.statePtr, ticks) ===
-          RESULT_OK;
+      return this.module._rewind_to_secs(this.statePtr, secs) === RESULT_OK;
   }
 
   endRewind() {

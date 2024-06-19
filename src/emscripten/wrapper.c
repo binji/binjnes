@@ -40,20 +40,28 @@ Emulator* emulator_new_simple(void* rom_data, size_t rom_size,
   return e;
 }
 
-f64 emulator_get_ticks_f64(Emulator* e) {
-  return (f64)emulator_get_ticks(e);
+static f64 ticks_to_secs(Ticks ticks) {
+  return (f64)ticks / e->master_ticks_per_second;
 }
 
-EmulatorEvent emulator_run_until_f64(Emulator* e, f64 until_ticks_f64) {
-  return emulator_run_until(e, (Ticks)until_ticks_f64);
+static Ticks secs_to_ticks(f64 secs) {
+  return (Ticks)(secs * e->master_ticks_per_second);
 }
 
-f64 rewind_get_newest_ticks_f64(RewindBuffer* buf) {
-  return (f64)rewind_get_newest_ticks(buf);
+f64 emulator_get_secs(Emulator* e) {
+  return ticks_to_secs(emulator_get_ticks(e));
 }
 
-f64 rewind_get_oldest_ticks_f64(RewindBuffer* buf) {
-  return (f64)rewind_get_oldest_ticks(buf);
+EmulatorEvent emulator_run_until_secs(Emulator* e, f64 until_secs) {
+  return emulator_run_until(e, secs_to_ticks(until_secs));
+}
+
+f64 rewind_get_newest_secs(RewindBuffer* buf) {
+  return ticks_to_secs(rewind_get_newest_ticks(buf));
+}
+
+f64 rewind_get_oldest_secs(RewindBuffer* buf) {
+  return ticks_to_secs(rewind_get_oldest_ticks(buf));
 }
 
 static void default_joypad_callback(SystemInput *input, void *user_data,
@@ -211,8 +219,8 @@ RewindState *rewind_begin(Emulator *e, RewindBuffer *rewind_buffer,
   return &s_rewind_state;
 }
 
-Result rewind_to_ticks_wrapper(RewindState* state, f64 ticks_f64) {
-  Ticks ticks = (Ticks)ticks_f64;
+Result rewind_to_secs(RewindState* state, f64 secs) {
+  Ticks ticks = secs_to_ticks(secs);
   CHECK(SUCCESS(
       rewind_to_ticks(state->rewind_buffer, ticks, &state->rewind_result)));
   CHECK(SUCCESS(emulator_read_state(e, &state->rewind_result.file_data)));
