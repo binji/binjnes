@@ -1,17 +1,27 @@
-#if defined(BINJNES_GCC) || defined(BINJNES_CLANG)
+#if defined(BINJNES_ATOMIC_C11)
 
 #include <stdatomic.h>
 
 typedef atomic_size_t AtomicSize;
+typedef atomic_bool AtomicBool;
+
 static inline size_t atomic_load_size(AtomicSize* addr) {
-    return atomic_load(addr);
+  return atomic_load(addr);
 }
 
 static inline void atomic_store_size(AtomicSize* addr, size_t value) {
-    atomic_store(addr, value);
+  atomic_store(addr, value);
 }
 
-#elif defined(BINJNES_MSVC)
+static inline bool atomic_load_bool(AtomicBool* addr) {
+  return atomic_load(addr);
+}
+
+static inline void atomic_store_bool(AtomicBool* addr, bool value) {
+  atomic_store(addr, value);
+}
+
+#elif defined(BINJNES_ATOMIC_MSVC)
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -19,13 +29,26 @@ static inline void atomic_store_size(AtomicSize* addr, size_t value) {
 #undef ERROR
 
 typedef volatile PVOID AtomicSize;
+typedef AtomicSize AtomicBool;
 
-size_t atomic_load_size(AtomicSize* addr) {
-    return (size_t)*addr;
+static inline size_t atomic_load_size(AtomicSize* addr) {
+  return (size_t)*addr;
 }
 
-void atomic_store_size(AtomicSize* addr, size_t value) {
-    _InterlockedExchangePointer(addr, (PVOID)value);
+static inline void atomic_store_size(AtomicSize* addr, size_t value) {
+  _InterlockedExchangePointer(addr, (PVOID)value);
 }
+
+static inline bool atomic_load_bool(AtomicBool* addr) {
+  return (bool)atomic_load_size(addr);
+}
+
+static inline void atomic_store_bool(AtomicBool* addr, bool value) {
+  atomic_store_size(addr, (size_t)value);
+}
+
+#else
+
+#error "No atomics"
 
 #endif

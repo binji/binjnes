@@ -14,6 +14,7 @@ if (UNIX AND NOT APPLE)
 endif ()
 
 include(CheckIncludeFile)
+CHECK_INCLUDE_FILE("stdatomic.h" HAVE_C11_ATOMIC)
 CHECK_INCLUDE_FILE("threads.h" HAVE_C11_THREADS)
 CHECK_INCLUDE_FILE("pthread.h" HAVE_PTHREADS)
 
@@ -23,6 +24,14 @@ elseif (HAVE_PTHREADS)
   add_definitions(-DBINJNES_THREAD_PTHREADS)
 else ()
   message(WARNING "No thread library found")
+endif ()
+
+if (HAVE_C11_ATOMIC)
+  add_definitions(-DBINJNES_ATOMIC_C11)
+elseif (CMAKE_CXX_COMPILER_ID MATCHES "MSVC")
+  add_definitions(-DBINJNES_ATOMIC_MSVC)
+else ()
+  message(WARNING "No atomic library found")
 endif ()
 
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")

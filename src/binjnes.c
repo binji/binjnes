@@ -1,7 +1,6 @@
 #include <assert.h>
 #include <inttypes.h>
 #include <stdarg.h>
-#include <stdatomic.h>
 
 #include "sokol/sokol_app.h"
 #include "sokol/sokol_audio.h"
@@ -73,7 +72,7 @@ static bool s_emulator_done;
 static mutex s_event_mtx;
 static sapp_event s_events[MAX_EVENT_COUNT];
 static size_t s_event_count;
-static atomic_bool s_running = true;
+static AtomicBool s_running = true;
 static f64 s_frame_duration;
 
 static const char *s_rom_filename;
@@ -908,7 +907,7 @@ static void handle_events(void) {
 static int emulator_thread(void *arg) {
   init_emulator();
   set_status_text("Loaded %s", s_rom_filename);
-  while (atomic_load(&s_running)) {
+  while (atomic_load_bool(&s_running)) {
     if (!s_paused && s_fast_forward) {
       handle_events();
       f64 delta_sec = 1.f / 60.f;
@@ -1003,7 +1002,7 @@ static void frame(void)  {
 }
 
 static void cleanup(void) {
-  atomic_store(&s_running, false);
+  atomic_store_bool(&s_running, false);
 
   // Make sure the emulator thread isn't waiting for the next frame.
   mutex_lock(&s_frame_begin_mtx);
