@@ -1,6 +1,5 @@
 #include <assert.h>
 #include <inttypes.h>
-#include <threads.h>
 #include <stdarg.h>
 #include <stdatomic.h>
 
@@ -17,6 +16,7 @@
 #include "joypad.h"
 #include "options.h"
 #include "rewind.h"
+#include "thread.h"
 
 #define SAVE_EXTENSION ".sav"
 #define SAVE_STATE_EXTENSION ".state"
@@ -60,17 +60,17 @@ typedef struct StatusText {
   u32 timeout;
 } StatusText;
 
-static thrd_t s_thread;
-static mtx_t s_frame_begin_mtx;
-static cnd_t s_frame_begin_cnd;
-static mtx_t s_frame_end_mtx;
-static cnd_t s_frame_end_cnd;
-static mtx_t s_emulator_done_mtx;
-static cnd_t s_emulator_done_cnd;
+static thread s_thread;
+static mutex s_frame_begin_mtx;
+static condvar s_frame_begin_cnd;
+static mutex s_frame_end_mtx;
+static condvar s_frame_end_cnd;
+static mutex s_emulator_done_mtx;
+static condvar s_emulator_done_cnd;
 static bool s_frame_begin;
 static bool s_frame_end;
 static bool s_emulator_done;
-static mtx_t s_event_mtx;
+static mutex s_event_mtx;
 static sapp_event s_events[MAX_EVENT_COUNT];
 static size_t s_event_count;
 static atomic_bool s_running = true;
@@ -641,14 +641,14 @@ static void init_input(void) {
 static int emulator_thread(void *arg);
 
 static void init(void) {
-  mtx_init(&s_event_mtx, mtx_plain);
-  mtx_init(&s_frame_begin_mtx, mtx_plain);
-  mtx_init(&s_frame_end_mtx, mtx_plain);
-  mtx_init(&s_emulator_done_mtx, mtx_plain);
-  cnd_init(&s_frame_begin_cnd);
-  cnd_init(&s_frame_end_cnd);
-  cnd_init(&s_emulator_done_cnd);
-  thrd_create(&s_thread, emulator_thread, NULL);
+  mutex_init(&s_event_mtx);
+  mutex_init(&s_frame_begin_mtx);
+  mutex_init(&s_frame_end_mtx);
+  mutex_init(&s_emulator_done_mtx);
+  condvar_init(&s_frame_begin_cnd);
+  condvar_init(&s_frame_end_cnd);
+  condvar_init(&s_emulator_done_cnd);
+  thread_create(&s_thread, emulator_thread, NULL);
 
   stm_setup();
   s_start_ticks = stm_now();
@@ -897,12 +897,12 @@ static void handle_event(const sapp_event *event) {
 }
 
 static void handle_events(void) {
-  mtx_lock(&s_event_mtx);
+  mutex_lock(&s_event_mtx);
   for (size_t i = 0; i < s_event_count; ++i) {
     handle_event(&s_events[i]);
   }
   s_event_count = 0;
-  mtx_unlock(&s_event_mtx);
+  mutex_unlock(&s_event_mtx);
 }
 
 static int emulator_thread(void *arg) {
@@ -917,14 +917,14 @@ static int emulator_thread(void *arg) {
       run_until_ticks(until_ticks);
       s_last_ticks = emulator_get_ticks(e);
     } else {
-      mtx_lock(&s_frame_begin_mtx);
+      mutex_lock(&s_frame_begin_mtx);
       while (!s_frame_begin) {
         handle_events();
-        cnd_wait(&s_frame_begin_cnd, &s_frame_begin_mtx);
+        condvar_wait(&s_frame_begin_cnd, &s_frame_begin_mtx);
       }
       s_frame_begin = false;
       f64 delta_sec = s_frame_duration;
-      mtx_unlock(&s_frame_begin_mtx);
+      mutex_unlock(&s_frame_begin_mtx);
 
       if (s_rewind_state.rewinding) {
         rewind_by(e->master_ticks_per_frame * REWIND_FACTOR);
@@ -952,15 +952,15 @@ static int emulator_thread(void *arg) {
     }
 
     update_overlay();
-    mtx_lock(&s_frame_end_mtx);
+    mutex_lock(&s_frame_end_mtx);
     s_frame_end = true;
-    cnd_signal(&s_frame_end_cnd);
-    mtx_unlock(&s_frame_end_mtx);
+    condvar_signal(&s_frame_end_cnd);
+    mutex_unlock(&s_frame_end_mtx);
   }
-  mtx_lock(&s_emulator_done_mtx);
+  mutex_lock(&s_emulator_done_mtx);
   s_emulator_done = true;
-  cnd_signal(&s_emulator_done_cnd);
-  mtx_unlock(&s_emulator_done_mtx);
+  condvar_signal(&s_emulator_done_cnd);
+  mutex_unlock(&s_emulator_done_mtx);
   return 0;
 }
 
@@ -969,21 +969,21 @@ static void frame(void)  {
     sapp_lock_mouse(!s_paused);
   }
 
-  mtx_lock(&s_frame_begin_mtx);
+  mutex_lock(&s_frame_begin_mtx);
   s_frame_begin = true;
   s_frame_duration = sapp_frame_duration();
-  cnd_signal(&s_frame_begin_cnd);
-  mtx_unlock(&s_frame_begin_mtx);
+  condvar_signal(&s_frame_begin_cnd);
+  mutex_unlock(&s_frame_begin_mtx);
 
-  mtx_lock(&s_frame_end_mtx);
+  mutex_lock(&s_frame_end_mtx);
   while (!s_frame_end) {
-    cnd_wait(&s_frame_end_cnd, &s_frame_end_mtx);
+    condvar_wait(&s_frame_end_cnd, &s_frame_end_mtx);
   }
   s_frame_end = false;
   sg_update_image(
       s_bindings[0].fs.images[0],
       &(sg_image_data){.subimage[0][0] = SG_RANGE(s_frame_buffer)});
-  mtx_unlock(&s_frame_end_mtx);
+  mutex_unlock(&s_frame_end_mtx);
 
   sg_update_image(s_bindings[1].fs.images[0],
                   &(sg_image_data){.subimage[0][0] = SG_RANGE(s_overlay_rgba)});
@@ -1006,16 +1006,16 @@ static void cleanup(void) {
   atomic_store(&s_running, false);
 
   // Make sure the emulator thread isn't waiting for the next frame.
-  mtx_lock(&s_frame_begin_mtx);
+  mutex_lock(&s_frame_begin_mtx);
   s_frame_begin = true;
-  cnd_signal(&s_frame_begin_cnd);
-  mtx_unlock(&s_frame_begin_mtx);
+  condvar_signal(&s_frame_begin_cnd);
+  mutex_unlock(&s_frame_begin_mtx);
 
-  mtx_lock(&s_emulator_done_mtx);
+  mutex_lock(&s_emulator_done_mtx);
   while (!s_emulator_done) {
-    cnd_wait(&s_emulator_done_cnd, &s_emulator_done_mtx);
+    condvar_wait(&s_emulator_done_cnd, &s_emulator_done_mtx);
   }
-  mtx_unlock(&s_emulator_done_mtx);
+  mutex_unlock(&s_emulator_done_mtx);
 
   if (s_write_joypad_filename) {
     FileData file_data;
@@ -1042,11 +1042,11 @@ static void event(const sapp_event *event) {
   }
 
   // Send the rest of the events to the emulator thread.
-  mtx_lock(&s_event_mtx);
+  mutex_lock(&s_event_mtx);
   if (s_event_count < MAX_EVENT_COUNT - 1) {
     s_events[s_event_count++] = *event;
   }
-  mtx_unlock(&s_event_mtx);
+  mutex_unlock(&s_event_mtx);
 }
 
 sapp_desc sokol_main(int argc, char *argv[]) {

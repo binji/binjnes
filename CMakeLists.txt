@@ -13,6 +13,18 @@ if (UNIX AND NOT APPLE)
   set(LINUX TRUE)
 endif ()
 
+include(CheckIncludeFile)
+CHECK_INCLUDE_FILE("threads.h" HAVE_C11_THREADS)
+CHECK_INCLUDE_FILE("pthread.h" HAVE_PTHREADS)
+
+if (HAVE_C11_THREADS)
+  add_definitions(-DBINJNES_THREAD_C11)
+elseif (HAVE_PTHREADS)
+  add_definitions(-DBINJNES_THREAD_PTHREADS)
+else ()
+  message(WARNING "No thread library found")
+endif ()
+
 if (CMAKE_CXX_COMPILER_ID MATCHES "Clang|GNU")
   if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
     add_definitions(-DBINJNES_CLANG)
