@@ -818,7 +818,7 @@ static void init_ppu_steps(E* e) {
                             ? s_lines_shared
                             : s_system_lines[e->ci.system] - num_shared_lines;
       for (int dot = 0; dot < num_dots; ++dot) {
-        int step = line * num_dots + dot;
+        int step = (int)(line * num_dots + dot);
         e->ppu_steps[step * 2 + enabled] =
             s_funcs[s_steps[lines[line]][dot] + offset];
       }
@@ -1199,19 +1199,19 @@ static void apu_tick(E *e, u64 cy, bool odd) {
     f32x4 sampvol = v128_mul_f32(v128_and(sample, play_mask4), a->vol);
 
     if (a->update & 0b11) {
-      static const f32 PA = 0.00179243811624196780,
+      static const f32 PA = 0.00179243811624196780f,
                        PB = 0.01113128890176917629f,
                        PC = -0.00008652593542076564f;
       f32 p = sampvol.af32[0] + sampvol.af32[1];
       a->pulse_mixed = PA + p * (PB + p * PC);
     }
     if (a->update & 0b11100) {
-      static const f32 TA = 0.00301475811951945616,
+      static const f32 TA = 0.00301475811951945616f,
                        TB = 0.00672613157755397317f,
                        TC = -0.00002214573369713896f,
                        TD = 0.00000003625915434472f,
-                       tri_factor = 2.7516713261213077,
-                       noise_factor = 1.8493587125234867;
+                       tri_factor = 2.7516713261213077f,
+                       noise_factor = 1.8493587125234867f;
       f32 t = tri_factor * sampvol.af32[2] + noise_factor * sampvol.af32[3] +
               a->dmcout;
       a->tridmc_mixed = TA + t * (TB + t * (TC + t * TD));
@@ -2320,7 +2320,7 @@ static int mapper4_predict_irq_delta_cy(E* e, int irq_counter, u32 state,
               &e->mmc3_a12_high[e->mmc3_a12_high_count], state, MAPPER4_GET,
               MAPPER4_CMP);
   assert(a12_high != NULL);
-  u32 index = a12_high - &e->mmc3_a12_high[0];
+  u32 index = (u32)(a12_high - &e->mmc3_a12_high[0]);
   while (e->mmc3_a12_high[index] < state) {
     if (++index == e->mmc3_a12_high_count) {
       index = 0;
@@ -2344,7 +2344,7 @@ static int mapper4_predict_irq_delta_cy(E* e, int irq_counter, u32 state,
 #undef MAPPER4_GET
 #undef MAPPER4_CMP
   assert(irq_clock != NULL);
-  index = irq_clock - &e->mmc3_irq_clock[0];
+  index = (u32)(irq_clock - &e->mmc3_irq_clock[0]);
   if (e->mmc3_irq_clock[index] < state && ++index == e->mmc3_irq_clock_count) {
     index = 0;
   }
@@ -4126,7 +4126,7 @@ void mapper69_write(E *e, u16 addr, u8 val) {
           break;
         case 8: case 9: case 10: {
           int ch = m->fme7.reg_select - 8;
-          m->fme7.vol.af32[ch] = val & 0xf;
+          m->fme7.vol.af32[ch] = (f32)(val & 0xf);
         }
       }
       break;

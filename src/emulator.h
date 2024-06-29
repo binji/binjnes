@@ -358,7 +358,7 @@ typedef struct Emulator {
   u32 mmc3_a12_high[84*241];  // Cache all PPU states where A12 will go high.
   u32 mmc3_a12_high_count;
   u32 mmc3_irq_clock[4*241];  // Cache all PPU states where IRQ will clock.
-  u32 mmc3_irq_clock_count;;
+  u32 mmc3_irq_clock_count;
 } Emulator;
 
 

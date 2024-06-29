@@ -101,7 +101,61 @@ static inline Result condvar_signal(condvar* c) {
 
 #elif BINJNES_THREAD_WIN32
 
-#error TODO
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+
+typedef HANDLE thread;
+typedef CRITICAL_SECTION mutex;
+typedef CONDITION_VARIABLE condvar;
+
+typedef struct {
+  int (*func)(void*);
+  void* arg;
+} thread_data;
+
+static inline DWORD WINAPI thread_thunk(_In_ LPVOID arg) {
+  thread_data* td = arg;
+  int result = (*td->func)(td->arg);
+  free(td);
+  (void)result;
+  return 0;
+}
+
+static inline Result thread_create(thread* t, int (*func)(void*), void* arg) {
+	thread_data* td = malloc(sizeof(thread_data));
+	td->func = func;
+	td->arg = arg;
+	t = CreateThread(NULL, 0, thread_thunk, td, 0, NULL);
+	return t == NULL ? ERROR : OK;
+}
+
+// Mutex.
+static inline Result mutex_init(mutex* m) {
+	InitializeCriticalSection(m);
+	return OK;
+}
+static inline Result mutex_lock(mutex* m) {
+	EnterCriticalSection(m);
+	return OK;
+}
+static inline Result mutex_unlock(mutex* m) {
+	LeaveCriticalSection(m);
+	return OK;
+}
+
+// Condition Variable.
+static inline Result condvar_init(condvar* c) {
+	InitializeConditionVariable(c);
+	return OK;
+}
+static inline Result condvar_wait(condvar* c, mutex* m) {
+	SleepConditionVariableCS(c, m, INFINITE);
+	return OK;
+}
+static inline Result condvar_signal(condvar* c) {
+	WakeConditionVariable(c);
+	return OK;
+}
 
 #else
 

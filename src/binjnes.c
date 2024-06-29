@@ -72,7 +72,7 @@ static bool s_emulator_done;
 static mutex s_event_mtx;
 static sapp_event s_events[MAX_EVENT_COUNT];
 static size_t s_event_count;
-static AtomicBool s_running = true;
+static AtomicBool s_running;
 static f64 s_frame_duration;
 
 static const char *s_rom_filename;
@@ -907,6 +907,7 @@ static void handle_events(void) {
 static int emulator_thread(void *arg) {
   init_emulator();
   set_status_text("Loaded %s", s_rom_filename);
+  atomic_store_bool(&s_running, true);
   while (atomic_load_bool(&s_running)) {
     if (!s_paused && s_fast_forward) {
       handle_events();
