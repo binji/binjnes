@@ -6387,6 +6387,16 @@ static Result init_emulator(E *e, const EInit *init) {
         e->s.c.ram[a] = a & 4 ? 0xff : 0;
       }
       break;
+    case RAM_INIT_RANDOM: {
+      u32 seed = init->random_seed;
+      randomize_buffer(&seed, e->s.c.ram, sizeof(e->s.c.ram));
+      randomize_buffer(&seed, e->s.c.prg_ram, sizeof(e->s.c.prg_ram));
+      randomize_buffer(&seed, e->s.p.ram, sizeof(e->s.p.ram));
+      randomize_buffer(&seed, e->s.p.chr_ram, sizeof(e->s.p.chr_ram));
+      randomize_buffer(&seed, e->s.p.palram, sizeof(e->s.p.palram));
+      update_palette(e);
+      break;
+    }
   }
 
   return OK;

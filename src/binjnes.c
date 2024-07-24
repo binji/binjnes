@@ -253,7 +253,7 @@ static void usage(int argc, char** argv) {
       "  --init-ram RAM_INIT     which values to initialize ram\n"
       "\n"
       " CONTROLLER is 'joypad' (default), 'zapper' or 'snesmouse'\n"
-      " RAM_INIT is 'zero' (default) or 'fceux'\n",
+      " RAM_INIT is 'zero' (default), 'fceux', or 'random'\n",
       argv[0]);
 }
 
@@ -343,6 +343,8 @@ static void parse_arguments(int argc, char** argv) {
                 s_ram_init = RAM_INIT_ZERO;
               } else if (strcmp(result.value, "fceux") == 0) {
                 s_ram_init = RAM_INIT_FCEUX;
+              } else if (strcmp(result.value, "random") == 0) {
+                s_ram_init = RAM_INIT_RANDOM;
               } else {
                 PRINT_ERROR("ERROR: unknown ram initialization type '%s'.\n\n",
                             result.value);
@@ -564,7 +566,7 @@ static void init_emulator(void) {
       .audio_frequency = AUDIO_FREQUENCY,
       .audio_frames = AUDIO_FRAMES,
       .ram_init = s_ram_init,
-      .random_seed = 0,
+      .random_seed = s_random_seed,
   });
   CHECK(e != NULL);
 

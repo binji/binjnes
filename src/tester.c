@@ -112,7 +112,7 @@ void usage(int argc, char** argv) {
       "  -s,--seed SEED                   random seed used for initializing RAM\n"
       "\n"
       " FORMAT is 'ppm' (default), 'bmp', or 'png'\n"
-      " RAM_INIT is 'zero' (default) or 'fceux'\n";
+      " RAM_INIT is 'zero' (default), 'fceux', or 'random'\n";
 
   PRINT_ERROR(usage, argv[0], DEFAULT_FRAMES);
 }
@@ -234,6 +234,8 @@ void parse_options(int argc, char**argv) {
                 s_ram_init = RAM_INIT_ZERO;
               } else if (strcmp(result.value, "fceux") == 0) {
                 s_ram_init = RAM_INIT_FCEUX;
+              } else if (strcmp(result.value, "random") == 0) {
+                s_ram_init = RAM_INIT_RANDOM;
               } else {
                 PRINT_ERROR("ERROR: unknown ram initialization type '%s'.\n\n",
                             result.value);

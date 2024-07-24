@@ -32,6 +32,7 @@ typedef void (*JoypadCallback)(struct SystemInput *input, void *user_data,
 typedef enum RamInit {
   RAM_INIT_ZERO,
   RAM_INIT_FCEUX,
+  RAM_INIT_RANDOM,
 } RamInit;
 
 typedef struct JoypadCallbackInfo {
@@ -59,7 +60,7 @@ typedef struct EmulatorInit {
   int audio_frequency;
   int audio_frames;
   RamInit ram_init;
-  u32 random_seed;  // Currently unused.
+  u32 random_seed;
 } EmulatorInit;
 
 typedef struct EmulatorConfig {
