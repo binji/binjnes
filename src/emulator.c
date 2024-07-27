@@ -2316,52 +2316,62 @@ static int mapper4_predict_irq_delta_cy(E* e, int irq_counter, u32 state,
   if (irq_counter == 0) return 0;
 #define MAPPER4_GET(x) (x)
 #define MAPPER4_CMP(x, y) ((x) < (y))
-  LOWER_BOUND(u32, a12_high, &e->mmc3_a12_high[0],
-              &e->mmc3_a12_high[e->mmc3_a12_high_count], state, MAPPER4_GET,
+  u32 *a12_high_begin = &e->mmc3_a12_high[0],
+      *a12_high_end = &e->mmc3_a12_high[e->mmc3_a12_high_count];
+  LOWER_BOUND(u32, a12_high, a12_high_begin, a12_high_end, state, MAPPER4_GET,
               MAPPER4_CMP);
   assert(a12_high != NULL);
-  u32 index = (u32)(a12_high - &e->mmc3_a12_high[0]);
-  while (e->mmc3_a12_high[index] < state) {
-    if (++index == e->mmc3_a12_high_count) {
-      index = 0;
+  // Advance to next a12 high after state.
+  while (*a12_high < state) {
+    if (++a12_high == a12_high_end) {
+      a12_high = e->mmc3_a12_high;
       break;
     }
   }
-  if (irq_counter == 1) {
-    int diff = e->mmc3_a12_high[index] - state;
-    DEBUG("irq_counter=%u low_count=%u state=%u next_high=%u (diff=%d)\n",
-          irq_counter, (u32)e->s.p.a12_low_count, state,
-          e->mmc3_a12_high[index], diff);
-    if (diff + e->s.p.a12_low_count >= 10) {
+  int diff = *a12_high - state;
+  DEBUG("irq_counter=%u low_count=%u state=%u [%u:%u] next_high=%u (diff=%d)\n",
+        irq_counter, (u32)e->s.p.a12_low_count, state, state % 341, state / 341,
+        *a12_high, diff);
+  if (diff + e->s.p.a12_low_count >= 10) {
+    if (--irq_counter == 0) {
       return diff;
     }
+    dcy += diff;
+    state = *a12_high;
+    DEBUG("  moved to [%u:%u] (clocks=%u)\n", state % 341, state / 341,
+           irq_counter);
   }
 
   // binary search to find next clock.
-  LOWER_BOUND(u32, irq_clock, &e->mmc3_irq_clock[0],
-              &e->mmc3_irq_clock[e->mmc3_irq_clock_count], state, MAPPER4_GET,
-              MAPPER4_CMP);
+  u32 *irq_clock_begin = &e->mmc3_irq_clock[0],
+      *irq_clock_end = &e->mmc3_irq_clock[e->mmc3_irq_clock_count];
+  LOWER_BOUND(u32, irq_clock, irq_clock_begin, irq_clock_end, state,
+              MAPPER4_GET, MAPPER4_CMP);
 #undef MAPPER4_GET
 #undef MAPPER4_CMP
   assert(irq_clock != NULL);
-  index = (u32)(irq_clock - &e->mmc3_irq_clock[0]);
-  if (e->mmc3_irq_clock[index] < state && ++index == e->mmc3_irq_clock_count) {
-    index = 0;
+  if (state == *irq_clock) {
+    // If clock would occur at this current state, then we shouldn't count it,
+    // but we always decrement irq_counter at the beginning of the loop. So
+    // pre-increment it here.
+    irq_counter++;
+  } else if (*irq_clock < state && ++irq_clock == irq_clock_end) {
+    irq_clock = irq_clock_begin;
   }
   DEBUG("started at [%u:%u] (clocks=%u)\n", state % 341, state / 341,
         irq_counter);
   while (--irq_counter >= 0) {
     u32 last_dcy = dcy;
-    u32 next_clock = e->mmc3_irq_clock[index++];
-    if (index == e->mmc3_irq_clock_count) index = 0;
-    if (next_clock < state) {
+    u32 next_state = *irq_clock++;
+    if (irq_clock == irq_clock_end) irq_clock = irq_clock_begin;
+    if (next_state < state) {
       const int num_dots = 341 * s_ppu_num_lines[e->ci.system];
-      dcy += next_clock + (num_dots - state -
+      dcy += next_state + (num_dots - state -
                            (e->ci.system == SYSTEM_NTSC && (odd_frame ^= 1)));
     } else {
-      dcy += next_clock - state;
+      dcy += next_state - state;
     }
-    state = next_clock;
+    state = next_state;
     DEBUG("moved to [%u:%u] (state=%u) (+%d) (clocks=%u)\n", state % 341,
           state / 341, state, dcy - last_dcy, irq_counter);
   }
@@ -2393,7 +2403,8 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   int counter = reload ? m->mmc3.irq_latch + 1 : p->a12_irq_counter;
   int dcy =
       mapper4_predict_irq_delta_cy(e, counter, pstate, p->frame & 1);
-  DEBUG("  scheduling mapper irq at %" PRIu64 " (%+d)\n", cy + dcy, dcy);
+  DEBUG("  scheduling mapper irq at %" PRIu64 " (%+d)\n",
+         cy + (dcy + 1) * e->ppu_divider, dcy);
   sched_at(e, SCHED_MAPPER_IRQ, cy + (dcy + 1) * e->ppu_divider, "mapper4");
 }
 
