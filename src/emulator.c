@@ -2300,13 +2300,40 @@ static void mapper4_calculate_a12_high_table(E *e) {
 static void mapper4_calculate_irq_clock_table(E *e) {
   if (e->mmc3_a12_high_count == 0) return;
   const int num_dots = 341 * s_ppu_num_lines[e->ci.system];
-  int last_low = e->mmc3_a12_high[e->mmc3_a12_high_count - 1] - num_dots + 2;
-  for (u32 i = 0; i < e->mmc3_a12_high_count; ++i) {
-    int cur_high = e->mmc3_a12_high[i];
-    if (cur_high - last_low >= 10) {
-      e->mmc3_irq_clock[e->mmc3_irq_clock_count++] = cur_high;
+  if (e->ci.submapper == SUBMAPPER_4_MC_ACC) {
+    // Count all the transitions from a12 hi->lo.
+    int last_high = -1;
+    int last_y = 0;
+    for (u32 i = 0; i < e->mmc3_a12_high_count; ++i) {
+      int cur_high = e->mmc3_a12_high[i];
+      if (last_high >= 0 && cur_high - last_high > 2) {
+        assert(e->mmc3_irq_clock_count + 1 < ARRAY_SIZE(e->mmc3_irq_clock));
+        e->mmc3_irq_clock[e->mmc3_irq_clock_count++] = last_high + 2;
+        DEBUG("[%u:%u] ", (last_high + 2) % 341, (last_high + 2) / 341);
+      }
+      if ((last_high + 2) / 341 != last_y) {
+        DEBUG("\n");
+        last_y = (last_high + 2) / 341;
+      }
+      last_high = cur_high;
     }
-    last_low = cur_high + 2;
+    // Loop the last time around.
+    int cur_high = e->mmc3_a12_high[0] + num_dots;
+    if (cur_high - last_high > 2) {
+      assert(e->mmc3_irq_clock_count + 1 < ARRAY_SIZE(e->mmc3_irq_clock));
+      e->mmc3_irq_clock[e->mmc3_irq_clock_count++] = last_high + 2;
+      DEBUG("[%u:%u] ", (last_high + 2) % 341, (last_high + 2) / 341);
+    }
+  } else {
+    // Count all the transitions from a12 lo->hi.
+    int last_low = e->mmc3_a12_high[e->mmc3_a12_high_count - 1] - num_dots + 2;
+    for (u32 i = 0; i < e->mmc3_a12_high_count; ++i) {
+      int cur_high = e->mmc3_a12_high[i];
+      if (cur_high - last_low >= 10) {
+        e->mmc3_irq_clock[e->mmc3_irq_clock_count++] = cur_high;
+      }
+      last_low = cur_high + 2;
+    }
   }
 }
 
@@ -2328,52 +2355,98 @@ static int mapper4_predict_irq_delta_cy(E* e, int irq_counter, u32 state,
       break;
     }
   }
-  int diff = *a12_high - state;
-  DEBUG("irq_counter=%u low_count=%u state=%u [%u:%u] next_high=%u (diff=%d)\n",
+  if (e->ci.submapper == SUBMAPPER_4_MC_ACC) {
+    // binary search to find next clock.
+    u32 *irq_clock_begin = &e->mmc3_irq_clock[0],
+        *irq_clock_end = &e->mmc3_irq_clock[e->mmc3_irq_clock_count];
+    LOWER_BOUND(u32, irq_clock, irq_clock_begin, irq_clock_end, state,
+                MAPPER4_GET, MAPPER4_CMP);
+    if (*irq_clock < state && ++irq_clock == irq_clock_end) {
+      irq_clock = irq_clock_begin;
+    }
+    int diff = *irq_clock - state;
+    DEBUG(
+        "irq_counter=%u low=%u low_count=%u state=%u [%u:%u] irq_clock=%u "
+        "(diff=%d)\n",
+        irq_counter, e->s.p.a12_low, (u32)e->s.p.a12_low_count, state,
+        state % 341, state / 341, *irq_clock, diff);
+
+    int clock_count = (irq_counter - 1) * 8 + (8 - e->s.p.a12_low_count);
+    if (!e->s.p.a12_low && *a12_high - state > 2) {
+      DEBUG("  going high->low (next high at [%u:%u])\n", *a12_high % 341,
+             *a12_high / 341);
+      --clock_count;
+    }
+    DEBUG("started at [%u:%u] (clocks=%u)\n", state % 341, state / 341,
+           clock_count);
+    while (--clock_count >= 0) {
+      u32 last_dcy = dcy;
+      u32 next_state = *irq_clock++;
+      if (next_state > 90000) {
+        DEBUG("wtf\n");
+      }
+      if (irq_clock == irq_clock_end) irq_clock = irq_clock_begin;
+      if (next_state < state) {
+        const int num_dots = 341 * s_ppu_num_lines[e->ci.system];
+        dcy += next_state + (num_dots - state -
+                             (e->ci.system == SYSTEM_NTSC && (odd_frame ^= 1)));
+      } else {
+        dcy += next_state - state;
+      }
+      state = next_state;
+      if (dcy - last_dcy < 2) ++clock_count;
+      DEBUG("moved to [%u:%u] (state=%u) (+%d) (clocks=%u)\n", state % 341,
+            state / 341, state, dcy - last_dcy, clock_count);
+    }
+  } else {
+    int diff = *a12_high - state;
+    DEBUG(
+        "irq_counter=%u low_count=%u state=%u [%u:%u] next_high=%u (diff=%d)\n",
         irq_counter, (u32)e->s.p.a12_low_count, state, state % 341, state / 341,
         *a12_high, diff);
-  if (diff + e->s.p.a12_low_count >= 10) {
-    if (--irq_counter == 0) {
-      return diff;
+    if (diff + e->s.p.a12_low_count >= 10) {
+      if (--irq_counter == 0) {
+        return diff;
+      }
+      dcy += diff;
+      state = *a12_high;
+      DEBUG("  moved to [%u:%u] (clocks=%u)\n", state % 341, state / 341,
+            irq_counter);
     }
-    dcy += diff;
-    state = *a12_high;
-    DEBUG("  moved to [%u:%u] (clocks=%u)\n", state % 341, state / 341,
-           irq_counter);
-  }
 
-  // binary search to find next clock.
-  u32 *irq_clock_begin = &e->mmc3_irq_clock[0],
-      *irq_clock_end = &e->mmc3_irq_clock[e->mmc3_irq_clock_count];
-  LOWER_BOUND(u32, irq_clock, irq_clock_begin, irq_clock_end, state,
-              MAPPER4_GET, MAPPER4_CMP);
+    // binary search to find next clock.
+    u32 *irq_clock_begin = &e->mmc3_irq_clock[0],
+        *irq_clock_end = &e->mmc3_irq_clock[e->mmc3_irq_clock_count];
+    LOWER_BOUND(u32, irq_clock, irq_clock_begin, irq_clock_end, state,
+                MAPPER4_GET, MAPPER4_CMP);
 #undef MAPPER4_GET
 #undef MAPPER4_CMP
-  assert(irq_clock != NULL);
-  if (state == *irq_clock) {
-    // If clock would occur at this current state, then we shouldn't count it,
-    // but we always decrement irq_counter at the beginning of the loop. So
-    // pre-increment it here.
-    irq_counter++;
-  } else if (*irq_clock < state && ++irq_clock == irq_clock_end) {
-    irq_clock = irq_clock_begin;
-  }
-  DEBUG("started at [%u:%u] (clocks=%u)\n", state % 341, state / 341,
-        irq_counter);
-  while (--irq_counter >= 0) {
-    u32 last_dcy = dcy;
-    u32 next_state = *irq_clock++;
-    if (irq_clock == irq_clock_end) irq_clock = irq_clock_begin;
-    if (next_state < state) {
-      const int num_dots = 341 * s_ppu_num_lines[e->ci.system];
-      dcy += next_state + (num_dots - state -
-                           (e->ci.system == SYSTEM_NTSC && (odd_frame ^= 1)));
-    } else {
-      dcy += next_state - state;
+    assert(irq_clock != NULL);
+    if (state == *irq_clock) {
+      // If clock would occur at this current state, then we shouldn't count it,
+      // but we always decrement irq_counter at the beginning of the loop. So
+      // pre-increment it here.
+      irq_counter++;
+    } else if (*irq_clock < state && ++irq_clock == irq_clock_end) {
+      irq_clock = irq_clock_begin;
     }
-    state = next_state;
-    DEBUG("moved to [%u:%u] (state=%u) (+%d) (clocks=%u)\n", state % 341,
-          state / 341, state, dcy - last_dcy, irq_counter);
+    DEBUG("started at [%u:%u] (clocks=%u)\n", state % 341, state / 341,
+          irq_counter);
+    while (--irq_counter >= 0) {
+      u32 last_dcy = dcy;
+      u32 next_state = *irq_clock++;
+      if (irq_clock == irq_clock_end) irq_clock = irq_clock_begin;
+      if (next_state < state) {
+        const int num_dots = 341 * s_ppu_num_lines[e->ci.system];
+        dcy += next_state + (num_dots - state -
+                             (e->ci.system == SYSTEM_NTSC && (odd_frame ^= 1)));
+      } else {
+        dcy += next_state - state;
+      }
+      state = next_state;
+      DEBUG("moved to [%u:%u] (state=%u) (+%d) (clocks=%u)\n", state % 341,
+            state / 341, state, dcy - last_dcy, irq_counter);
+    }
   }
   return dcy;
 }
@@ -2403,8 +2476,9 @@ static void mapper4_reschedule_irq(E* e, u32 pstate, Ticks cy) {
   int counter = reload ? m->mmc3.irq_latch + 1 : p->a12_irq_counter;
   int dcy =
       mapper4_predict_irq_delta_cy(e, counter, pstate, p->frame & 1);
-  DEBUG("  scheduling mapper irq at %" PRIu64 " (%+d)\n",
-         cy + (dcy + 1) * e->ppu_divider, dcy);
+  u64 at = cy + (dcy + 1) * e->ppu_divider;
+  DEBUG("  scheduling mapper irq at %" PRIu64 " [%u:%u] (%+d)\n", at,
+         (u32)(at % 341), (u32)(at / 341), dcy);
   sched_at(e, SCHED_MAPPER_IRQ, cy + (dcy + 1) * e->ppu_divider, "mapper4");
 }
 
@@ -2478,6 +2552,12 @@ static void mapper4_write(E *e, u16 addr, u8 val) {
       if (addr & 1) {
         m->mmc3.irq_reload = true;
         e->s.p.a12_irq_counter = 0;
+        if (e->ci.submapper == SUBMAPPER_4_MC_ACC) {
+          DEBUG(
+              "  mapper4_write(%04x, %02x): setting low count to 0 [%u:%u]\n",
+              addr, val, ppu_dot(e), ppu_line(e));
+          e->s.p.a12_low_count = 7;
+        }
         mapper4_reschedule_irq(e, e->s.p.state, e->s.c.cy);
         DEBUG("     [%" PRIu64 "] mmc3 irq reload\n", e->s.cy);
       } else {
@@ -2507,56 +2587,80 @@ static void mapper4_on_ppu_addr_updated(E* e, u16 addr, Ticks cy,
   M* m = &e->s.m;
   P* p = &e->s.p;
 
+  bool clock_irq = false;
   bool low = (addr & 0x1000) == 0;
-  if (p->a12_low) {
-    p->a12_low_count += cy - p->last_vram_access_cy;
-  }
-  DEBUG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
-        ") (frame = %u) [%u:%u] (ppuctrl=%02x) (from_cpu=%u)\n",
-        cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, ppu_dot(e),
-        ppu_line(e), p->ppuctrl, from_cpu);
-
-  bool reschedule = false;
-  if (!low) {
-    if (p->a12_low_count >= 10 * e->ppu_divider) {
-      bool trigger_irq = false;
-      if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) [%u:%u]\n", cy,
-            p->frame, ppu_dot(e), ppu_line(e));
-        p->a12_irq_counter = m->mmc3.irq_latch;
-        m->mmc3.irq_reload = false;
-        if (e->ci.submapper != SUBMAPPER_4_NEC && p->a12_irq_counter == 0) {
-          trigger_irq = true;
-        }
-      } else {
-        DEBUG("     [%" PRIu64 "] mmc3 clocked (frame = %u) [%u:%u] (from_cpu=%u)\n", cy,
-            p->frame, ppu_dot(e), ppu_line(e), from_cpu);
-        if (--p->a12_irq_counter == 0) {
-          trigger_irq = true;
-        }
+  if (e->ci.submapper == SUBMAPPER_4_MC_ACC) {
+    if ((p->a12_low ^ low) & low) {
+      if (m->mmc3.irq_enable) {
+        DEBUG("  [%u:%u] hi->lo (count=%" PRIu64 ")\n", p->state % 341,
+              p->state / 341, p->a12_low_count);
       }
-
-      if (trigger_irq) {
-        if (m->mmc3.irq_enable) {
-          DEBUG("     [%" PRIu64 "] mmc3 irq (frame = %u) [%u:%u] (from_cpu=%u)\n", cy,
-              p->frame, ppu_dot(e), ppu_line(e), from_cpu);
-          e->s.c.irq |= IRQ_MAPPER;
-          if (!from_cpu) {
-            sched_occurred(e, SCHED_MAPPER_IRQ, cy);
-          }
-          reschedule = true;
-        }
-      } else if (from_cpu) {
-        reschedule = true;
+      if (++p->a12_low_count >= 8) {
+        p->a12_low_count = 0;
+        clock_irq = true;
       }
     }
-    p->a12_low_count = 0;
+  } else {
+    if (p->a12_low) {
+      p->a12_low_count += cy - p->last_vram_access_cy;
+    }
+    DEBUG("     [%" PRIu64 "] access=%04x a12=%s (%" PRIu64
+          ") (frame = %u) [%u:%u] (ppuctrl=%02x) (from_cpu=%u)\n",
+          cy, addr, low ? "lo" : "HI", p->a12_low_count, p->frame, ppu_dot(e),
+          ppu_line(e), p->ppuctrl, from_cpu);
+    if (!low) {
+      if (p->a12_low_count >= 10 * e->ppu_divider) {
+        clock_irq = true;
+      }
+      p->a12_low_count = 0;
+    }
   }
+
+  if (clock_irq) {
+    bool trigger_irq = false;
+    if (p->a12_irq_counter == 0 || m->mmc3.irq_reload) {
+      if (m->mmc3.irq_enable) {
+        DEBUG("     [%" PRIu64 "] mmc3 clocked at 0 (frame = %u) [%u:%u]\n", cy,
+              p->frame, ppu_dot(e), ppu_line(e));
+      }
+      p->a12_irq_counter = m->mmc3.irq_latch;
+      m->mmc3.irq_reload = false;
+      if (e->ci.submapper != SUBMAPPER_4_NEC && p->a12_irq_counter == 0) {
+        trigger_irq = true;
+      }
+    } else {
+      if (m->mmc3.irq_enable) {
+        DEBUG("     [%" PRIu64
+              "] mmc3 clocked (frame = %u) [%u:%u] (from_cpu=%u)\n",
+              cy, p->frame, ppu_dot(e), ppu_line(e), from_cpu);
+      }
+      if (--p->a12_irq_counter == 0) {
+        trigger_irq = true;
+      }
+    }
+
+    bool reschedule = false;
+    if (trigger_irq) {
+      if (m->mmc3.irq_enable) {
+        DEBUG("     [%" PRIu64
+              "] mmc3 irq (frame = %u) [%u:%u] (from_cpu=%u)\n",
+              cy, p->frame, ppu_dot(e), ppu_line(e), from_cpu);
+        e->s.c.irq |= IRQ_MAPPER;
+        if (!from_cpu) {
+          sched_occurred(e, SCHED_MAPPER_IRQ, cy);
+        }
+        reschedule = true;
+      }
+    } else if (from_cpu) {
+      reschedule = true;
+    }
+    if (reschedule) {
+      mapper4_reschedule_irq(e, e->s.p.state + 1, cy + e->ppu_divider);
+    }
+  }
+
   p->a12_low = low;
   p->last_vram_access_cy = cy;
-  if (reschedule) {
-    mapper4_reschedule_irq(e, e->s.p.state + 1, cy + e->ppu_divider);
-  }
 }
 
 static u8 mapper4_hkrom_prg_ram_read(E* e, u16 addr) {
