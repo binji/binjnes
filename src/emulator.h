@@ -156,10 +156,9 @@ typedef struct {
     } mmc3;
 
     struct {
-      u16 chr_bg_bank[4];
       u16 lastaddr;
       u8 ramprot[2];
-      u8 prg_mode, chr_mode, exram_mode, scan, scan_cmp, match_count;
+      u8 prg_mode, chr_mode, exram_mode, chr_hi, scan, scan_cmp, match_count;
       u8 mullo, mulhi;
       bool irq_enable, irq_pending, in_frame;
     } mmc5;

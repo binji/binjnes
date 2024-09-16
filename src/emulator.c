@@ -2907,7 +2907,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       u8 bankidx = addr - 0x5120;
       DEBUG("✓  CHR bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
             bankidx * 0x400 + 0x3ff, val);
-      m->chr_bank[bankidx] = m->chr_spr_bank[bankidx] = val;
+      m->chr_bank[bankidx] = m->chr_spr_bank[bankidx] =
+          (m->mmc5.chr_hi << 8) | val;
       memcpy(m->chr_bank, m->chr_spr_bank, sizeof(m->chr_bank));
       mapper5_update_chr(e);
       break;
@@ -2917,7 +2918,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
       u8 bankidx = addr - 0x5128;
       DEBUG("✓  CHR BG bankswitching %04x..%04x = %02x\n", bankidx * 0x400,
             bankidx * 0x400 + 0x3ff, val);
-      m->chr_bg_bank[bankidx] = m->chr_bg_bank[bankidx + 4] = val;
+      m->chr_bg_bank[bankidx] = m->chr_bg_bank[bankidx + 4] =
+          (m->mmc5.chr_hi << 8) | val;
       memcpy(m->chr_bank, m->chr_bg_bank, sizeof(m->chr_bank));
       mapper5_update_chr(e);
       break;
@@ -2925,6 +2927,8 @@ static void mapper5_write(E *e, u16 addr, u8 val) {
 
     case 0x5130:
       DEBUG("✓  CHR bank upper bits = %u\n", val & 3);
+      m->mmc5.chr_hi = val & 3;
+      mapper5_update_chr(e);
       break;
 
     case 0x5200:
@@ -6158,7 +6162,11 @@ static Result init_mapper(E *e) {
     e->s.m.prg_bank[3] = 0xff;
     e->s.m.mmc5.prg_mode = 3;
     e->s.m.mmc5.lastaddr = ~0;
-    set_mirror(e, e->ci.mirror);
+    for (int i = 8; i < 16; ++i) {
+      e->s.m.ppu1k_bank[i] = 0;
+      e->s.m.ppu1k_loc[i] = PPU_BANK_NTRAM;
+    }
+    update_nt_map_banking(e);
     set_chr8k_map(e, 0);
     set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
