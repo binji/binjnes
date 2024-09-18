@@ -165,7 +165,7 @@ typedef struct {
 
     struct {
       u8 bank_select;
-    } m206;
+    } m76, m206;
 
     struct {
       u8 prg_mode, irq_latch, irq_counter;
