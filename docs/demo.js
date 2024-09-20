@@ -143,7 +143,7 @@ let vm = new Vue({
             const hr = (secs / (60 * 60)) | 0;
             const min = zeroPadLeft((secs / 60) % 60, 2);
             const sec = zeroPadLeft(secs % 60, 2);
-            const ms = zeroPadLeft((secs / 1000) % 1000, 3);
+            const ms = zeroPadLeft((secs * 1000) % 1000, 3);
             return `${hr}:${min}:${sec}.${ms}`;
         },
         pauseLabel: function() {

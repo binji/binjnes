@@ -401,8 +401,8 @@
       <div v-if="loaded && paused">
         <div class="bar">
           <input type="range" id="rewind"
-            :min="rewind.minTicks" :max="rewind.maxTicks"
-            :value="ticks" @input="rewindTo">
+            :min="rewind.minSecs" :max="rewind.maxSecs"
+            :value="secs" :step="0.01" @input="rewindTo">
           <span id="rewindTime" class="right">{{rewindTime}}</span>
         </div>
       </div>
