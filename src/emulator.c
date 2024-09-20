@@ -6480,6 +6480,33 @@ static Result init_mapper(E *e) {
   ON_ERROR_RETURN;
 }
 
+static u32 random_u32(u32* state) {
+  /* xorshift32: https://en.wikipedia.org/wiki/Xorshift */
+  u32 x = *state;
+  x ^= x << 13;
+  x ^= x >> 17;
+  x ^= x << 5;
+  *state = x;
+  return x;
+}
+
+static void randomize_buffer(u32* seed, u8* buffer, u32 size) {
+  while (size >= sizeof(u32)) {
+    u32 x = random_u32(seed);
+    memcpy(buffer, &x, sizeof(x));
+    buffer += sizeof(u32);
+    size -= sizeof(u32);
+  }
+  if (size > 0) {
+    u32 x = random_u32(seed);
+    switch (size) {
+      case 3: *buffer++ = x & 0xff; x >>= 8; break;
+      case 2: *buffer++ = x & 0xff; x >>= 8; break;
+      case 1: *buffer++ = x & 0xff; x >>= 8; break;
+    }
+  }
+}
+
 static Result init_emulator(E *e, const EInit *init) {
   S* s = &e->s;
   ZERO_MEMORY(*s);

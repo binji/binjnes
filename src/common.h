@@ -149,9 +149,6 @@ Result file_read(const char* filename, FileData* out);
 Result file_write(const char* filename, const FileData*);
 void file_data_delete(FileData*);
 
-u32 random_u32(u32* state);
-void randomize_buffer(u32* seed, u8* buffer, u32 size);
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
