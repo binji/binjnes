@@ -4130,6 +4130,36 @@ static void mapper30_write(E *e, u16 addr, u8 val) {
                  e->ci.prg16k_banks - 1);
 }
 
+static void mapper33_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  switch (addr & 0xa003) {
+    case 0x8000:
+      set_mirror(e, ((val >> 6) & 1) + 2);
+      m->prg_bank[0] = val & 0x3f & (e->ci.prg8k_banks - 1);
+      goto update_prg;
+    case 0x8001:
+      m->prg_bank[1] = val & 0x3f & (e->ci.prg8k_banks - 1);
+      goto update_prg;
+    case 0x8002: case 0x8003:
+      m->chr_bank[addr & 1] = (val << 1) & (e->ci.chr1k_banks - 1);
+      goto update_chr;
+    case 0xa000: case 0xa001: case 0xa002: case 0xa003:
+      m->chr_bank[(addr & 3) + 2] = val & (e->ci.chr1k_banks - 1);
+      goto update_chr;
+
+    update_prg:
+      set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], e->ci.prg8k_banks - 2,
+                    e->ci.prg8k_banks - 1);
+      break;
+    update_chr:
+      set_chr1k_map(e, m->chr_bank[0], m->chr_bank[0] + 1, m->chr_bank[1],
+                    m->chr_bank[1] + 1, m->chr_bank[2], m->chr_bank[3],
+                    m->chr_bank[4], m->chr_bank[5]);
+      break;
+  }
+}
+
 static void mapper34_bnrom_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
@@ -6326,6 +6356,13 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
+    break;
+
+  case 33:
+    e->mapper_write = mapper33_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 1, 0, 1, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
 
   case 34:
