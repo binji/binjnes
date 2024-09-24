@@ -6299,6 +6299,9 @@ static Result init_mapper(E *e) {
       default: goto unsupported;
     }
     goto vrc4_shared;
+  case 22:
+    e->mapper_write = mapper_vrc2a_write;
+    goto vrc_shared;
   case 23:
     switch (e->ci.submapper) {
       case 0:                  e->mapper_write = mapper23_write; break;
