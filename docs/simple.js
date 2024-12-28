@@ -6,14 +6,11 @@
  */
 "use strict";
 
-const RESULT_OK = 0;
-const RESULT_ERROR = 1;
 const SCREEN_WIDTH = 256;
 const SCREEN_HEIGHT = 240;
 const AUDIO_FRAMES = 4096;
 const AUDIO_LATENCY_SEC = 0.1;
 const MAX_UPDATE_SEC = 5 / 60;
-const PPU_TICKS_PER_SECOND = 5369318;
 const EVENT_NEW_FRAME = 1;
 const EVENT_AUDIO_BUFFER_FULL = 2;
 const EVENT_UNTIL_TICKS = 4;
@@ -26,7 +23,7 @@ const binjnesPromise = Binjnes();
 // Extract stuff from the vue.js implementation in demo.js.
 class VM {
     constructor() {
-        this.ticks = 0;
+        this.secs = 0;
         this.paused_ = false;
         this.volume = 0.5;
     }
@@ -39,7 +36,7 @@ class VM {
         if (newPaused == oldPaused) return;
         if (newPaused) {
           emulator.pause();
-          this.ticks = emulator.ticks;
+          this.secs = emulator.secs;
         } else {
           emulator.resume();
         }
@@ -81,12 +78,14 @@ class Emulator {
 
     constructor(module, romBuffer) {
         this.module = module;
-        this.romDataPtr = this.module._malloc(romBuffer.byteLength);
-        let buf = makeWasmBuffer(this.module, this.romDataPtr, romBuffer.byteLength);
-        buf.set(new Uint8Array(romBuffer));
+        // Align size up to 32k.
+        const size = (romBuffer.byteLength + 0x7fff) & ~0x7fff;
+        this.romDataPtr = this.module._malloc(size);
+        makeWasmBuffer(this.module, this.romDataPtr, size)
+            .fill(0)
+            .set(new Uint8Array(romBuffer));
         this.e = this.module._emulator_new_simple(
-            this.romDataPtr, romBuffer.byteLength, Audio.ctx.sampleRate,
-            AUDIO_FRAMES);
+            this.romDataPtr, size, Audio.ctx.sampleRate, AUDIO_FRAMES);
         if (this.e == 0) {
             throw new Error('Invalid ROM.');
         }
@@ -97,7 +96,7 @@ class Emulator {
         this.joypadPtr = this.module._joypad_new_simple(this.e);
 
         this.lastRafSec = 0;
-        this.leftoverTicks = 0;
+        this.leftoverSecs = 0;
         this.fps = 60;
 
         this.bindKeys();
@@ -151,13 +150,13 @@ class Emulator {
         this.requestAnimationFrame();
     }
 
-    get ticks() {
-        return this.module._emulator_get_ticks_f64(this.e);
+    get secs() {
+        return this.module._emulator_get_secs(this.e);
     }
 
-    runUntil(ticks) {
+    runUntil(runUntilSecs) {
         while (true) {
-            const event = this.module._emulator_run_until_f64(this.e, ticks);
+            const event = this.module._emulator_run_until_secs(this.e, runUntilSecs);
             if (event & EVENT_NEW_FRAME) {
                 this.video.uploadTexture();
             }
@@ -165,26 +164,25 @@ class Emulator {
                 this.audio.pushBuffer();
             }
             if (event & EVENT_UNTIL_TICKS) {
+                this.video.renderTexture();
                 break;
             }
         }
     }
 
-    rafCallback(startMs) {
+    rafCallback(rafStartMs) {
         this.requestAnimationFrame();
         let deltaSec = 0;
-        const startSec = startMs / 1000;
+        const startSec = rafStartMs / 1000;
         deltaSec = Math.max(startSec - (this.lastRafSec || startSec), 0);
-        const startTicks = this.ticks;
-        const deltaTicks =
-            Math.min(deltaSec, MAX_UPDATE_SEC) * PPU_TICKS_PER_SECOND;
-        const runUntilTicks = (startTicks + deltaTicks - this.leftoverTicks);
-        this.runUntil(runUntilTicks);
-        this.leftoverTicks = (this.ticks - runUntilTicks) | 0;
         this.lastRafSec = startSec;
-        const lerp = (from, to, alpha) => (alpha * from) + (1 - alpha) * to;
-        this.fps = lerp(this.fps, Math.min(1 / deltaSec, 10000), 0.3);
-        this.video.renderTexture();
+        const startSecs = this.secs;
+        const deltaSecs = Math.min(deltaSec, MAX_UPDATE_SEC);
+        const runUntilSecs = startSecs + deltaSecs - this.leftoverSecs;
+        const startMs = performance.now();
+        this.runUntil(runUntilSecs);
+        const endMs = performance.now();
+        this.msPerFrame = endMs - startMs;
     }
 
     bindKeys() {
@@ -283,25 +281,28 @@ Audio.ctx = new AudioContext;
 
 class Video {
     constructor(module, e, el) {
-        this.buffer = new Uint16Array(module.HEAP16.buffer,
+        this.videoBuffer = new Uint16Array(
+            module.HEAP16.buffer,
             module._get_frame_buffer_ptr(e),
             module._get_frame_buffer_size(e) >> 1);
-        this.rgbaBuffer = new Uint32Array(module.HEAP32.buffer,
-            module._get_rgba_frame_buffer_ptr(e),
-            module._get_rgba_frame_buffer_size(e) >> 2);
-        const palette = new Uint32Array(module.HEAP16.buffer,
+        this.paletteBuffer = new Uint32Array(
+            module.HEAP32.buffer,
             module._get_palette_ptr(e),
-            module._get_palette_size(e) >> 2)
+            module._get_palette_size(e) >> 2);
         try {
-          this.renderer = new WebGLRenderer(el, palette);
+          this.renderer = new WebGLRenderer(el);
+          this.renderer.setPalette(this.paletteBuffer);
         } catch (error) {
-          console.log(`Error creating WebGLRenderer: ${error}`);
-          this.renderer = new Canvas2DRenderer(module, e, el);
+            console.log(`Error creating WebGLRenderer: ${error}`);
         }
     }
 
+    setPalette() {
+        this.renderer.setPalette(this.paletteBuffer);
+    }
+
     uploadTexture() {
-        this.renderer.uploadTexture(this.buffer, this.rgbaBuffer);
+        this.renderer.uploadTexture(this.videoBuffer);
     }
 
     renderTexture() {
@@ -309,28 +310,8 @@ class Video {
     }
 }
 
-class Canvas2DRenderer {
-    constructor(module, e, el) {
-        this.ctx = el.getContext('2d');
-        this.module = module;
-        this.e = e;
-        this.imageData = this.ctx.createImageData(el.width, el.height);
-    }
-
-    renderTexture() {
-        this.ctx.putImageData(this.imageData, 0, 0);
-    }
-
-    uploadTexture(buffer, rgbaBuffer) {
-        this.module._emulator_convert_frame_buffer_simple(this.e);
-        const clamped = new Uint8ClampedArray(
-            rgbaBuffer.buffer, rgbaBuffer.byteOffset, rgbaBuffer.byteLength);
-        this.imageData.data.set(clamped);
-    }
-}
-
 class WebGLRenderer {
-    constructor(el, palette) {
+    constructor(el) {
         const gl = this.gl = el.getContext('webgl2', {preserveDrawingBuffer: true});
         if (gl === null) {
             throw new Error('unable to create webgl context');
@@ -365,30 +346,30 @@ class WebGLRenderer {
         }
 
         const vertexShader = compileShader(gl.VERTEX_SHADER,
-           `#version 300 es
-            in vec2 aPos;
-            in vec2 aTexCoord;
-            out vec2 vTexCoord;
-            void main(void) {
-                gl_Position = vec4(aPos, 0.0, 1.0);
-                vTexCoord = aTexCoord;
-            }`);
+             `#version 300 es
+                in vec2 aPos;
+                in vec2 aTexCoord;
+                out vec2 vTexCoord;
+                void main(void) {
+                    gl_Position = vec4(aPos, 0.0, 1.0);
+                    vTexCoord = aTexCoord;
+                }`);
         const fragmentShader = compileShader(gl.FRAGMENT_SHADER,
-           `#version 300 es
-            precision highp float;
-            in vec2 vTexCoord;
-            out vec4 outColor;
-            uniform highp usampler2D uSampler;
-            uniform uint uPalette[512];
-            void main(void) {
-                uint color = uPalette[texture(uSampler, vTexCoord).r & 511u];
-                outColor = vec4(
-                    float((color >> 0) & 0xffu) / 255.5f,
-                    float((color >> 8) & 0xffu) / 255.5f,
-                    float((color >> 16) & 0xffu) / 255.5f,
-                    1.0f
-                );
-            }`);
+             `#version 300 es
+                precision highp float;
+                in vec2 vTexCoord;
+                out vec4 outColor;
+                uniform highp usampler2D uSampler;
+                uniform uint uPalette[512];
+                void main(void) {
+                    uint color = uPalette[texture(uSampler, vTexCoord).r & 511u];
+                    outColor = vec4(
+                        float((color >> 0) & 0xffu) / 255.5f,
+                        float((color >> 8) & 0xffu) / 255.5f,
+                        float((color >> 16) & 0xffu) / 255.5f,
+                        1.0f
+                    );
+                }`);
 
         const program = gl.createProgram();
         gl.attachShader(program, vertexShader);
@@ -409,7 +390,12 @@ class WebGLRenderer {
         gl.vertexAttribPointer(aPos, 2, gl.FLOAT, gl.FALSE, 16, 0);
         gl.vertexAttribPointer(aTexCoord, 2, gl.FLOAT, gl.FALSE, 16, 8);
         gl.uniform1i(uSampler, 0);
-        gl.uniform1uiv(uPalette, palette);
+        gl.uniform1uiv(uPalette, new Uint32Array(512));
+        this.uPalette = uPalette;
+    }
+
+    setPalette(palette) {
+        this.gl.uniform1uiv(this.uPalette, palette);
     }
 
     renderTexture() {
