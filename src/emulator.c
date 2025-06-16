@@ -1516,6 +1516,7 @@ static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
                 (ctrl->joyp.down << 5) | (ctrl->joyp.up << 4) |
                 (ctrl->joyp.start << 3) | (ctrl->joyp.select << 2) |
                 (ctrl->joyp.B << 1) | (ctrl->joyp.A << 0);
+            j->port[i].orig_serial = j->port[i].serial;
             if (j->port[i].serial) {
               print_byte(0x4016 + i, j->port[i].serial, 5, "RLDUTEBA");
             }
@@ -1538,6 +1539,7 @@ static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
             u8 b3 = dx < 0 ? 0x80 | (u8)(-dx) : dx;
             j->port[i].serial =
                 (reverse(b3) << 24) | (reverse(b2) << 16) | (reverse(b1) << 8);
+            j->port[i].orig_serial = j->port[i].serial;
           }
           break;
       }
@@ -1545,7 +1547,7 @@ static inline u8 read_joyp(E* e, int index, bool write, u8 val) {
   } else {
     for (int i = 0; i < 2; ++i) {
       j->port[i].type = CONTROLLER_JOYPAD;
-      j->port[i].serial = 0;
+      j->port[i].serial = j->port[i].orig_serial = 0;
     }
   }
 

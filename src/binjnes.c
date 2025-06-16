@@ -27,6 +27,10 @@
 #define STATUS_TEXT_X 2
 #define STATUS_TEXT_Y (SCREEN_HEIGHT - 8 - GLYPH_HEIGHT - 2)
 #define STATUS_TEXT_RGBA MAKE_RGBA(255, 0, 0, 255)
+#define FRAME_COUNTER_TEXT_X STATUS_TEXT_X
+#define FRAME_COUNTER_TEXT_Y (STATUS_TEXT_Y - GLYPH_HEIGHT - 2)
+#define JOYPAD_TEXT_X 100
+#define JOYPAD_TEXT_Y (STATUS_TEXT_Y - GLYPH_HEIGHT - 2)
 #define STATUS_TEXT_TIMEOUT 120 /* Frames */
 
 // TODO: make these configurable?
@@ -227,7 +231,31 @@ static void update_overlay(void) {
     char buf[128];
     snprintf(buf, sizeof(buf), "f%u lag:%u %.1f fps", e->s.p.frame + 1,
              e->s.c.lag_frames, fps);
-    draw_rect_str(STATUS_TEXT_X, STATUS_TEXT_Y - GLYPH_HEIGHT - 2,
+    draw_rect_str(FRAME_COUNTER_TEXT_X, FRAME_COUNTER_TEXT_Y,
+                  MAKE_RGBA(224, 224, 224, 255), STATUS_TEXT_RGBA, buf);
+
+    u32 p1 = e->s.j.port[0].orig_serial;
+    u32 p2 = e->s.j.port[1].orig_serial;
+    snprintf(buf, sizeof(buf), "%c%c%c%c%c%c%c%c %c%c%c%c%c%c%c%c",
+        p1 & 0x80 ? 'R' : ' ',
+        p1 & 0x40 ? 'L' : ' ',
+        p1 & 0x20 ? 'D' : ' ',
+        p1 & 0x10 ? 'U' : ' ',
+        p1 & 0x08 ? 'T' : ' ',
+        p1 & 0x04 ? 'E' : ' ',
+        p1 & 0x02 ? 'B' : ' ',
+        p1 & 0x01 ? 'A' : ' ',
+
+        p2 & 0x80 ? 'R' : ' ',
+        p2 & 0x40 ? 'L' : ' ',
+        p2 & 0x20 ? 'D' : ' ',
+        p2 & 0x10 ? 'U' : ' ',
+        p2 & 0x08 ? 'T' : ' ',
+        p2 & 0x04 ? 'E' : ' ',
+        p2 & 0x02 ? 'B' : ' ',
+        p2 & 0x01 ? 'A' : ' '
+        );
+    draw_rect_str(JOYPAD_TEXT_X, JOYPAD_TEXT_Y,
                   MAKE_RGBA(224, 224, 224, 255), STATUS_TEXT_RGBA, buf);
   }
 

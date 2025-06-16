@@ -303,7 +303,7 @@ typedef struct {
   struct {
     ControllerType type;
     Ticks triggercy;
-    u32 zapfbidx, serial;
+    u32 zapfbidx, serial, orig_serial;
     u8 sensitivity;
     bool trigger;
   } port[2];
