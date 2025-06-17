@@ -204,6 +204,10 @@ typedef struct {
     } m28;
 
     struct {
+      u8 prg_mode;
+    } m32;
+
+    struct {
       u8 bank_mode;
       u16 irq_counter, irq_reload;
       bool irq_enable, irq_counter_enable;

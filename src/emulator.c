@@ -4132,6 +4132,38 @@ static void mapper30_write(E *e, u16 addr, u8 val) {
                  e->ci.prg16k_banks - 1);
 }
 
+static void mapper32_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  switch (addr >> 12) {
+    case 0x8:
+      m->prg_bank[0] = val & 0x1f & (e->ci.prg8k_banks - 1);
+      break;
+    case 0x9:
+      if (e->ci.submapper != SUBMAPPER_32_MAJOR_LEAGUE) {
+        set_mirror(e, (val & 1) + 2);
+      }
+      m->m32.prg_mode = (val >> 1) & 1;
+      break;
+    case 0xa:
+      m->prg_bank[1] = val & 0x1f & (e->ci.prg8k_banks - 1);
+      break;
+    case 0xb:
+      m->chr_bank[addr & 7] = val & (e->ci.chr1k_banks - 1);
+      break;
+  }
+  if (m->m32.prg_mode == 0) {
+    set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], e->ci.prg8k_banks - 2,
+                  e->ci.prg8k_banks - 1);
+  } else {
+    set_prg8k_map(e, e->ci.prg8k_banks - 2, m->prg_bank[1], m->prg_bank[0],
+                  e->ci.prg8k_banks - 1);
+  }
+  set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                m->chr_bank[3], m->chr_bank[4], m->chr_bank[5], m->chr_bank[6],
+                m->chr_bank[7]);
+}
+
 static void mapper33_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
@@ -6474,6 +6506,17 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
+    break;
+
+  case 32:
+    e->mapper_write = mapper32_write;
+    if (e->ci.submapper == SUBMAPPER_32_MAJOR_LEAGUE) {
+      set_mirror(e, MIRROR_SINGLE_0);
+    } else {
+      set_mirror(e, e->ci.mirror);
+    }
+    set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, e->ci.prg8k_banks - 2, e->ci.prg8k_banks - 1);
     break;
 
   case 33:
