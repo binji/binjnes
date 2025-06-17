@@ -4253,6 +4253,49 @@ static void mapper66_write(E *e, u16 addr, u8 val) {
   set_prg32k_map(e, m->prg_bank[0] = (val >> 4) & 3 & (e->ci.prg32k_banks - 1));
 }
 
+static void mapper67_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  u8 reg = (addr >> 11) & 0xf;
+  switch (reg) {
+    case 0: case 2: case 4: case 6:
+    case 8: case 10: case 12: case 14:
+      e->s.c.irq &= ~IRQ_MAPPER;
+      break;
+    case 1: case 3: case 5: case 7:
+      m->chr_bank[(reg - 1) >> 1] = val & 0x3f & (e->ci.chr2k_banks - 1);
+      set_chr2k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                    m->chr_bank[3]);
+      break;
+    case 9:
+      if (m->m67.irq_counter_latch ^= 1) {
+        m->m67.irq_counter = (m->m67.irq_counter & 0x00ff) | (val << 8);
+      } else {
+        m->m67.irq_counter = (m->m67.irq_counter & 0xff00) | val;
+      }
+      break;
+    case 11:
+      m->m67.irq_counter_enable = !!(val & 0x10);
+      m->m67.irq_counter_latch = 0;
+      break;
+    case 13:
+      set_mirror(e, (val ^ 2) & 3);
+      break;
+    case 15:
+      set_prg16k_map(e, m->prg_bank[0] = val & 0xf & (e->ci.prg16k_banks - 1),
+                     e->ci.prg16k_banks - 1);
+      break;
+  }
+}
+
+static void mapper67_cpu_step(E* e) {
+  if (e->s.m.m67.irq_counter_enable &&
+      --e->s.m.m67.irq_counter == 0) {
+    e->s.c.irq |= IRQ_MAPPER;
+    e->s.m.m67.irq_counter_enable = false;
+  }
+}
+
 void mapper69_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
@@ -6485,6 +6528,14 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0] = e->ci.prg32k_banks - 1);
+    break;
+
+  case 67:
+    e->mapper_write = mapper67_write;
+    e->mapper_cpu_step = mapper67_cpu_step;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg8k_banks - 1);
     break;
 
   case 69:

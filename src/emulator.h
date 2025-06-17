@@ -210,6 +210,11 @@ typedef struct {
     } m65;
 
     struct {
+      u16 irq_counter;
+      bool irq_counter_latch, irq_counter_enable;
+    } m67;
+
+    struct {
       u8 command;
       u16 irq_counter;
       bool irq_enable, irq_counter_enable;
