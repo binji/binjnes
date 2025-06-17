@@ -204,6 +204,12 @@ typedef struct {
     } m28;
 
     struct {
+      u8 bank_mode;
+      u16 irq_counter, irq_reload;
+      bool irq_enable, irq_counter_enable;
+    } m65;
+
+    struct {
       u8 command;
       u16 irq_counter;
       bool irq_enable, irq_counter_enable;

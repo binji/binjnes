@@ -4187,6 +4187,65 @@ static void mapper34_nina001_write(E *e, u16 addr, u8 val) {
   e->s.m.prg_ram_updated = true;
 }
 
+static void mapper65_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  switch (addr) {
+    case 0x8000:
+      m->prg_bank[0] = val & (e->ci.prg8k_banks - 1);
+      break;
+    case 0x9000:
+      m->m65.bank_mode = val >> 7;
+      break;
+    case 0x9001:
+      switch (val >> 6) {
+        case 0: set_mirror(e, MIRROR_VERTICAL); break;
+        case 2: set_mirror(e, MIRROR_HORIZONTAL); break;
+        default: set_mirror(e, MIRROR_SINGLE_0); break;
+      }
+      break;
+    case 0x9003:
+      m->m65.irq_enable = val >> 7;
+      e->s.c.irq &= ~IRQ_MAPPER;
+      break;
+    case 0x9004:
+      m->m65.irq_counter = m->m65.irq_reload;
+      m->m65.irq_counter_enable = true;
+      e->s.c.irq &= ~IRQ_MAPPER;
+      break;
+    case 0x9005:
+      m->m65.irq_reload = (m->m65.irq_reload & 0x00ff) | (val << 8);
+      break;
+    case 0x9006:
+      m->m65.irq_reload = (m->m65.irq_reload & 0xff00) | val;
+      break;
+    case 0xa000:
+      m->prg_bank[1] = val & (e->ci.prg8k_banks - 1);
+      break;
+    case 0xb000: case 0xb001: case 0xb002: case 0xb003:
+    case 0xb004: case 0xb005: case 0xb006: case 0xb007:
+      m->chr_bank[addr - 0xb000] = val & (e->ci.chr1k_banks - 1);
+      break;
+  }
+  set_chr1k_map(e, m->chr_bank[0], m->chr_bank[1], m->chr_bank[2],
+                m->chr_bank[3], m->chr_bank[4], m->chr_bank[5],
+                m->chr_bank[6], m->chr_bank[7]);
+  if (m->m65.bank_mode == 0) {
+    set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], 0x3e, 0x3f);
+  } else {
+    set_prg8k_map(e, 0x3e, m->prg_bank[1], m->prg_bank[0], 0x3f);
+  }
+}
+
+static void mapper65_cpu_step(E* e) {
+  if (e->s.m.m65.irq_enable &&
+      e->s.m.m65.irq_counter_enable &&
+      e->s.m.m65.irq_counter-- == 0) {
+    e->s.c.irq |= IRQ_MAPPER;
+    e->s.m.m65.irq_counter_enable = false;
+  }
+}
+
 static void mapper66_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
@@ -6409,6 +6468,16 @@ static Result init_mapper(E *e) {
       set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
       set_prg32k_map(e, 0);
     }
+    break;
+
+  case 65:
+    e->mapper_write = mapper65_write;
+    e->mapper_cpu_step = mapper65_cpu_step;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg8k_map(e, e->s.m.prg_bank[0] = 0, e->s.m.prg_bank[1] = 1, 0x3e,
+                  e->ci.prg8k_banks - 1);
+    e->s.m.m65.bank_mode = 0;
     break;
 
   case 66:
