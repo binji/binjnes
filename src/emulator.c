@@ -4536,6 +4536,44 @@ static void mapper79_write(E *e, u16 addr, u8 val) {
       e, (m->prg_bank[0] = ((val >> 3) & 1) & (e->ci.prg32k_banks - 1)));
 }
 
+static void mapper80_prg_ram_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  switch (addr) {
+    case 0x7ef0: case 0x7ef1: case 0x7ef2: case 0x7ef3: case 0x7ef4: case 0x7ef5:
+      m->chr_bank[addr - 0x7ef0] = val & (e->ci.chr1k_banks - 1);
+      break;
+    case 0x7ef6:
+      set_mirror(e, val & 1 ? MIRROR_VERTICAL : MIRROR_HORIZONTAL);
+      break;
+    case 0x7ef8: case 0x7ef9:
+      m->prg_ram_en = val == 0xa3;
+      break;
+    case 0x7efa: case 0x7efb:
+    case 0x7efc: case 0x7efd:
+    case 0x7efe: case 0x7eff:
+      m->prg_bank[(addr - 0x7efa) >> 1] = val & (e->ci.prg8k_banks - 1);
+      break;
+    default:
+      if (addr >= 0x7f00 && m->prg_ram_en) {
+        e->s.c.prg_ram[addr & 0x7f] = val;
+      }
+      break;
+  }
+  set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], m->prg_bank[2],
+                e->ci.prg8k_banks - 1);
+  set_chr1k_map(e, m->chr_bank[0] & ~1, m->chr_bank[0] | 1, m->chr_bank[1] & ~1,
+                m->chr_bank[1] | 1, m->chr_bank[2], m->chr_bank[3],
+                m->chr_bank[4], m->chr_bank[5]);
+}
+
+static u8 mapper80_prg_ram_read(E* e, u16 addr) {
+  M* m = &e->s.m;
+  if (m->prg_ram_en && addr >= 0x7f00) {
+    return e->s.c.prg_ram[addr & 0x7f];
+  }
+  return e->s.c.open_bus;
+}
+
 static void mapper_vrc7_shared_write(E *e, u16 addr, u8 val, u8 shift, u8 mask) {
   M *m = &e->s.m;
   u16 fix_addr = (addr & 0xf000) | ((addr >> shift) & mask);
@@ -6620,6 +6658,15 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->ci.prg16k_banks - 1);
+    break;
+
+  case 80:
+    e->mapper_write = mapper0_write;
+    e->mapper_prg_ram_read = mapper80_prg_ram_read;
+    e->mapper_prg_ram_write = mapper80_prg_ram_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr1k_map(e, 0, 0, 0, 0, 0, 0, 0, 0);
+    set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
 
   case 85:
