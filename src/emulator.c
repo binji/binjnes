@@ -4489,6 +4489,40 @@ static void mapper71_write(E *e, u16 addr, u8 val) {
   }
 }
 
+static void mapper75_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (addr < 0x8000) return;
+  switch (addr >> 12) {
+    case 0x8:
+      m->prg_bank[0] = val & 0xf & (e->ci.prg8k_banks - 1);
+      break;
+    case 0x9:
+      set_mirror(e, val & 1 ? MIRROR_HORIZONTAL : MIRROR_VERTICAL);
+      m->chr_bank[0] =
+          ((m->chr_bank[0] & 0xf) | (val & 2) << 3) & (e->ci.chr4k_banks - 1);
+      m->chr_bank[1] =
+          ((m->chr_bank[1] & 0xf) | (val & 4) << 2) & (e->ci.chr4k_banks - 1);
+      break;
+    case 0xa:
+      m->prg_bank[1] = val & 0xf & (e->ci.prg8k_banks - 1);
+      break;
+    case 0xc:
+      m->prg_bank[2] = val & 0xf & (e->ci.prg8k_banks - 1);
+      break;
+    case 0xe:
+      m->chr_bank[0] =
+          ((m->chr_bank[0] & 0x10) | (val & 0xf)) & (e->ci.chr4k_banks - 1);
+      break;
+    case 0xf:
+      m->chr_bank[1] =
+          ((m->chr_bank[1] & 0x10) | (val & 0xf)) & (e->ci.chr4k_banks - 1);
+      break;
+  }
+  set_prg8k_map(e, m->prg_bank[0], m->prg_bank[1], m->prg_bank[2],
+                e->ci.prg8k_banks - 1);
+  set_chr4k_map(e, m->chr_bank[0], m->chr_bank[1]);
+}
+
 static void mapper76_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
@@ -6636,6 +6670,13 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case 75:
+    e->mapper_write = mapper75_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr4k_map(e, 0, 0);
+    set_prg8k_map(e, 0, 0, 0, e->ci.prg8k_banks - 1);
     break;
 
   case 76:
