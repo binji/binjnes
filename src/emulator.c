@@ -4772,6 +4772,14 @@ static u8 mapper163_read(E *e, u16 addr) {
   return e->s.c.open_bus;
 }
 
+static void mapper180_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  if (addr < 0x8000) return;
+  val &= rom_read(e, addr);
+  m->prg_bank[0] = val & (e->ci.prg16k_banks - 1);
+  set_prg16k_map(e, 0, m->prg_bank[0]);
+}
+
 static void mapper206_write(E *e, u16 addr, u8 val) {
   M* m = &e->s.m;
   if (addr < 0x8000) return;
@@ -6746,6 +6754,13 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr4k_map(e, 0, 0);
     set_prg32k_map(e, 3);
+    break;
+
+  case 180:
+    e->mapper_write = mapper180_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
     break;
 
   case 206:
