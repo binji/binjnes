@@ -4233,6 +4233,14 @@ static void mapper34_nina001_write(E *e, u16 addr, u8 val) {
   e->s.m.prg_ram_updated = true;
 }
 
+static void mapper38_prg_ram_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x7000) return;
+  set_chr8k_map(e, (m->chr_bank[0] = (val & 3) & (e->ci.chr8k_banks - 1)));
+  set_prg32k_map(
+      e, (m->prg_bank[0] = ((val >> 3) & 3) & (e->ci.prg32k_banks - 1)));
+}
+
 static void mapper65_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   if (addr < 0x8000) return;
@@ -6661,6 +6669,14 @@ static Result init_mapper(E *e) {
       set_chr4k_map(e, 0, e->ci.chr4k_banks - 1);
       set_prg32k_map(e, 0);
     }
+    break;
+
+  case 38:
+    e->mapper_write = mapper0_write;
+    e->mapper_prg_ram_write = mapper38_prg_ram_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg32k_map(e, 0);
     break;
 
   case 65:
