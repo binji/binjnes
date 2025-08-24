@@ -3257,6 +3257,12 @@ static void mapper11_write(E *e, u16 addr, u8 val) {
   set_prg32k_map(e, (m->prg_bank[0] = (val & 3) & (e->ci.prg32k_banks - 1)));
 }
 
+static void mapper13_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  set_chr4k_map(e, 0, (m->chr_bank[0] = (val & 3) & (e->ci.chr4k_banks - 1)));
+}
+
 static void mapper16_shared_write(E *e, u16 addr, u8 val) {
   M *m = &e->s.m;
   DEBUG("mapper16_shared_write(%04x, %02x)\n", addr, val);
@@ -6482,6 +6488,12 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg32k_map(e, e->s.m.prg_bank[0]);
+    break;
+  case 13:
+    e->mapper_write = mapper13_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr4k_map(e, 0, 0);
+    set_prg32k_map(e, e->ci.prg32k_banks - 1);
     break;
   case 16:
     if (e->ci.submapper == 4) {
