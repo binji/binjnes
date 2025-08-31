@@ -4710,6 +4710,14 @@ static void mapper89_write(E *e, u16 addr, u8 val) {
   set_mirror(e, val & 8 ? MIRROR_SINGLE_1 : MIRROR_SINGLE_0);
 }
 
+static void mapper93_write(E *e, u16 addr, u8 val) {
+  M *m = &e->s.m;
+  if (addr < 0x8000) return;
+  set_prg16k_map(e,
+                 m->prg_bank[0] = ((val >> 4) & 7) & (e->ci.prg16k_banks - 1),
+                 e->ci.prg16k_banks - 1);
+}
+
 static void mapper118_write(E *e, u16 addr, u8 val) {
   mapper4_write(e, addr, val);
   M* m = &e->s.m;
@@ -6784,6 +6792,13 @@ static Result init_mapper(E *e) {
 
   case 89:
     e->mapper_write = mapper89_write;
+    set_mirror(e, e->ci.mirror);
+    set_chr8k_map(e, 0);
+    set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case 93:
+    e->mapper_write = mapper93_write;
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
