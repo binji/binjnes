@@ -307,13 +307,19 @@ static inline u8 reverse(u8 b) {
 }
 
 // Derived from
-// https://graphics.stanford.edu/~seander/bithacks.html#Interleave64bitOps and
-// https://graphics.stanford.edu/~seander/bithacks.html#ReverseByteWith64Bits
+// https://graphics.stanford.edu/~seander/bithacks.html#InterleaveTableLookup and
+// https://graphics.stanford.edu/~seander/bithacks.html#BitReverseTable
 static inline u16 reverse_interleave(u8 h, u8 l) {
-  const u64 A = 0x1001001001001ull, B = 0x8084042021010ull,
-            C = 0x200040008001ull;
-  return (((l * A & B) * C >> 43) & 0x5555) |
-         (((h * A & B) * C >> 42) & 0xAAAA);
+  static const u16 s_reverse[256] = {
+#   define R2(n)    n,     n + 0x4000,     n + 0x1000,     n + 0x5000
+#   define R4(n) R2(n), R2(n + 0x0400), R2(n + 0x0100), R2(n + 0x0500)
+#   define R6(n) R4(n), R4(n + 0x0040), R4(n + 0x0010), R4(n + 0x0050)
+      R6(0), R6(4), R6(1), R6(5)
+#undef R2
+#undef R4
+#undef R6
+  };
+  return s_reverse[h] << 1 | s_reverse[l];
 }
 
 static inline u32 interleave2(u16 h, u16 l) {
