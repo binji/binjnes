@@ -68,6 +68,10 @@ add_custom_target(${name}-copy-to-bin ALL
 )
 endfunction ()
 
+if (CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_definitions(-Wno-format-security)
+endif()
+
 if (NOT EMSCRIPTEN)
   add_executable(binjnes-tester
     src/common.c
@@ -116,9 +120,6 @@ if (NOT EMSCRIPTEN)
   target_copy_to_bin(binjnes)
 
 else (EMSCRIPTEN)
-
-  add_definitions(-Wno-format-security)
-
   add_executable(binjnes
     src/memory.c
     src/cartdb.c
