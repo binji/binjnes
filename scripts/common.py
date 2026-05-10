@@ -14,7 +14,7 @@ SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 ROOT_DIR = os.path.dirname(SCRIPT_DIR)
 BIN_DIR = os.path.join(ROOT_DIR, 'bin')
 OUT_DIR = os.path.join(ROOT_DIR, 'out')
-ROM_DIR = os.path.join(ROOT_DIR, 'rom')
+ROM_DIR = os.path.join(ROOT_DIR, 'roms')
 TEST_DIR = os.path.join(ROOT_DIR, 'test')
 THIRD_PARTY_DIR = os.path.join(ROOT_DIR, 'third_party')
 TESTER = os.path.join(BIN_DIR, 'binjnes-tester')
@@ -46,13 +46,15 @@ def Run(exe, *args, **kwargs):
 
 def RunTester(rom, frames=None, out_image=None, animate=False,
               controller_input=None, exe=None, timeout_sec=None,
-              seed=0):
+              seed=0, movie=None):
   exe = exe or TESTER
   cmd = []
   if frames:
     cmd.extend(['-f', str(frames)])
   if controller_input:
     cmd.extend(['-j', controller_input])
+  if movie:
+    cmd.extend(['-m', movie])
   if out_image:
     cmd.extend(['-o', out_image])
   if animate:
