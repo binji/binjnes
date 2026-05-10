@@ -188,7 +188,7 @@ void parse_options(int argc, char**argv) {
           case 'o': {
             s_output_image = result.value;
             if (s_output_image_format == OUTPUT_IMAGE_FORMAT_DETECT) {
-              char* last_dot = strrchr(s_output_image, '.');
+              const char* last_dot = strrchr(s_output_image, '.');
               if (last_dot != NULL) {
                 for (size_t i = 0; i < ARRAY_SIZE(s_format_extension); ++i) {
                   if (strcmp(last_dot + 1, s_format_extension[i]) == 0) {

@@ -13,7 +13,7 @@
 const char* replace_extension(const char* filename, const char* extension) {
   size_t length = strlen(filename) + strlen(extension) + 1; /* +1 for \0. */
   char* result = xmalloc(length);
-  char* last_dot = strrchr(filename, '.');
+  const char* last_dot = strrchr(filename, '.');
   if (last_dot == NULL) {
     snprintf(result, length, "%s%s", filename, extension);
   } else {
