@@ -287,7 +287,7 @@ typedef struct {
 } Spr;
 
 typedef struct {
-  u8 ram[0x2000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
+  u8 ram[0x4000], chr_ram[MAX_CHRRAM_SIZE], oam[0x100], oam2[0x20];
   u32 bgatshift;  // [0:1] bg/at
   u32 bgshift, atshift;
   u32 state, fbidx, frame;

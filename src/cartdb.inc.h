@@ -632,49 +632,56 @@ static const Cart s_carts[] = {
   /* 564 */ {.mapper=89,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
   /* 565 */ {.mapper=93,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
   /* 566 */ {.mapper=93,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,},
-  /* 567 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 568 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
-  /* 569 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 570 */ {.mapper=118,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
-  /* 571 */ {.mapper=118,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
-  /* 572 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
-  /* 573 */ {.mapper=163,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
-  /* 574 */ {.mapper=163,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
-  /* 575 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
-  /* 576 */ {.mapper=180,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
-  /* 577 */ {.mapper=180,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
-  /* 578 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 579 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 580 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 581 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 582 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 583 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 584 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 585 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 586 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 587 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
-  /* 588 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
-  /* 589 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 590 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
-  /* 591 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_24K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
-  /* 592 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 593 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 594 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 595 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
-  /* 596 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
-  /* 597 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
-  /* 598 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
-  /* 599 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
-  /* 600 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 601 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
-  /* 602 */ {.mapper=210,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 603 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 604 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,.battery=1,},
-  /* 605 */ {.mapper=210,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 606 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
-  /* 607 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_VERTICAL,},
-  /* 608 */ {.mapper=232,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
-  /* 609 */ {.mapper=232,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 567 */ {.mapper=111,.prgrom=SIZE_32K,.chrram=SIZE_8K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 568 */ {.mapper=111,.prgrom=SIZE_32K,.chrram=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 569 */ {.mapper=111,.prgrom=SIZE_64K,.chrram=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 570 */ {.mapper=111,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 571 */ {.mapper=111,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,.system=SYSTEM_NTSC,},
+  /* 572 */ {.mapper=111,.prgrom=SIZE_512K,.chrram=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,.battery=1,.system=SYSTEM_NTSC,},
+  /* 573 */ {.mapper=111,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 574 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 575 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_PAL,},
+  /* 576 */ {.mapper=118,.prgrom=SIZE_128K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 577 */ {.mapper=118,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,},
+  /* 578 */ {.mapper=118,.prgrom=SIZE_256K,.prgnvram=SIZE_8K,.chrrom=SIZE_128K,.mirror=MIRROR_HORIZONTAL,.battery=1,},
+  /* 579 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 580 */ {.mapper=163,.prgrom=SIZE_512K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 581 */ {.mapper=163,.prgrom=SIZE_1024K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 582 */ {.mapper=163,.prgrom=SIZE_2048K,.prgnvram=SIZE_8K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.battery=1,.system=SYSTEM_NTSC,},
+  /* 583 */ {.mapper=180,.prgrom=SIZE_64K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,.system=SYSTEM_NTSC,},
+  /* 584 */ {.mapper=180,.prgrom=SIZE_128K,.chrram=SIZE_8K,.mirror=MIRROR_HORIZONTAL,},
+  /* 585 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 586 */ {.mapper=206,.prgrom=SIZE_64K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 587 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 588 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 589 */ {.mapper=206,.prgrom=SIZE_128K,.prgram=SIZE_2K,.chrrom=SIZE_64K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 590 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 591 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 592 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 593 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 594 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_HORIZONTAL,},
+  /* 595 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 596 */ {.mapper=206,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 597 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 598 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_24K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 599 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 600 */ {.mapper=206,.prgrom=SIZE_64K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 601 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 602 */ {.mapper=206,.prgrom=SIZE_128K,.chrrom=SIZE_64K,.mirror=MIRROR_VERTICAL,},
+  /* 603 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.prgram=SIZE_2K,.chrrom=SIZE_32K,.mirror=MIRROR_FOUR_SCREEN,},
+  /* 604 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_16K,.mirror=MIRROR_HORIZONTAL,},
+  /* 605 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_HORIZONTAL,},
+  /* 606 */ {.mapper=206,.submapper=1,.prgrom=SIZE_32K,.chrrom=SIZE_32K,.mirror=MIRROR_VERTICAL,},
+  /* 607 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 608 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.chrrom=SIZE_256K,.mirror=MIRROR_HORIZONTAL,},
+  /* 609 */ {.mapper=210,.submapper=1,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 610 */ {.mapper=210,.submapper=1,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 611 */ {.mapper=210,.submapper=1,.prgrom=SIZE_512K,.prgnvram=SIZE_2K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,.battery=1,},
+  /* 612 */ {.mapper=210,.submapper=2,.prgrom=SIZE_128K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 613 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_128K,.mirror=MIRROR_VERTICAL,},
+  /* 614 */ {.mapper=210,.submapper=2,.prgrom=SIZE_256K,.chrrom=SIZE_256K,.mirror=MIRROR_VERTICAL,},
+  /* 615 */ {.mapper=232,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
+  /* 616 */ {.mapper=232,.submapper=1,.prgrom=SIZE_256K,.chrram=SIZE_8K,.mirror=MIRROR_VERTICAL,.system=SYSTEM_NTSC,},
 };
 
 static const u32 s_crcs[] = {
@@ -7613,30 +7620,47 @@ static const u32 s_crcs[] = {
 /**** 566 mapper=93 prgrom=128K chrram=8K mirror=V */
     0xB20C1030, //  Licensed Japan\Shanghai.nes 
     0x05C4AF33, //  Samples\Shanghai.nes 
-/**** 567 mapper=118 prgrom=128K chrrom=128K mirror=H */
+/**** 567 mapper=111 prgrom=32K chrram=8K mirror=4 */
+    0xC2A72BC6, //  Homebrew\Demos\GTROM Flash RAM Test.nes 
+/**** 568 mapper=111 prgrom=32K chrram=32K mirror=4 */
+    0x16443121, //  Homebrew\Demos\GTROM RAM Test.nes 
+    0x6D0C01DE, //  Modern\Arkade Rush.nes 
+/**** 569 mapper=111 prgrom=64K chrram=32K mirror=4 */
+    0x8659EDD3, //  Homebrew\Super Homebrew War (GTROM).nes 
+/**** 570 mapper=111 prgrom=512K chrram=32K mirror=4 */
+    0x5FEFA2FB, //  Modern\Goofy Foot.nes 
+    0x60795F4D, //  Modern\KHAN Games 4-in-1 Retro Gamepak.nes 
+/**** 571 mapper=111 prgrom=512K chrram=32K mirror=4 system=SYSTEM_NTSC */
+    0x01BB9F32, //  Homebrew\NEScape!.nes 
+/**** 572 mapper=111 prgrom=512K chrram=32K mirror=4 battery=1 system=SYSTEM_NTSC */
+    0xDC970ED2, //  Modern\Anguna꞉ Scourge of the Goblin King.nes 
+    0xAB11D571, //  Modern\Larry and the Long Look for a Luscious Lover.nes 
+/**** 573 mapper=111 prgrom=128K chrrom=256K mirror=H */
+    0x15E688C0, //  Homebrew\Translations\Chinese (Simplified)\忍者龍剣伝.nes 
+/**** 574 mapper=118 prgrom=128K chrrom=128K mirror=H */
     0x0A90D4A3, //  Homebrew\Translations\English\Major League [FlashPV].nes 
     0x90C773C1, //  Licensed North America\Goal! Two.nes 
     0xB9B4D9E0, //  Licensed North America\NES Play Action Football.nes 
     0x41F9E0AA, //  Licensed North America\Pro Sport Hockey.nes 
-/**** 568 mapper=118 prgrom=128K chrrom=128K mirror=H system=SYSTEM_PAL */
+/**** 575 mapper=118 prgrom=128K chrrom=128K mirror=H system=SYSTEM_PAL */
     0xD20BB617, //  Licensed PAL\Goal! 2.nes 
-/**** 569 mapper=118 prgrom=128K chrrom=256K mirror=H */
+/**** 576 mapper=118 prgrom=128K chrrom=256K mirror=H */
     0x23F33D22, //  Modern\Virtual Console\NES Play Action Football.nes 
-/**** 570 mapper=118 prgrom=256K chrrom=128K mirror=H */
+/**** 577 mapper=118 prgrom=256K chrrom=128K mirror=H */
     0xC4F9251A, //  Bootleg Hacks\超級兄弟 IV.nes 
     0xB3D92E78, //  Homebrew\Translations\English\Armadillo [Vice Translations].nes 
     0x78B657AC, //  Licensed Japan\Armadillo.nes 
-/**** 571 mapper=118 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
+/**** 578 mapper=118 prgrom=256K prgnvram=8K chrrom=128K mirror=H battery=1 */
     0x5C565F25, //  Homebrew\Translations\English\The Game of Life RPG [Nebulous Translations].nes 
     0x68064D76, //  Homebrew\Translations\English\Ys III꞉ Wanderers from Ys [Vice Translations].nes 
     0x07D92C31, //  Licensed Japan\RPG人生Game.nes 
     0x37B62D04, //  Licensed Japan\Ys III꞉ Wanderers from Ys.nes 
-/**** 572 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_NTSC */
+/**** 579 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=H battery=1 system=SYSTEM_NTSC */
     0x3869DB94, //  Bad Dumps\梁山英雄 [wrong PRG bank order].nes 
-/**** 573 mapper=163 prgrom=512K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
+/**** 580 mapper=163 prgrom=512K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x4CE082F8, //  Bad Dumps\拳皇R-1꞉ 最强格斗王 [wrong PRG bank order].nes 
     0xBBAB3A61, //  Unlicensed China\南晶\拳皇R-1꞉ 最强格斗王.nes 
-/**** 574 mapper=163 prgrom=1024K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
+/**** 581 mapper=163 prgrom=1024K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x9D8AA034, //  Bad Dumps\Final Fantasy IV - 最终幻想4꞉ 光与暗 水晶纷争 [wrong PRG bank order].nes 
     0x63C41F82, //  Bad Dumps\World of Warcraft꞉ Demon Hunter [pacnsacdave][wrong PRG bank order].nes 
     0x9DE10A91, //  Bad Dumps\七龙珠大冒险 - Dragon Ball [wrong PRG bank order].nes 
@@ -7664,7 +7688,7 @@ static const u32 s_crcs[] = {
     0x4E3EDF88, //  Unlicensed China\南晶\超级机器人大战 A.nes 
     0xDA47B05A, //  Unlicensed China\南晶\隋唐英雄.nes 
     0xE08AB52E, //  Unlicensed China\南晶\魔兽世界꞉ 恶魔猎人.nes 
-/**** 575 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
+/**** 582 mapper=163 prgrom=2048K prgnvram=8K chrram=8K mirror=V battery=1 system=SYSTEM_NTSC */
     0x5E66E6C4, //  Bad Dumps\Naruto RPG - 火影忍者 [wrong PRG bank order].nes 
     0x696D98E3, //  Bad Dumps\三国志꞉ 吕布传 [wrong PRG bank order].nes 
     0x9F197F2B, //  Bad Dumps\三国群侠传 [wrong PRG bank order].nes 
@@ -7733,39 +7757,39 @@ static const u32 s_crcs[] = {
     0x85FA53E1, //  Unlicensed China\南晶\魔界塔士.nes 
     0x2121DAB2, //  Unlicensed China\南晶\魔界霸主.nes 
     0xE3EF9739, //  Unlicensed China\南晶\黄金の太陽.nes 
-/**** 576 mapper=180 prgrom=64K chrram=8K mirror=H system=SYSTEM_NTSC */
+/**** 583 mapper=180 prgrom=64K chrram=8K mirror=H system=SYSTEM_NTSC */
     0x9B7F149B, //  Homebrew\Berzerk [Parisoft].nes 
-/**** 577 mapper=180 prgrom=128K chrram=8K mirror=H */
+/**** 584 mapper=180 prgrom=128K chrram=8K mirror=H */
     0xC68363F6, //  Licensed Japan\Crazy Climber.nes 
-/**** 578 mapper=206 prgrom=64K prgram=2K chrrom=32K mirror=4 */
+/**** 585 mapper=206 prgrom=64K prgram=2K chrrom=32K mirror=4 */
     0xE45485A5, //  Vs. System\Atari R.B.I. Baseball (set 1).nes 
     0x8337E123, //  Vs. System\Atari R.B.I. Baseball (set 2).nes 
-/**** 579 mapper=206 prgrom=64K prgram=2K chrrom=64K mirror=4 */
+/**** 586 mapper=206 prgrom=64K prgram=2K chrrom=64K mirror=4 */
     0x52C501D0, //  Vs. System\Vs. T.K.O. Boxing.nes 
-/**** 580 mapper=206 prgrom=128K prgram=2K chrrom=32K mirror=4 */
+/**** 587 mapper=206 prgrom=128K prgram=2K chrrom=32K mirror=4 */
     0x12012CD9, //  Vs. System\Super Xevious꞉ Gampの謎.nes 
-/**** 581 mapper=206 prgrom=128K chrrom=64K mirror=4 */
+/**** 588 mapper=206 prgrom=128K chrrom=64K mirror=4 */
     0xCD50A092, //  Unlicensed North America\Gauntlet.nes 
-/**** 582 mapper=206 prgrom=128K prgram=2K chrrom=64K mirror=4 */
+/**** 589 mapper=206 prgrom=128K prgram=2K chrrom=64K mirror=4 */
     0x832CF592, //  Vs. System\Freedom Force.nes 
-/**** 583 mapper=206 prgrom=32K chrrom=16K mirror=H */
+/**** 590 mapper=206 prgrom=32K chrrom=16K mirror=H */
     0xDB1131F0, //  Bootleg Singles\TouchGamePlayer\Super Chinese.nes 
     0x540B04EE, //  Multicarts\extracts\Space Shuttle Exploration (CB-4035).nes 
-/**** 584 mapper=206 prgrom=32K chrrom=32K mirror=H */
+/**** 591 mapper=206 prgrom=32K chrrom=32K mirror=H */
     0x559DE7CA, //  Bootleg Singles\TouchGamePlayer\Babelの塔.nes 
     0x8AF25130, //  Licensed Japan\Babelの塔.nes 
     0xE9990228, //  Modern\Namco Museum Archives\Babelの塔.nes 
     0x55463622, //  Modern\Namco Museum Archives\Family Jockey.nes 
     0x145FEE2E, //  Modern\Namco Museum Archives\Valkyrieの冒険꞉ 時の鍵伝説.nes 
     0x2457A912, //  Modern\Virtual Console\Valkyrieの冒険꞉ 時の鍵伝説.nes 
-/**** 585 mapper=206 prgrom=64K chrrom=64K mirror=H */
+/**** 592 mapper=206 prgrom=64K chrrom=64K mirror=H */
     0x0FFDE258, //  Unlicensed North America\Fantasy Zone.nes 
-/**** 586 mapper=206 prgrom=128K chrrom=32K mirror=H */
+/**** 593 mapper=206 prgrom=128K chrrom=32K mirror=H */
     0x3CFEB4E1, //  Homebrew\Translations\English\Super Xevious꞉ The Riddle of GAMP [Psyklax].nes 
     0xF7762A20, //  Licensed Japan\Side Pocket.nes 
     0x7BB5664F, //  Licensed Japan\Super Xevious꞉ Gampの謎.nes 
     0x1A77388B, //  Modern\Namco Museum Archives\Super Xevious꞉ Gampの謎.nes 
-/**** 587 mapper=206 prgrom=128K chrrom=64K mirror=H */
+/**** 594 mapper=206 prgrom=128K chrrom=64K mirror=H */
     0x56E0E6C6, //  Homebrew\Translations\English\Family Pinball [Suicidal Translations].nes 
     0x87C5CF7C, //  Homebrew\Translations\English\Karnov [Eien Ni Hen &amp; Vice Translations v1.10].nes 
     0x491D8CDB, //  Licensed Japan\Family Pinball.nes 
@@ -7781,19 +7805,19 @@ static const u32 s_crcs[] = {
     0x139EB5B5, //  Unlicensed North America\Indiana Jones and the Temple of Doom.nes 
     0x5800BE2D, //  Unlicensed North America\Toobin'.nes 
     0x10D17B9B, //  Unlicensed South Korea\Toobin'.nes 
-/**** 588 mapper=206 prgrom=32K chrrom=16K mirror=V system=SYSTEM_NTSC */
+/**** 595 mapper=206 prgrom=32K chrrom=16K mirror=V system=SYSTEM_NTSC */
     0x4FF561BB, //  Homebrew\Hacks\Super Mario Bros. series\Randomize [Dot].nes 
     0xF558F82D, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros.꞉ 2014-12 Beta.nes 
-/**** 589 mapper=206 prgrom=32K chrrom=32K mirror=V */
+/**** 596 mapper=206 prgrom=32K chrrom=32K mirror=V */
     0x235B71ED, //  Modern\Namco Museum Archives\Metro-Cross.nes 
     0x26CB086B, //  Modern\Namco Museum Archives\Sky Kid.nes 
     0xF49EBCFE, //  Modern\Virtual Console\Sky Kid.nes 
     0x48FD2FB7, //  Multicarts\extracts\Super City Tank.nes 
-/**** 590 mapper=206 prgrom=64K chrrom=8K mirror=V system=SYSTEM_NTSC */
+/**** 597 mapper=206 prgrom=64K chrrom=8K mirror=V system=SYSTEM_NTSC */
     0x5E25F869, //  Homebrew\Hacks\Super Mario Bros. series\Power Peach Sis. [SiWu].nes 
-/**** 591 mapper=206 prgrom=64K chrrom=24K mirror=V system=SYSTEM_NTSC */
+/**** 598 mapper=206 prgrom=64K chrrom=24K mirror=V system=SYSTEM_NTSC */
     0x7F5A6B56, //  Homebrew\Hacks\Super Mario Bros. series\Super Mario Bros. (animated background).nes 
-/**** 592 mapper=206 prgrom=64K chrrom=32K mirror=V */
+/**** 599 mapper=206 prgrom=64K chrrom=32K mirror=V */
     0x5C5D8F8C, //  Homebrew\Hacks\R.B.I. Baseball (R.B.I Players' Circuit).nes 
     0x1300A8B7, //  Licensed Japan\Pro 野球꞉ Family Stadium '87.nes 
     0xDCDF06DE, //  Licensed Japan\Pro 野球꞉ Family Stadium.nes 
@@ -7801,20 +7825,20 @@ static const u32 s_crcs[] = {
     0xE73E7260, //  Unlicensed North America\Pac-Mania.nes 
     0x2E326A1D, //  Unlicensed North America\R.B.I. Baseball.nes 
     0xA8F5C2AB, //  Unlicensed North America\Vindicators.nes 
-/**** 593 mapper=206 prgrom=64K chrrom=64K mirror=V */
+/**** 600 mapper=206 prgrom=64K chrrom=64K mirror=V */
     0xA8B7D027, //  Compatibility Hacks\Vs. TKO Boxing [home console v0.9b].nes 
     0xBD3D4EA8, //  Homebrew\Translations\English\Family Tennis [Goldenband v10-05-2015].nes 
     0x5B4C6146, //  Licensed Japan\Family Boxing.nes 
     0xA49253C6, //  Licensed Japan\Family Tennis.nes 
     0x5BB62688, //  Licensed North America\Ring King.nes 
     0x5F2C3195, //  Unlicensed North America\Super Sprint.nes 
-/**** 594 mapper=206 prgrom=128K chrrom=32K mirror=V */
+/**** 601 mapper=206 prgrom=128K chrrom=32K mirror=V */
     0xCDB3424D, //  Homebrew\Translations\English\Family Circuit [MrRichard999 v0.95].nes 
     0x9CBC8253, //  Licensed Japan\Family Circuit.nes 
     0x2E563C66, //  Licensed Japan\Mappy-Land.nes 
     0x7C38CF24, //  Modern\Namco Museum Archives\Family Circuit.nes 
     0x2A4F30CA, //  Modern\Namco Museum Archives\Mappy-Land.nes 
-/**** 595 mapper=206 prgrom=128K chrrom=64K mirror=V */
+/**** 602 mapper=206 prgrom=128K chrrom=64K mirror=V */
     0xAD66557F, //  Bootleg Singles\Lupin 三世꞉ Pandoraの遺産 (Cocot).nes 
     0x0955D16B, //  Homebrew\Hacks\Pokémon꞉ Pikachuの冒険 [Yuifa].nes 
     0x97C28E04, //  Homebrew\Translations\English\Dragon Buster II꞉ Seal of Darkness [PentarouZero].nes 
@@ -7843,33 +7867,33 @@ static const u32 s_crcs[] = {
     0x22D1427A, //  Modern\Namco Museum Archives\天下一武士꞉ ケルナグール.nes 
     0x96DFC776, //  Unlicensed North America\R.B.I. Baseball 2.nes 
     0xFD63E7AC, //  Unlicensed North America\R.B.I. Baseball 3.nes 
-/**** 596 mapper=206 submapper=1 prgrom=32K prgram=2K chrrom=32K mirror=4 */
+/**** 603 mapper=206 submapper=1 prgrom=32K prgram=2K chrrom=32K mirror=4 */
     0x21A653C7, //  Vs. System\Super Sky Kid.nes 
-/**** 597 mapper=206 submapper=1 prgrom=32K chrrom=16K mirror=H */
+/**** 604 mapper=206 submapper=1 prgrom=32K chrrom=16K mirror=H */
     0x711C2B0E, //  Licensed Japan\Super Chinese.nes 
-/**** 598 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=H */
+/**** 605 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=H */
     0xE03329D0, //  Homebrew\Translations\English\Family Jockey [MrRichard999].nes 
     0xCD527549, //  Homebrew\Translations\English\Valkyrie's Adventure꞉ Legend of the Time Key [DvD Translations revA].nes 
     0x3719A26D, //  Licensed Japan\Family Jockey.nes 
     0xC6ADD8C5, //  Licensed Japan\Valkyrieの冒険꞉ 時の鍵伝説.nes 
-/**** 599 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=V */
+/**** 606 mapper=206 submapper=1 prgrom=32K chrrom=32K mirror=V */
     0xE40B4973, //  Licensed Japan\Metro-Cross.nes 
     0xCA6A7BF1, //  Licensed Japan\Sky Kid.nes 
-/**** 600 mapper=210 submapper=1 prgrom=256K chrrom=256K mirror=H */
+/**** 607 mapper=210 submapper=1 prgrom=256K chrrom=256K mirror=H */
     0xBD523011, //  Licensed Japan\Dream Master.nes 
-/**** 601 mapper=210 submapper=1 prgrom=512K chrrom=256K mirror=H */
+/**** 608 mapper=210 submapper=1 prgrom=512K chrrom=256K mirror=H */
     0x1696354C, //  Homebrew\Translations\English\Namco Prism Zone꞉ Dream Master [Aishsha v1.01].nes 
-/**** 602 mapper=210 submapper=1 prgrom=128K chrrom=128K mirror=V */
+/**** 609 mapper=210 submapper=1 prgrom=128K chrrom=128K mirror=V */
     0xB9B2E109, //  Homebrew\Translations\English\Famista '91 [MrRichard999, TheMajinZenki, Jink640, FlashPV v0.991].nes 
     0x077A9F0E, //  Homebrew\Translations\English\Famista '91 [MrRichard999, TheMajinZenki, Jink640, FlashPV v0.99].nes 
     0x808606F0, //  Licensed Japan\Famista '91.nes 
     0x0C47946D, //  Licensed Japan\ちびまる子ちゃん꞉ うきうき Shopping.nes 
     0x81B7F1A8, //  Licensed Japan\平成天才バカボン.nes 
-/**** 603 mapper=210 submapper=1 prgrom=256K chrrom=128K mirror=V */
+/**** 610 mapper=210 submapper=1 prgrom=256K chrrom=128K mirror=V */
     0x71C8243B, //  Homebrew\Translations\English\The Genius Bakabon [KingMike's Translations].nes 
-/**** 604 mapper=210 submapper=1 prgrom=512K prgnvram=2K chrrom=128K mirror=V battery=1 */
+/**** 611 mapper=210 submapper=1 prgrom=512K prgnvram=2K chrrom=128K mirror=V battery=1 */
     0xC247CC80, //  Licensed Japan\Family Circuit '91.nes 
-/**** 605 mapper=210 submapper=2 prgrom=128K chrrom=128K mirror=V */
+/**** 612 mapper=210 submapper=2 prgrom=128K chrrom=128K mirror=V */
     0xB94C2CA8, //  Homebrew\Hacks\Evil Dead Ash Lives! [Crying Onion].nes 
     0x164C86A3, //  Homebrew\Translations\English\Famista '92 [MrRichard999, TheMajinZenki, Jink640, FlashPV v1.01].nes 
     0x370C849B, //  Homebrew\Translations\English\Famista '93 [MrRichard999, TheMajinZenki, Jink640, FlashPV v0.991].nes 
@@ -7881,19 +7905,19 @@ static const u32 s_crcs[] = {
     0x46FD7843, //  Licensed Japan\Splatterhouse꞉ わんぱくGraffiti.nes 
     0x2447E03B, //  Licensed Japan\Top Striker.nes 
     0x1595B7D5, //  Modern\Namco Museum Archives\Splatterhouse꞉ わんぱくGraffiti.nes 
-/**** 606 mapper=210 submapper=2 prgrom=256K chrrom=128K mirror=V */
+/**** 613 mapper=210 submapper=2 prgrom=256K chrrom=128K mirror=V */
     0x97267E45, //  Homebrew\Translations\English\Wagyan Land 2 [Abstract Crouton Productions, Terminus Traduction].nes 
     0x7431D203, //  Homebrew\Translations\English\Wagyan Land 2 [Abstract Crouton Productions].nes 
     0x1DC0F740, //  Licensed Japan\ワギャン Land 2.nes 
     0x162B85B6, //  Modern\Virtual Console\ワギャン Land 2.nes 
-/**** 607 mapper=210 submapper=2 prgrom=256K chrrom=256K mirror=V */
+/**** 614 mapper=210 submapper=2 prgrom=256K chrrom=256K mirror=V */
     0xD323B806, //  Licensed Japan\ワギャン Land 3.nes 
-/**** 608 mapper=232 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
+/**** 615 mapper=232 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
     0xB462718E, //  Unlicensed Elsewhere\Super Sports Challenge (rev1).nes 
     0xB89888C9, //  Unlicensed North America\Quattro Adventure.nes 
     0x792070A9, //  Unlicensed North America\Quattro Arcade.nes 
     0xCCCAF368, //  Unlicensed North America\Quattro Sports.nes 
-/**** 609 mapper=232 submapper=1 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
+/**** 616 mapper=232 submapper=1 prgrom=256K chrram=8K mirror=V system=SYSTEM_NTSC */
     0x4B40CBD9, //  Unlicensed Elsewhere\Pegasus 4-in-1.nes 
     0x6A7BF037, //  Unlicensed Elsewhere\Super Adventure Quests.nes 
     0xA045FE1D, //  Unlicensed Elsewhere\Super Sports Challenge (rev0).nes 
@@ -7940,9 +7964,10 @@ static const u32 s_cart_crc_count[] = {
   /* 518 */  1,   2,   1,  15,   8,   3,  16,   1,   1,   1,   2,  12,   1,   2, 
   /* 532 */  2,   2,   2,   2,   2,   9,   2,   6,   1,   6,   1,   1,   2,  14, 
   /* 546 */  1,   2,   2,   1,   5,   1,   1,  10,   1,   1,   1,   1,   1,   2, 
-  /* 560 */  4,   5,   9,   5,   1,   1,   2,   4,   1,   1,   3,   4,   1,   2, 
-  /* 574 */ 27,  68,   1,   1,   2,   1,   1,   1,   1,   2,   6,   1,   4,  15, 
-  /* 588 */  2,   4,   1,   1,   7,   6,   5,  28,   1,   1,   4,   2,   1,   1, 
-  /* 602 */  5,   1,   1,  11,   4,   1,   4,   3, 
+  /* 560 */  4,   5,   9,   5,   1,   1,   2,   1,   2,   1,   2,   1,   2,   1, 
+  /* 574 */  4,   1,   1,   3,   4,   1,   2,  27,  68,   1,   1,   2,   1,   1, 
+  /* 588 */  1,   1,   2,   6,   1,   4,  15,   2,   4,   1,   1,   7,   6,   5, 
+  /* 602 */ 28,   1,   1,   4,   2,   1,   1,   5,   1,   1,  11,   4,   1,   4, 
+  /* 616 */  3, 
 };
 

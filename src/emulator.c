@@ -1984,10 +1984,10 @@ static void update_ppu_bank(E *e, int index, u16 bank, PPUBankLoc loc) {
       e->ppu_map_write[index] =
           e->ci.chr_data_write + ((bank & CHRRAM1K_MASK) << 10);
       break;
-    case PPU_BANK_NTRAM:     bank &= 1; goto ntram;
-    case PPU_BANK_NTRAM_EXT: bank &= 3; goto ntram;
-    case PPU_BANK_EXRAM:     bank =  2; goto ntram;
-    case PPU_BANK_FILL:      bank =  3; goto ntram;
+    case PPU_BANK_NTRAM:     bank &=  1; goto ntram;
+    case PPU_BANK_NTRAM_EXT: bank &= 15; goto ntram;
+    case PPU_BANK_EXRAM:     bank =   2; goto ntram;
+    case PPU_BANK_FILL:      bank =   3; goto ntram;
     ntram:
       e->ppu_map[index] = e->ppu_map_write[index] = e->s.p.ram + (bank << 10);
       break;
@@ -2005,10 +2005,10 @@ static void update_ppu_bg_spr_bank(E *e, int index, u16 bgbank, u16 sprbank,
     e->ppu_spr_map[index] =
         e->ci.chr_data + ((sprbank & (e->ci.chr1k_banks - 1)) << 10);
     break;
-  case PPU_BANK_NTRAM:     bgbank &= 1; sprbank &= 1; goto ntram;
-  case PPU_BANK_NTRAM_EXT: bgbank &= 3; sprbank &= 3; goto ntram;
-  case PPU_BANK_EXRAM:     bgbank =     sprbank  = 2; goto ntram;
-  case PPU_BANK_FILL:      bgbank =     sprbank  = 3; goto ntram;
+  case PPU_BANK_NTRAM:     bgbank &=  1; sprbank &=  1; goto ntram;
+  case PPU_BANK_NTRAM_EXT: bgbank &= 15; sprbank &= 15; goto ntram;
+  case PPU_BANK_EXRAM:     bgbank =      sprbank  =  2; goto ntram;
+  case PPU_BANK_FILL:      bgbank =      sprbank  =  3; goto ntram;
   ntram:
     e->ppu_bg_map[index] = e->s.p.ram + (bgbank << 10);
     e->ppu_spr_map[index] = e->s.p.ram + (sprbank << 10);
@@ -4733,6 +4733,23 @@ static void mapper93_write(E *e, u16 addr, u8 val) {
                  e->ci.prg16k_banks - 1);
 }
 
+static void mapper111_write(E *e, u16 addr, u8 val) {
+  M* m = &e->s.m;
+  // TODO: self-flash
+  switch (addr >> 12) {
+    case 5: case 7:
+      set_chr8k_map(e, !!(val & 0x10));
+      set_prg32k_map(e,
+                     m->prg_bank[0] = (val & 0xf) & (e->ci.prg32k_banks - 1));
+      for (int i = 0; i < 8; ++i) {
+        e->s.m.ppu1k_bank[8 + i] = !!(val & 0x20) * 8 + i;
+        e->s.m.ppu1k_loc[8 + i] = PPU_BANK_NTRAM_EXT;
+      }
+      update_nt_map_banking(e);
+      break;
+  }
+}
+
 static void mapper118_write(E *e, u16 addr, u8 val) {
   mapper4_write(e, addr, val);
   M* m = &e->s.m;
@@ -6817,6 +6834,19 @@ static Result init_mapper(E *e) {
     set_mirror(e, e->ci.mirror);
     set_chr8k_map(e, 0);
     set_prg16k_map(e, 0, e->ci.prg16k_banks - 1);
+    break;
+
+  case 111:
+    // Bump CHR RAM up from 8k -> 16k.
+    e->ci.chr8k_banks = 2;
+    e->ci.chr4k_banks = 4;
+    e->ci.chr2k_banks = 8;
+    e->ci.chr1k_banks = 16;
+    e->mapper_write = mapper111_write;
+    e->mapper_prg_ram_write = mapper111_write;
+    e->mapper_update_nt_map = update_nt_map_banking;
+    set_chr8k_map(e, 0);
+    set_prg32k_map(e, e->ci.prg32k_banks - 1);
     break;
 
   case 163:
